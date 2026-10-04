@@ -1,0 +1,13 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "127.0.0.1:8790:8790"
+    environment:
+      ZHIYU_DEMO: "false"
+      ZHIYU_SESSION_HOURS: "24"
+    volumes:
+      - zhiyu-data:/data
+    restart: unless-stopped
+volumes:
+  zhiyu-data:
