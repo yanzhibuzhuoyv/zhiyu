@@ -1,0 +1,43 @@
+name: zhiyu-docker-test
+services:
+  backend:
+    image: zhiyu-backend:docker-test
+    build:
+      context: ./backend
+      target: runtime
+      args:
+        PYTHON_IMAGE: python:3.13-slim@sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f
+    ports:
+      - "127.0.0.1:8791:8790"
+    environment:
+      ZHIYU_DEMO: "${ZHIYU_DOCKER_TEST_DEMO:-false}"
+      ZHIYU_SESSION_HOURS: "24"
+    volumes:
+      - test-data:/data
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+  tests:
+    profiles: [tests]
+    image: zhiyu-backend:unit-test
+    build:
+      context: ./backend
+      target: test
+      args:
+        PYTHON_IMAGE: python:3.13-slim@sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f
+    volumes:
+      - ./scripts:/workspace/scripts:ro
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    environment:
+      COVERAGE_FILE: /tmp/.coverage
+volumes:
+  test-data:

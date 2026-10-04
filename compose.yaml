@@ -1,6 +1,8 @@
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      target: runtime
     ports:
       - "127.0.0.1:8790:8790"
     environment:
@@ -9,5 +11,8 @@ services:
     volumes:
       - zhiyu-data:/data
     restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
 volumes:
   zhiyu-data:

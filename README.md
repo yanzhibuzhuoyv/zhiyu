@@ -48,6 +48,6 @@ uv run --no-sync pytest --cov=app --cov-report=term-missing
 uv run --no-sync ruff check app tests
 ```
 
-Docker 部署：`docker compose up --build -d`，默认绑定电脑回环端口。容器版本默认关闭演示。Docker 定义已提供，实际验证状态见 [VALIDATION.md](docs/VALIDATION.md)。
+Docker 部署：`docker compose up --build -d --wait`，默认绑定电脑回环端口，关闭演示。独立容器测试：`.\scripts\Test-Docker.ps1`；构建、重启/重建恢复与测试环境用法见 [DOCKER.md](docs/DOCKER.md)。
 
 [首版架构与范围](docs/ARCHITECTURE.md) · [实际验证结果](docs/VALIDATION.md)

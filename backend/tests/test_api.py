@@ -1,11 +1,11 @@
 from pathlib import Path
 
 import pytest
-from app.providers import ProviderError
 from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
+from app.providers import ProviderError
 
 
 class FakeProvider:

@@ -9,6 +9,7 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+*.egg-info/
 backend/data/
 *.log
 android/.gradle/
