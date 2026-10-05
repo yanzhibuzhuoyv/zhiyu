@@ -1,0 +1,4470 @@
+{
+  "fixture_time_utc": "2026-10-05T09:00:00+00:00",
+  "dataset": "16 synthetic scenarios; never user data",
+  "limitation": "In-sample lexical regression comparison, not a global optimum or LLM factuality measurement. Message time is not event time. Nearby events remain unconfirmed separate originals.",
+  "policies": {
+    "relevance_only_equal_authors": {
+      "weights": {
+        "bm25_fraction": 0.2,
+        "assistant_weight": 1,
+        "recency_bonus": 0,
+        "event_weight": 0,
+        "event_window_hours": 12
+      },
+      "case_passes": 11,
+      "case_count": 16,
+      "hits": 19,
+      "expected_count": 24,
+      "forbidden_selected": 0,
+      "cases": [
+        {
+          "case": "chicken_birthday",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": false,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "wrong_day_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "foreign_owner_and_ai_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "unrelated_neighbors",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "latest_correction",
+          "expected": [
+            101
+          ],
+          "selected": [
+            9,
+            11,
+            13,
+            101
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-101",
+              "user_text": "Correction: anniversary is August tenth.",
+              "assistant_id": "a-101",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 0.492573,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "natural_update_without_marker",
+          "expected": [
+            103
+          ],
+          "selected": [
+            9,
+            11,
+            13,
+            103
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-103",
+              "user_text": "Our anniversary is August tenth.",
+              "assistant_id": "a-103",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 0.492573,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "book_and_music_independent_originals",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            3
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我给那本书夹了星河书签。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.68,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "那晚你推荐的音乐是月光曲。",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.445845,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "generic_want_read_intent",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我上周读过山海手记，喜欢其中的灯塔章节。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "old_precise_many_partial",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            53,
+            55,
+            57
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "琉璃沙漏特别花纹是紫荆枝。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2024-07-27T09:00:00+00:00",
+              "assistant_created_at": "2024-07-27T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-53",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-53",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.25882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-55",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-55",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.25882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-57",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-57",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.25882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "user_fact_vs_ai_statement",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            19,
+            21,
+            23
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "用户月光暗号是紫荆花。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-03-19T09:00:00+00:00",
+              "assistant_created_at": "2026-03-19T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-19",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-19",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-21",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-23",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-23",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "multiple_distinct_originals",
+          "expected": [
+            1,
+            3,
+            5
+          ],
+          "selected": [
+            1,
+            3,
+            5
+          ],
+          "hits": 3,
+          "expected_count": 3,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "AuroraCafe is where we met.",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.466667,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "Our anniversary is July ninth.",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.466667,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-5",
+              "user_text": "My birthday is August tenth.",
+              "assistant_id": "a-5",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.466667,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "other_food_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": false,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "那天我们一起喝桂花奶茶。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "english_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": false,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "We had lemon pie that evening.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.733333,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "past_episode_text_not_message_date",
+          "expected": [
+            9,
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": false,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "前天晚上吃了鸡翅，是烤的。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "event_competes_with_weak_partial",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            21,
+            23,
+            25
+          ],
+          "hits": 1,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": false,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "桂花奶茶的味道很好。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-21",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.304804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-23",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-23",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.304804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-25",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-25",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.304804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "adjacent_day_false_neighbor",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        }
+      ]
+    },
+    "equal_authors_with_events": {
+      "weights": {
+        "bm25_fraction": 0.2,
+        "assistant_weight": 1,
+        "recency_bonus": 0,
+        "event_weight": 0.65,
+        "event_window_hours": 12
+      },
+      "case_passes": 16,
+      "case_count": 16,
+      "hits": 24,
+      "expected_count": 24,
+      "forbidden_selected": 0,
+      "cases": [
+        {
+          "case": "chicken_birthday",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "今天是我的生日，晚上一起庆祝。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "wrong_day_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "foreign_owner_and_ai_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "unrelated_neighbors",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "latest_correction",
+          "expected": [
+            101
+          ],
+          "selected": [
+            9,
+            11,
+            13,
+            101
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-101",
+              "user_text": "Correction: anniversary is August tenth.",
+              "assistant_id": "a-101",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 0.492573,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "natural_update_without_marker",
+          "expected": [
+            103
+          ],
+          "selected": [
+            9,
+            11,
+            13,
+            103
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-103",
+              "user_text": "Our anniversary is August tenth.",
+              "assistant_id": "a-103",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 0.492573,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "book_and_music_independent_originals",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            3
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我给那本书夹了星河书签。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.68,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "那晚你推荐的音乐是月光曲。",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.445845,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "generic_want_read_intent",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我上周读过山海手记，喜欢其中的灯塔章节。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "old_precise_many_partial",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            53,
+            55,
+            57
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "琉璃沙漏特别花纹是紫荆枝。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2024-07-27T09:00:00+00:00",
+              "assistant_created_at": "2024-07-27T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-53",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-53",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.25882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-55",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-55",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.25882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-57",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-57",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.25882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "user_fact_vs_ai_statement",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            19,
+            21,
+            23
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "用户月光暗号是紫荆花。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-03-19T09:00:00+00:00",
+              "assistant_created_at": "2026-03-19T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-19",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-19",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-21",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-23",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-23",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "multiple_distinct_originals",
+          "expected": [
+            1,
+            3,
+            5
+          ],
+          "selected": [
+            1,
+            3,
+            5
+          ],
+          "hits": 3,
+          "expected_count": 3,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "AuroraCafe is where we met.",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.466667,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "Our anniversary is July ninth.",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.466667,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-5",
+              "user_text": "My birthday is August tenth.",
+              "assistant_id": "a-5",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.466667,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "other_food_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "那天我们一起喝桂花奶茶。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "当天是我们的纪念日，庆祝认识三年。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "english_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "We had lemon pie that evening.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.733333,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "Today is my birthday and we celebrated together.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.476667,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "past_episode_text_not_message_date",
+          "expected": [
+            9,
+            11
+          ],
+          "selected": [
+            9,
+            11
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "前天是我生日，家里给我办了小聚会。",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T08:00:00+00:00",
+              "assistant_created_at": "2026-10-05T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "前天晚上吃了鸡翅，是烤的。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "event_competes_with_weak_partial",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            3,
+            21,
+            25
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "桂花奶茶的味道很好。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "当天是我们的纪念日，我们一起庆祝。",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-1"
+              ],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-21",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.304804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-25",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-25",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.304804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "adjacent_day_false_neighbor",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.0,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        }
+      ]
+    },
+    "heavy_recency": {
+      "weights": {
+        "bm25_fraction": 0.2,
+        "assistant_weight": 0.65,
+        "recency_bonus": 0.8,
+        "event_weight": 0.65,
+        "event_window_hours": 12
+      },
+      "case_passes": 14,
+      "case_count": 16,
+      "hits": 22,
+      "expected_count": 24,
+      "forbidden_selected": 0,
+      "cases": [
+        {
+          "case": "chicken_birthday",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.75,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "今天是我的生日，晚上一起庆祝。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "wrong_day_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.75,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "foreign_owner_and_ai_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.75,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "unrelated_neighbors",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.75,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "latest_correction",
+          "expected": [
+            101
+          ],
+          "selected": [
+            11,
+            13,
+            15,
+            101
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.2,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.2,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-15",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-15",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.2,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-101",
+              "user_text": "Correction: anniversary is August tenth.",
+              "assistant_id": "a-101",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 1.266766,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "natural_update_without_marker",
+          "expected": [
+            103
+          ],
+          "selected": [
+            11,
+            13,
+            15,
+            103
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.2,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.2,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-15",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-15",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.2,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-103",
+              "user_text": "Our anniversary is August tenth.",
+              "assistant_id": "a-103",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 1.266766,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "book_and_music_independent_originals",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            3
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我给那本书夹了星河书签。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.43,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "那晚你推荐的音乐是月光曲。",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.195845,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "generic_want_read_intent",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我上周读过山海手记，喜欢其中的灯塔章节。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.75,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "old_precise_many_partial",
+          "expected": [
+            1
+          ],
+          "selected": [
+            51,
+            53,
+            55,
+            57
+          ],
+          "hits": 0,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": false,
+          "original_records": [
+            {
+              "user_id": "u-51",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-51",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.05882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-53",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-53",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.05882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-55",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-55",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.05882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-57",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-57",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.05882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "user_fact_vs_ai_statement",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            19,
+            21,
+            23
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "用户月光暗号是紫荆花。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-03-19T09:00:00+00:00",
+              "assistant_created_at": "2026-03-19T09:00:00+00:00",
+              "score": 1.104348,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-19",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-19",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.45,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-21",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.45,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-23",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-23",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.45,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "multiple_distinct_originals",
+          "expected": [
+            1,
+            3,
+            5
+          ],
+          "selected": [
+            1,
+            3,
+            5
+          ],
+          "hits": 3,
+          "expected_count": 3,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "AuroraCafe is where we met.",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.216667,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "Our anniversary is July ninth.",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.216667,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-5",
+              "user_text": "My birthday is August tenth.",
+              "assistant_id": "a-5",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.216667,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "other_food_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "那天我们一起喝桂花奶茶。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.75,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "当天是我们的纪念日，庆祝认识三年。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "english_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "We had lemon pie that evening.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.483333,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "Today is my birthday and we celebrated together.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.476667,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "past_episode_text_not_message_date",
+          "expected": [
+            9,
+            11
+          ],
+          "selected": [
+            9,
+            11
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "前天是我生日，家里给我办了小聚会。",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T08:00:00+00:00",
+              "assistant_created_at": "2026-10-05T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "前天晚上吃了鸡翅，是烤的。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.8,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "event_competes_with_weak_partial",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            21,
+            23,
+            25
+          ],
+          "hits": 1,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": false,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "桂花奶茶的味道很好。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.75,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-21",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.104804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-23",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-23",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.104804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-25",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-25",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.104804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "adjacent_day_false_neighbor",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.75,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        }
+      ]
+    },
+    "weak_event_bonus": {
+      "weights": {
+        "bm25_fraction": 0.2,
+        "assistant_weight": 0.65,
+        "recency_bonus": 0.05,
+        "event_weight": 0.35,
+        "event_window_hours": 12
+      },
+      "case_passes": 15,
+      "case_count": 16,
+      "hits": 23,
+      "expected_count": 24,
+      "forbidden_selected": 0,
+      "cases": [
+        {
+          "case": "chicken_birthday",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "今天是我的生日，晚上一起庆祝。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.35,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "wrong_day_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "foreign_owner_and_ai_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "unrelated_neighbors",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "latest_correction",
+          "expected": [
+            101
+          ],
+          "selected": [
+            9,
+            11,
+            13,
+            101
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-101",
+              "user_text": "Correction: anniversary is August tenth.",
+              "assistant_id": "a-101",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 0.54096,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "natural_update_without_marker",
+          "expected": [
+            103
+          ],
+          "selected": [
+            9,
+            11,
+            13,
+            103
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-103",
+              "user_text": "Our anniversary is August tenth.",
+              "assistant_id": "a-103",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 0.54096,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "book_and_music_independent_originals",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            3
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我给那本书夹了星河书签。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.726875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "那晚你推荐的音乐是月光曲。",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.49272,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "generic_want_read_intent",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我上周读过山海手记，喜欢其中的灯塔章节。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "old_precise_many_partial",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            53,
+            55,
+            57
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "琉璃沙漏特别花纹是紫荆枝。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2024-07-27T09:00:00+00:00",
+              "assistant_created_at": "2024-07-27T09:00:00+00:00",
+              "score": 1.001807,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-53",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-53",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.30882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-55",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-55",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.30882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-57",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-57",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.30882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "user_fact_vs_ai_statement",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            21,
+            23,
+            25
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "用户月光暗号是紫荆花。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-03-19T09:00:00+00:00",
+              "assistant_created_at": "2026-03-19T09:00:00+00:00",
+              "score": 1.006522,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-21",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.7,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-23",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-23",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.7,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-25",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-25",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.7,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "multiple_distinct_originals",
+          "expected": [
+            1,
+            3,
+            5
+          ],
+          "selected": [
+            1,
+            3,
+            5
+          ],
+          "hits": 3,
+          "expected_count": 3,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "AuroraCafe is where we met.",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.513542,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "Our anniversary is July ninth.",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.513542,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-5",
+              "user_text": "My birthday is August tenth.",
+              "assistant_id": "a-5",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.513542,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "other_food_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "那天我们一起喝桂花奶茶。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "当天是我们的纪念日，庆祝认识三年。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.35,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "english_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "We had lemon pie that evening.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.780208,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "Today is my birthday and we celebrated together.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.256667,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "past_episode_text_not_message_date",
+          "expected": [
+            9,
+            11
+          ],
+          "selected": [
+            9,
+            11
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "前天是我生日，家里给我办了小聚会。",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T08:00:00+00:00",
+              "assistant_created_at": "2026-10-05T08:00:00+00:00",
+              "score": 0.35,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "前天晚上吃了鸡翅，是烤的。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.05,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "event_competes_with_weak_partial",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            21,
+            23,
+            25
+          ],
+          "hits": 1,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": false,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "桂花奶茶的味道很好。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-21",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.354804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-23",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-23",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.354804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-25",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-25",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.354804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "adjacent_day_false_neighbor",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        }
+      ]
+    },
+    "wide_24_hour_window": {
+      "weights": {
+        "bm25_fraction": 0.2,
+        "assistant_weight": 0.65,
+        "recency_bonus": 0.05,
+        "event_weight": 0.65,
+        "event_window_hours": 24
+      },
+      "case_passes": 15,
+      "case_count": 16,
+      "hits": 24,
+      "expected_count": 24,
+      "forbidden_selected": 1,
+      "cases": [
+        {
+          "case": "chicken_birthday",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "今天是我的生日，晚上一起庆祝。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "wrong_day_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "foreign_owner_and_ai_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "unrelated_neighbors",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "latest_correction",
+          "expected": [
+            101
+          ],
+          "selected": [
+            9,
+            11,
+            13,
+            101
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-101",
+              "user_text": "Correction: anniversary is August tenth.",
+              "assistant_id": "a-101",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 0.54096,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "natural_update_without_marker",
+          "expected": [
+            103
+          ],
+          "selected": [
+            9,
+            11,
+            13,
+            103
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-103",
+              "user_text": "Our anniversary is August tenth.",
+              "assistant_id": "a-103",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 0.54096,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "book_and_music_independent_originals",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            3
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我给那本书夹了星河书签。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.726875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "那晚你推荐的音乐是月光曲。",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.49272,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "generic_want_read_intent",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我上周读过山海手记，喜欢其中的灯塔章节。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "old_precise_many_partial",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            53,
+            55,
+            57
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "琉璃沙漏特别花纹是紫荆枝。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2024-07-27T09:00:00+00:00",
+              "assistant_created_at": "2024-07-27T09:00:00+00:00",
+              "score": 1.001807,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-53",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-53",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.30882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-55",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-55",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.30882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-57",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-57",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.30882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "user_fact_vs_ai_statement",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            21,
+            23,
+            25
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "用户月光暗号是紫荆花。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-03-19T09:00:00+00:00",
+              "assistant_created_at": "2026-03-19T09:00:00+00:00",
+              "score": 1.006522,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-21",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.7,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-23",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-23",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.7,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-25",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-25",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.7,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "multiple_distinct_originals",
+          "expected": [
+            1,
+            3,
+            5
+          ],
+          "selected": [
+            1,
+            3,
+            5
+          ],
+          "hits": 3,
+          "expected_count": 3,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "AuroraCafe is where we met.",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.513542,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "Our anniversary is July ninth.",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.513542,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-5",
+              "user_text": "My birthday is August tenth.",
+              "assistant_id": "a-5",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.513542,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "other_food_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "那天我们一起喝桂花奶茶。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "当天是我们的纪念日，庆祝认识三年。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "english_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "We had lemon pie that evening.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.780208,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "Today is my birthday and we celebrated together.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.476667,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "past_episode_text_not_message_date",
+          "expected": [
+            9,
+            11
+          ],
+          "selected": [
+            9,
+            11
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "前天是我生日，家里给我办了小聚会。",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T08:00:00+00:00",
+              "assistant_created_at": "2026-10-05T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "前天晚上吃了鸡翅，是烤的。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.05,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "event_competes_with_weak_partial",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            3,
+            21,
+            25
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "桂花奶茶的味道很好。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "当天是我们的纪念日，我们一起庆祝。",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-1"
+              ],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-21",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.354804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-25",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-25",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.354804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "adjacent_day_false_neighbor",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [
+            13
+          ],
+          "passed": false,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "今天是我的生日，晚上庆祝。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T05:00:00+00:00",
+              "assistant_created_at": "2026-10-04T05:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        }
+      ]
+    },
+    "bounded_user_first_12h": {
+      "weights": {
+        "bm25_fraction": 0.2,
+        "assistant_weight": 0.65,
+        "recency_bonus": 0.05,
+        "event_weight": 0.65,
+        "event_window_hours": 12
+      },
+      "case_passes": 16,
+      "case_count": 16,
+      "hits": 24,
+      "expected_count": 24,
+      "forbidden_selected": 0,
+      "cases": [
+        {
+          "case": "chicken_birthday",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "今天是我的生日，晚上一起庆祝。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "wrong_day_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "foreign_owner_and_ai_birthday",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "unrelated_neighbors",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "latest_correction",
+          "expected": [
+            101
+          ],
+          "selected": [
+            9,
+            11,
+            13,
+            101
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-101",
+              "user_text": "Correction: anniversary is August tenth.",
+              "assistant_id": "a-101",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 0.54096,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "natural_update_without_marker",
+          "expected": [
+            103
+          ],
+          "selected": [
+            9,
+            11,
+            13,
+            103
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "AuroraCafe anniversary plan July ninth.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-07-07T09:00:00+00:00",
+              "assistant_created_at": "2026-07-07T09:00:00+00:00",
+              "score": 1.0125,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-103",
+              "user_text": "Our anniversary is August tenth.",
+              "assistant_id": "a-103",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-04T09:00:00+00:00",
+              "assistant_created_at": "2026-10-04T09:00:00+00:00",
+              "score": 0.54096,
+              "reason": "latest_user_context",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "book_and_music_independent_originals",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            3
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我给那本书夹了星河书签。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.726875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "那晚你推荐的音乐是月光曲。",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.49272,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "generic_want_read_intent",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "我上周读过山海手记，喜欢其中的灯塔章节。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "old_precise_many_partial",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            53,
+            55,
+            57
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "琉璃沙漏特别花纹是紫荆枝。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2024-07-27T09:00:00+00:00",
+              "assistant_created_at": "2024-07-27T09:00:00+00:00",
+              "score": 1.001807,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-53",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-53",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.30882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-55",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-55",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.30882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-57",
+              "user_text": "今天讨论沙漏花纹。",
+              "assistant_id": "a-57",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.30882,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "user_fact_vs_ai_statement",
+          "expected": [
+            1
+          ],
+          "selected": [
+            1,
+            21,
+            23,
+            25
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "用户月光暗号是紫荆花。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-03-19T09:00:00+00:00",
+              "assistant_created_at": "2026-03-19T09:00:00+00:00",
+              "score": 1.006522,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-21",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.7,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-23",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-23",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.7,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-25",
+              "user_text": "继续聊聊。",
+              "assistant_id": "a-25",
+              "assistant_text": "用户月光暗号是白玫瑰。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.7,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "multiple_distinct_originals",
+          "expected": [
+            1,
+            3,
+            5
+          ],
+          "selected": [
+            1,
+            3,
+            5
+          ],
+          "hits": 3,
+          "expected_count": 3,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "AuroraCafe is where we met.",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.513542,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "Our anniversary is July ninth.",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.513542,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-5",
+              "user_text": "My birthday is August tenth.",
+              "assistant_id": "a-5",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.513542,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "other_food_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "那天我们一起喝桂花奶茶。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "当天是我们的纪念日，庆祝认识三年。",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "english_event",
+          "expected": [
+            11,
+            13
+          ],
+          "selected": [
+            11,
+            13
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "We had lemon pie that evening.",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 0.780208,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-13",
+              "user_text": "Today is my birthday and we celebrated together.",
+              "assistant_id": "a-13",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.476667,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "past_episode_text_not_message_date",
+          "expected": [
+            9,
+            11
+          ],
+          "selected": [
+            9,
+            11
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-9",
+              "user_text": "前天是我生日，家里给我办了小聚会。",
+              "assistant_id": "a-9",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T08:00:00+00:00",
+              "assistant_created_at": "2026-10-05T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-11"
+              ],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-11",
+              "user_text": "前天晚上吃了鸡翅，是烤的。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 1.05,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "event_competes_with_weak_partial",
+          "expected": [
+            1,
+            3
+          ],
+          "selected": [
+            1,
+            3,
+            21,
+            25
+          ],
+          "hits": 2,
+          "expected_count": 2,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-1",
+              "user_text": "桂花奶茶的味道很好。",
+              "assistant_id": "a-1",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-3",
+              "user_text": "当天是我们的纪念日，我们一起庆祝。",
+              "assistant_id": "a-3",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T08:00:00+00:00",
+              "assistant_created_at": "2026-10-03T08:00:00+00:00",
+              "score": 0.65,
+              "reason": "nearby_event",
+              "anchor_ids": [
+                "u-1"
+              ],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-21",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-21",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.354804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            },
+            {
+              "user_id": "u-25",
+              "user_text": "桂花飘香，散步轻松。",
+              "assistant_id": "a-25",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-05T09:00:00+00:00",
+              "assistant_created_at": "2026-10-05T09:00:00+00:00",
+              "score": 0.354804,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        },
+        {
+          "case": "adjacent_day_false_neighbor",
+          "expected": [
+            11
+          ],
+          "selected": [
+            11
+          ],
+          "hits": 1,
+          "expected_count": 1,
+          "forbidden_selected": [],
+          "passed": true,
+          "original_records": [
+            {
+              "user_id": "u-11",
+              "user_text": "我那天晚饭吃了烤鸡翅，很开心。",
+              "assistant_id": "a-11",
+              "assistant_text": "收到。",
+              "user_created_at": "2026-10-03T09:00:00+00:00",
+              "assistant_created_at": "2026-10-03T09:00:00+00:00",
+              "score": 1.046875,
+              "reason": "direct",
+              "anchor_ids": [],
+              "relation_confirmed": false
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

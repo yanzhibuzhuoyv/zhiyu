@@ -24,9 +24,9 @@ HTTP 联调使用独立的 `zhiyu-docker-test` 项目、`127.0.0.1:8791` 端口�
 - UID 10001、只读根目录、删除 capabilities、只发布回环地址、数据卷没有测试 Key 原文。
 - 文档/会话删除与退出连接。
 
-单测日志在 `artifacts/docker-unit-tests.log`，HTTP 通过后生成 `artifacts/docker-validation.json`，其中只记录容器、镜像、健康检查与测试结果，未写入 Key/token。这些本地证据不提交 Git。
+单测日志在 `artifacts/docker-unit-tests.log`，HTTP通过后生成 `artifacts/docker-validation.json` 与 `artifacts/companion-validation.json`，只记录容器、健康与测试结果，不写Key/token。最新0.1.1逐消息FTS/权重版271测试/94.60%覆盖率，真实万轮通过，见[验证报告](VALIDATION.md)。这些本地证据不提交Git。
 
-测试成功后保留演示容器供查看：API 文档 <http://127.0.0.1:8791/docs>，健康检查 <http://127.0.0.1:8791/health>。Android 模拟器的 debug App 可以填 `http://10.0.2.2:8791`，服务商选“本地演示”，Key 填 `demo-key`。演示回复会明确标注，不调用云端模型。
+测试成功后保留演示容器供查看：API文档 <http://127.0.0.1:8791/docs>，健康检查 <http://127.0.0.1:8791/health>。新版debug APK已内置模拟器地址`http://10.0.2.2:8791`，不需要普通用户填写服务器；选择“本地演示”并输入`demo-key`。演示回复明确标记，无云端请求。真实用户版本需构建配置自己的HTTPS服务。
 
 停止容器并保留数据卷：
 
@@ -62,4 +62,12 @@ docker compose up --build -d --wait
 
 首次 Docker Hub 拉取因网络超时失败，随后复用了此机已有的 `mirror.gcr.io/library/python:3.13-slim` 缓存，并使用摘要 `sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f` 构建。依赖仍按 lock 中的 SHA256 校验，没有关闭 TLS 校验。
 
-真实厂商 Key 在线调用、容器内真实 BGE 模型推理、安卓连接该 Docker 端口尚未包含在本轮 Docker 测试；首版本机 BGE/安卓验证详见 [VALIDATION.md](VALIDATION.md)。
+2026-10-05恢复时再次出现相同socket错误，普通start/stop未成功；确认故障进程及绝对路径后保留重建0字节socket临时目录恢复。保留路径为`run.zhiyu-recovery-20261005-101000`、`run.zhiyu-recovery-20261005-101200`和`docker-secrets-engine.zhiyu-recovery-20261005-101200`，仍无reset/prune或数据卷删除。不能将临时恢复描述为Docker根因已永久解决。
+
+真实厂商Key、容器内BGE、真机及公网HTTPS仍未验证。新版模拟器连接Docker实际结果见[VALIDATION.md](VALIDATION.md)。
+
+2026-10-05 12:13再次启动报sailor-ingest.sock无法访问。仅停止已崩溃且路径位于Docker安装目录的进程，验证两个临时目录中仅有0字节socket后保留搬动，12:14重新启动引擎成功。保留`run.zhiyu-recovery-20261005-121405`及`docker-secrets-engine.zhiyu-recovery-20261005-121405`。没有工厂重置、prune或删除卷。这仍是临时恢复，后续重新检查在线状态。
+
+逐消息FTS与权重版本完整驱动271项通过、94.60%覆盖率、30压力工具回归。千轮/万轮真实HTTP需单独执行，过程、版本摘要和只读存储测量见[长聊实测](LONG_CHAT_TEST.md)。
+
+后来新增长字段工具16反例，Windows/LinuxDocker全部工具46 passed、ruff通过；新增`Test-LongFields.ps1`单独真实Docker exit0。当前Test-Docker.ps1已加入全scripts检查与此helper，新增步骤分别验证，未重复重建和运行原驱动。已有运行镜像时直接`./scripts/Test-LongFields.ps1`：独立network-none临时容器、只读脚本、loopback HTTP，输出每次新的artifacts/long-fields-*报告。双方16k及4条64k合成AI回复、原文中尾/分页/重启/超限检查与空间数据见[长字段实测](LONG_FIELDS_TEST.md)。

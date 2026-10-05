@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.zhiyu.app.domain.AuthSession
+import com.zhiyu.app.domain.CompanionBinding
 import com.zhiyu.app.domain.CredentialStore
 import com.zhiyu.app.domain.SavedConnection
 import org.json.JSONObject
@@ -14,7 +15,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** The preference contains only a random IV and authenticated ciphertext, never raw credentials. */
+/** Credentials and the durable AI binding are authenticated ciphertext with separate AAD. */
 class SecureCredentialStore(
     context: Context,
     storageName: String = "zhiyu_credentials",
@@ -32,15 +33,25 @@ class SecureCredentialStore(
             generateKey()
         }
     }
+    private fun decode(encoded: String, purpose: String): JSONObject {
+        val parts = encoded.split(':')
+        require(parts.size == 2)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, Base64.decode(parts[0], Base64.NO_WRAP)))
+        cipher.updateAAD(purpose.toByteArray(Charsets.UTF_8))
+        return JSONObject(String(cipher.doFinal(Base64.decode(parts[1], Base64.NO_WRAP)), Charsets.UTF_8))
+    }
+    private fun encode(json: JSONObject, purpose: String): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key())
+        cipher.updateAAD(purpose.toByteArray(Charsets.UTF_8))
+        val ciphertext = cipher.doFinal(json.toString().toByteArray(Charsets.UTF_8))
+        return Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(ciphertext, Base64.NO_WRAP)
+    }
     @Synchronized override fun read(): SavedConnection? {
         val encoded = prefs.getString("encrypted", null) ?: return null
         try {
-            val parts = encoded.split(':')
-            require(parts.size == 2)
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, Base64.decode(parts[0], Base64.NO_WRAP)))
-            cipher.updateAAD(alias.toByteArray(Charsets.UTF_8))
-            val json = JSONObject(String(cipher.doFinal(Base64.decode(parts[1], Base64.NO_WRAP)), Charsets.UTF_8))
+            val json = decode(encoded, alias)
             val session = json.optJSONObject("session")?.let {
                 AuthSession(it.getString("token"), it.getString("provider_id"), it.getString("model"), it.getLong("expires_at"))
             }
@@ -57,14 +68,32 @@ class SecureCredentialStore(
             json.put("session", JSONObject().put("token", it.token).put("provider_id", it.providerId)
                 .put("model", it.model).put("expires_at", it.expiresAt))
         }
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key())
-        cipher.updateAAD(alias.toByteArray(Charsets.UTF_8))
-        val ciphertext = cipher.doFinal(json.toString().toByteArray(Charsets.UTF_8))
-        val encoded = Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(ciphertext, Base64.NO_WRAP)
-        check(prefs.edit().putString("encrypted", encoded).commit()) { "无法保存本机加密连接信息" }
+        check(prefs.edit().putString("encrypted", encode(json, alias)).commit()) { "无法保存本机加密连接信息" }
+    }
+    @Synchronized override fun readBinding(): CompanionBinding? {
+        val encoded = prefs.getString("companion_binding", null) ?: return null
+        return try {
+            val json = decode(encoded, "$alias:companion")
+            CompanionBinding(json.getString("provider_id"), json.getString("model"), json.optJSONObject("profile")?.profile(), json.optBoolean("profile_configured", false)).also {
+                require(it.providerId.isNotBlank() && it.model.isNotBlank())
+            }
+        } catch (_: Exception) {
+            throw IllegalStateException("本机 AI 绑定信息无法验证，不能重新选择 AI")
+        }
+    }
+    @Synchronized override fun writeBinding(binding: CompanionBinding) {
+        require(binding.providerId.isNotBlank() && binding.model.isNotBlank())
+        val existing = readBinding()
+        val sameAi = existing?.providerId == binding.providerId && existing.model == binding.model
+        val legacyUpgrade = existing?.profileConfigured == false && binding.profileConfigured
+        val userTraining = existing?.profileConfigured == true && binding.profileConfigured &&
+            existing.profile?.mode != "preset" && binding.profile?.mode == "custom"
+        check(existing == null || existing == binding || (sameAi && (legacyUpgrade || userTraining))) { "已绑定的 AI 不能更换" }
+        val json = JSONObject().put("provider_id", binding.providerId).put("model", binding.model)
+            .put("profile", binding.profile?.json() ?: JSONObject.NULL).put("profile_configured", binding.profileConfigured)
+        check(prefs.edit().putString("companion_binding", encode(json, "$alias:companion")).commit()) { "无法保存 AI 绑定信息" }
     }
     @Synchronized override fun clear() {
-        check(prefs.edit().clear().commit()) { "无法清除本机连接信息" }
+        check(prefs.edit().remove("encrypted").commit()) { "无法清除本机连接信息" }
     }
 }

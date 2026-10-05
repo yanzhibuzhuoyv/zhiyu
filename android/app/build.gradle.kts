@@ -2,6 +2,14 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+val configuredServerUrl = providers.gradleProperty("zhiyuBackendUrl").orNull.orEmpty().trim()
+require(!configuredServerUrl.contains('"') && !configuredServerUrl.contains('\\') && configuredServerUrl.none { it.code < 32 }) {
+    "zhiyuBackendUrl contains invalid characters"
+}
+val buildsRelease = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+require(!buildsRelease || configuredServerUrl.isBlank() || configuredServerUrl.startsWith("https://")) {
+    "Release builds require an HTTPS zhiyuBackendUrl"
+}
 android {
     namespace = "com.zhiyu.app"
     compileSdk = 36
@@ -9,15 +17,15 @@ android {
         applicationId = "com.zhiyu.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }
     buildTypes {
-        debug { buildConfigField("String", "DEFAULT_SERVER_URL", "\"http://10.0.2.2:8790\"") }
+        debug { buildConfigField("String", "DEFAULT_SERVER_URL", "\"${configuredServerUrl.ifBlank { "http://10.0.2.2:8791" }}\"") }
         release {
-            buildConfigField("String", "DEFAULT_SERVER_URL", "\"\"")
+            buildConfigField("String", "DEFAULT_SERVER_URL", "\"${configuredServerUrl.takeIf { it.startsWith("https://") }.orEmpty()}\"")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

@@ -15,8 +15,14 @@ internal fun JSONObject.provider() = Provider(
 )
 internal fun JSONObject.conversation() = Conversation(
     getString("id"), getString("title"), getString("model"), getBoolean("use_rag"),
-    getString("created_at"), getString("updated_at"),
+    getString("created_at"), getString("updated_at"), optJSONObject("companion_profile")?.profile(),
 )
+internal fun JSONObject.profile() = CompanionRules.normalize(CompanionProfile(
+    getString("mode"), optString("style", "gentle"), optString("role", "partner"),
+    optString("name"), optString("user_name"), optString("instructions"),
+))!!
+internal fun CompanionProfile.json() = JSONObject().put("mode", mode).put("style", style).put("role", role)
+    .put("name", name).put("user_name", userName).put("instructions", instructions)
 internal fun JSONObject.source() = Source(getString("document_id"), getString("name"), getString("text"), optDouble("score", 0.0))
 internal fun JSONObject.message() = Message(
     getString("id"), getString("role"), getString("content"),

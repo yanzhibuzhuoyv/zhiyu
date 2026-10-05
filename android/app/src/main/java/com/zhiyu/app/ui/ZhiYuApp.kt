@@ -1,107 +1,100 @@
 package com.zhiyu.app.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.zhiyu.app.domain.Conversation
+import com.zhiyu.app.BuildConfig
 import com.zhiyu.app.ui.screens.*
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun ZhiYuApp(viewModel: ChatViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val drawer = rememberDrawerState(DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
-    var deleting by remember { mutableStateOf<Conversation?>(null) }
-    ModalNavigationDrawer(
-        drawerState = drawer,
-        gesturesEnabled = state.connected,
-        drawerContent = {
-            ModalDrawerSheet {
-                Column(Modifier.padding(24.dp)) {
-                    Text("知语", style = MaterialTheme.typography.headlineMedium)
-                    Text("每个想法，都有回响", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(24.dp))
-                    Button(onClick = { viewModel.createConversation(); scope.launch { drawer.close() } }, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Outlined.Add, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("新对话")
+    var menuOpen by remember { mutableStateOf(false) }
+    var libraryOpen by remember { mutableStateOf(false) }
+    var revalidate by remember { mutableStateOf(false) }
+    var developerSettings by remember { mutableStateOf(false) }
+    var styleOpen by remember { mutableStateOf(false) }
+    val providerName = state.provider?.name ?: state.binding?.providerId ?: "知语"
+    val companionName = state.profile?.name?.takeIf { it.isNotBlank() } ?: providerName
+    LaunchedEffect(state.connected) {
+        if (!state.connected) { menuOpen = false; libraryOpen = false; revalidate = false; styleOpen = false }
+    }
+    Scaffold(
+        topBar = {
+            if (state.connected) TopAppBar(
+                title = {
+                    Column {
+                        Text(companionName, maxLines = 1, style = MaterialTheme.typography.titleLarge)
+                        Text("你的 AI 恋人", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                }
-                LazyColumn(Modifier.weight(1f)) {
-                    items(state.conversations, key = { it.id }) { conversation ->
-                        NavigationDrawerItem(
-                            label = { Text(conversation.title, maxLines = 2) },
-                            selected = state.selectedId == conversation.id,
-                            onClick = { if (!state.isBusy) { viewModel.selectConversation(conversation.id); scope.launch { drawer.close() } } },
-                            modifier = Modifier.padding(horizontal = 12.dp),
-                            icon = { Icon(Icons.Outlined.ChatBubbleOutline, null) },
-                            badge = { IconButton(onClick = { deleting = conversation }, enabled = !state.isBusy) { Icon(Icons.Outlined.DeleteOutline, "删除对话 ${conversation.title}") } },
-                        )
+                },
+                actions = {
+                    Box {
+                        IconButton(onClick = { menuOpen = true }, enabled = !state.isBusy) { Icon(Icons.Outlined.MoreVert, "更多设置") }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(text = { Text("刷新聊天") }, leadingIcon = { Icon(Icons.Outlined.Refresh, null) },
+                                onClick = { menuOpen = false; viewModel.refresh() })
+                            DropdownMenuItem(text = { Text("资料") }, leadingIcon = { Icon(Icons.Outlined.FolderOpen, null) },
+                                onClick = { menuOpen = false; libraryOpen = true })
+                            DropdownMenuItem(text = { Text("恋人设定") }, leadingIcon = { Icon(Icons.Outlined.FavoriteBorder, null) },
+                                onClick = { menuOpen = false; styleOpen = true })
+                            DropdownMenuItem(text = { Text("重新验证 API Key") }, leadingIcon = { Icon(Icons.Outlined.Key, null) },
+                                onClick = { menuOpen = false; revalidate = true })
+                            if (BuildConfig.DEBUG) DropdownMenuItem(text = { Text("开发设置") }, leadingIcon = { Icon(Icons.Outlined.Settings, null) },
+                                onClick = { menuOpen = false; developerSettings = true })
+                        }
                     }
-                    if (state.conversations.isEmpty()) item { Text("还没有对话", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
-            }
+                },
+            )
         },
-    ) {
-        Scaffold(
-            topBar = {
-                if (state.connected) TopAppBar(
-                    title = { Text(if (state.tab == AppTab.CHAT) state.selected?.title ?: "知语" else state.tab.label, maxLines = 1) },
-                    navigationIcon = { IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Outlined.Menu, "会话列表") } },
-                    actions = {
-                        IconButton(onClick = viewModel::createConversation, enabled = !state.isBusy) { Icon(Icons.Outlined.Add, "新对话") }
-                        IconButton(onClick = viewModel::refresh, enabled = !state.isBusy) { Icon(Icons.Outlined.Refresh, "刷新") }
-                    },
-                )
-            },
-            bottomBar = {
-                if (state.connected) NavigationBar {
-                    AppTab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = state.tab == tab, onClick = { viewModel.tab(tab) }, label = { Text(tab.label) },
-                            icon = { Icon(when (tab) { AppTab.CHAT -> Icons.Outlined.ChatBubbleOutline; AppTab.LIBRARY -> Icons.Outlined.FolderOpen; AppTab.SETTINGS -> Icons.Outlined.Settings }, null) },
-                        )
-                    }
-                }
-            },
-        ) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding)) {
-                if (state.isBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                state.error?.let { Feedback(it, true, viewModel::dismissError) }
-                state.notice?.let { Feedback(it, false, viewModel::dismissError) }
-                if (state.restoring) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) { Text("正在恢复本机连接…") }
-                } else if (!state.connected) {
-                    ConnectionScreen(state, viewModel)
-                } else when (state.tab) {
-                    AppTab.CHAT -> ChatScreen(state, viewModel)
-                    AppTab.LIBRARY -> LibraryScreen(state, viewModel)
-                    AppTab.SETTINGS -> SettingsScreen(state, viewModel)
-                }
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            if (state.isBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            state.error?.let { Feedback(it, true, viewModel::dismissError) }
+            state.notice?.let { Feedback(it, false, viewModel::dismissError) }
+            when {
+                state.restoring -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("正在准备你的 AI…") }
+                !state.connected -> ConnectionScreen(state, viewModel)
+                else -> ChatScreen(state, viewModel)
             }
         }
     }
-    deleting?.let { conversation ->
-        AlertDialog(
-            onDismissRequest = { deleting = null }, title = { Text("删除这段对话？") },
-            text = { Text("「${conversation.title}」及其所有消息将被永久删除。") },
-            confirmButton = { TextButton(onClick = { viewModel.deleteConversation(conversation.id); deleting = null }) { Text("删除") } },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("取消") } },
-        )
+    if (libraryOpen && state.connected) Dialog(onDismissRequest = { libraryOpen = false }) {
+        Surface(shape = MaterialTheme.shapes.extraLarge, modifier = Modifier.fillMaxWidth().fillMaxHeight(0.86f).testTag("library_dialog")) {
+            Column {
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp, top = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("我们的资料", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                    IconButton(onClick = { libraryOpen = false }) { Icon(Icons.Outlined.Close, "关闭资料") }
+                }
+                if (state.isBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                state.error?.let { Feedback(it, true, viewModel::dismissError) }
+                state.notice?.let { Feedback(it, false, viewModel::dismissError) }
+                Box(Modifier.weight(1f)) { LibraryScreen(state, viewModel) }
+            }
+        }
     }
+    if (revalidate) AlertDialog(
+        onDismissRequest = { revalidate = false },
+        title = { Text("重新验证 API Key？") },
+        text = { Text("将清除本机 Key 并返回验证页。已绑定的 $providerName 和模型 ${state.binding?.model ?: state.model} 仍会保留，不能更换。使用原 Key 重新验证可继续这段聊天。") },
+        confirmButton = { TextButton(onClick = { revalidate = false; viewModel.disconnect() }, modifier = Modifier.testTag("confirm_revalidate")) { Text("继续验证") } },
+        dismissButton = { TextButton(onClick = { revalidate = false }) { Text("取消") } },
+    )
+    if (developerSettings && BuildConfig.DEBUG) DevelopmentServerDialog(state, viewModel) { developerSettings = false }
+    if (styleOpen && state.connected) CompanionProfileDialog(state, viewModel) { styleOpen = false }
 }
 
 @Composable private fun Feedback(text: String, isError: Boolean, dismiss: () -> Unit) {
     Surface(color = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer) {
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
             IconButton(onClick = dismiss) { Icon(Icons.Outlined.Close, "关闭提示") }
         }

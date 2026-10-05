@@ -21,8 +21,8 @@ import com.zhiyu.app.ui.ChatViewModel
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(viewModel::importDocument) }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("把资料变成对话的依据", style = MaterialTheme.typography.titleLarge)
-            Text("导入文档后，开启对话中的「知识检索」。AI 回复会展示实际检索到的引用。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("让彼此多了解一点", style = MaterialTheme.typography.titleMedium)
+            Text("资料会在相关话题中提供参考，回复可以查看实际引用的片段。聊天中的往事也会按相关性找回。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(onClick = { picker.launch(arrayOf("text/*", "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/octet-stream")) }, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Outlined.UploadFile, null)
                 Spacer(Modifier.width(8.dp))

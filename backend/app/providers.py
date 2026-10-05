@@ -1,5 +1,6 @@
 """Small OpenAI-compatible adapter with fixed routes and safe, user-facing errors."""
 
+import json
 import re
 from dataclasses import asdict
 from typing import Any
@@ -139,13 +140,27 @@ def _content(message: dict) -> str:
     return ""
 
 
+def _demo_knowledge(context: str) -> str:
+    try:
+        references = json.loads(context)
+    except ValueError:
+        return context  # Preserve the earlier text format used by existing callers.
+    if not isinstance(references, list) or not all(
+        isinstance(source, dict) and type(source.get("index")) is int
+        and isinstance(source.get("name"), str) and isinstance(source.get("text"), str)
+        for source in references
+    ):
+        return context
+    return "\n\n".join(f"[{source['index']}] 文件：{source['name']}\n{source['text']}" for source in references)
+
+
 def _demo_answer(messages: list[dict]) -> str:
     user_text = next(
         (message["content"] for message in reversed(messages) if message["role"] == "user"), "你好"
     )
     system = "\n".join(message["content"] for message in messages if message["role"] == "system")
     match = re.search(r"<knowledge>\n(.*?)\n</knowledge>", system, flags=re.DOTALL)
-    context = match.group(1) if match else ""
+    context = _demo_knowledge(match.group(1)) if match else ""
     if context:
         return (
             f"【本地演示】你问的是：{user_text[:200]}\n\n"

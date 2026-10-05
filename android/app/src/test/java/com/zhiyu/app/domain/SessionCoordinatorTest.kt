@@ -11,9 +11,12 @@ import org.junit.Test
 class SessionCoordinatorTest {
     private class MemoryStore : CredentialStore {
         var value: SavedConnection? = null
+        var binding: CompanionBinding? = null
         override fun read() = value
         override fun write(connection: SavedConnection) { value = connection }
         override fun clear() { value = null }
+        override fun readBinding() = binding
+        override fun writeBinding(binding: CompanionBinding) { this.binding = binding }
     }
     private class FakeAuth : AuthService {
         var count = 0
@@ -118,5 +121,107 @@ class SessionCoordinatorTest {
         })
         try { manager.token(); fail("Expected cancellation") } catch (_: CancellationException) { }
         assertNull(store.value?.session)
+    }
+    @Test fun successfulChoiceSurvivesLogoutAndCannotChangeCompanyOrModel() = runTest {
+        val store = MemoryStore()
+        val auth = FakeAuth()
+        val manager = SessionCoordinator(store, auth)
+        manager.login("https://host", "deepseek", "key", "model")
+        manager.clear()
+        assertEquals(CompanionBinding("deepseek", "model"), store.binding)
+        assertNull(store.value)
+        assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { manager.login("https://host", "qwen", "key", "model") }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { manager.login("https://host", "deepseek", "key", "other-model") }
+        }
+        assertEquals(1, auth.count)
+    }
+    @Test fun failedVerificationDoesNotBindAnAi() = runTest {
+        val store = MemoryStore()
+        val auth = FakeAuth().apply { reject = true }
+        val manager = SessionCoordinator(store, auth)
+        try { manager.login("https://host", "deepseek", "bad", "model") } catch (_: ApiFailure) { }
+        assertNull(store.binding)
+        assertNull(store.value)
+    }
+    @Test fun legacyVerifiedSessionAdoptsItsOriginalAiAndRejectsAnAlteredConnection() = runTest {
+        val store = MemoryStore().apply { value = SavedConnection("https://host", "deepseek", "key", "model", AuthSession("legacy", "deepseek", "model", 5000)) }
+        val auth = FakeAuth()
+        val manager = SessionCoordinator(store, auth) { 1000 }
+        assertEquals("legacy", manager.token())
+        assertEquals(CompanionBinding("deepseek", "model", profileConfigured = false), store.binding)
+        store.value = store.value!!.copy(providerId = "qwen")
+        try { manager.token(); fail("Expected identity mismatch") } catch (_: IllegalArgumentException) { }
+        assertEquals(0, auth.count)
+    }
+    @Test fun refreshCannotAcceptADifferentModelFromTheServer() = runTest {
+        val store = MemoryStore().apply { value = SavedConnection("https://host", "deepseek", "key", "model") }
+        val manager = SessionCoordinator(store, object : AuthService {
+            override suspend fun authenticate(connection: SavedConnection) = AuthSession("bad", "deepseek", "different", 5000)
+        })
+        try { manager.token(); fail("Expected identity mismatch") } catch (_: IllegalArgumentException) { }
+        assertNull(store.value!!.session)
+        assertNull(store.binding)
+    }
+    @Test fun presetPersonalitySurvivesLogoutAndCannotBeChangedOrDisabled() = runTest {
+        val store = MemoryStore()
+        val auth = FakeAuth()
+        val manager = SessionCoordinator(store, auth) { 1000 }
+        val preset = CompanionProfile(style = "playful", name = "小雨")
+        manager.login("https://host", "deepseek", "key", "model", preset)
+        assertEquals("model", manager.saved()!!.model)
+        assertEquals("token-1", manager.token())
+        manager.clear()
+        assertEquals(preset, store.binding!!.profile)
+        try { manager.login("https://host", "deepseek", "key", "model", preset.copy(style = "steady")); fail("Expected fixed personality") } catch (_: IllegalArgumentException) { }
+        assertEquals(1, auth.count)
+        manager.login("https://host", "deepseek", "replacement-key", "model")
+        assertEquals(preset, store.binding!!.profile)
+    }
+    @Test fun failedProfileAdmissionDoesNotPersistAnIrreversibleChoiceOrKey() = runTest {
+        val store = MemoryStore()
+        val manager = SessionCoordinator(store, FakeAuth())
+        try {
+            manager.login("https://host", "deepseek", "key", "model", CompanionProfile()) { throw ApiFailure(409, "已固定") }
+            fail("Expected incompatible profile")
+        } catch (_: ApiFailure) { }
+        assertNull(store.binding)
+        assertNull(store.value)
+    }
+    @Test fun userTrainingCanEvolveButCannotBecomeAPreset() = runTest {
+        val store = MemoryStore()
+        val manager = SessionCoordinator(store, FakeAuth())
+        val custom = CompanionProfile(mode = "custom", instructions = "说话自然一些")
+        manager.login("https://host", "deepseek", "key", "model", custom)
+        manager.login("https://host", "deepseek", "key", "model", custom.copy(instructions = "叫我小舟"))
+        try { manager.login("https://host", "deepseek", "key", "model", CompanionProfile()); fail("Expected fixed choice mode") } catch (_: IllegalArgumentException) { }
+        assertEquals(custom.copy(instructions = "叫我小舟"), store.binding!!.profile)
+    }
+    @Test fun latestUserTrainingSurvivesLogoutAndANewCoordinator() = runTest {
+        val store = MemoryStore()
+        val manager = SessionCoordinator(store, FakeAuth()) { 1000 }
+        val first = CompanionProfile(mode = "custom", instructions = "第一次设定")
+        val later = first.copy(instructions = "后来培养的新习惯")
+        manager.login("https://host", "deepseek", "key", "model", first)
+        manager.updateTraining(later)
+        manager.clear()
+        val restored = SessionCoordinator(store, FakeAuth()) { 1000 }
+        assertEquals(later, restored.binding()!!.profile)
+        restored.login("https://host", "deepseek", "key", "model")
+        assertEquals(later, restored.binding()!!.profile)
+        assertEquals("token-1", restored.token())
+    }
+    @Test fun legacyVerifiedConnectionCanBeReadMoreThanOnceAndAdoptsProfileOnce() = runTest {
+        val store = MemoryStore().apply { value = SavedConnection("https://host", "deepseek", "key", "model", AuthSession("legacy", "deepseek", "model", 5000)) }
+        val manager = SessionCoordinator(store, FakeAuth()) { 1000 }
+        assertNotNull(manager.saved())
+        assertNotNull(manager.saved())
+        val original = CompanionProfile(name = "原来的恋人")
+        manager.adoptLegacyProfile(original)
+        manager.adoptLegacyProfile(original.copy(name = "不能换"))
+        assertEquals(original, manager.binding()!!.profile)
+        assertEquals("legacy", manager.token())
     }
 }

@@ -11,12 +11,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Docker 镜像构建失败。' }
     docker compose -p zhiyu-docker-test -f compose.test.yaml --profile tests run --rm --no-deps tests | Tee-Object -FilePath artifacts/docker-unit-tests.log
     if ($LASTEXITCODE -ne 0) { throw 'Linux 容器自动测试失败。' }
-    docker compose -p zhiyu-docker-test -f compose.test.yaml --profile tests run --rm --no-deps tests ruff check --no-cache app tests /workspace/scripts/smoke_docker.py
+    docker compose -p zhiyu-docker-test -f compose.test.yaml --profile tests run --rm --no-deps tests ruff check --config pyproject.toml --no-cache app tests /workspace/scripts
     if ($LASTEXITCODE -ne 0) { throw '静态检查失败。' }
     uv sync --directory backend --frozen --extra dev
     if ($LASTEXITCODE -ne 0) { throw 'HTTP 联调工具依赖安装失败。' }
     & "$projectRoot/backend/.venv/Scripts/python.exe" scripts/smoke_docker.py
     if ($LASTEXITCODE -ne 0) { throw 'Docker HTTP 与持久化联调失败。' }
+    & "$projectRoot/backend/.venv/Scripts/python.exe" scripts/smoke_companion.py
+    if ($LASTEXITCODE -ne 0) { throw '恋人设定、长聊记忆与分页联调失败。' }
+    & "$projectRoot/backend/.venv/Scripts/python.exe" -m pytest scripts/tests -q
+    if ($LASTEXITCODE -ne 0) { throw '压力测试工具自身回归失败。' }
+    & "$PSScriptRoot/Test-LongFields.ps1"
 } finally {
     Pop-Location
 }

@@ -17,17 +17,24 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
     private val mutableState = MutableStateFlow(AppState())
     val state = mutableState.asStateFlow()
     private var connectionCleanup: Deferred<Unit>? = null
+    private var profileEdited = false
 
     init {
         viewModelScope.launch {
             try {
+                val binding = repository.savedBinding()
+                mutableState.update { it.copy(binding = binding, profile = binding?.profile, providerId = binding?.providerId.orEmpty(), model = binding?.model.orEmpty()) }
                 val saved = repository.savedConnection()
                 if (saved != null) {
-                    mutableState.update { it.copy(serverUrl = saved.serverUrl, providerId = saved.providerId, model = saved.model, apiKey = saved.apiKey, busy = "恢复连接") }
-                    val providers = repository.providers(saved.serverUrl)
-                    mutableState.update { it.copy(providers = providers, connected = true) }
+                    val restoredBinding = repository.savedBinding()
+                    check(restoredBinding == null || (restoredBinding.providerId == saved.providerId && restoredBinding.model == saved.model)) { "保存的连接与已绑定 AI 不一致" }
+                    mutableState.update { it.copy(binding = restoredBinding, serverUrl = saved.serverUrl, providerId = saved.providerId, model = saved.model, apiKey = saved.apiKey, busy = "恢复连接") }
+                    loadProviderCatalog()
+                    mutableState.update { it.copy(connected = true) }
                     loadConversations()
                     mutableState.update { it.copy(documents = repository.documents()) }
+                } else {
+                    loadProviderCatalog()
                 }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -43,59 +50,90 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
             previousCleanup?.await()
             repository.forgetLocalConnection()
         }
-        mutableState.update { it.copy(serverUrl = value, providers = emptyList(), providerId = "", model = "", apiKey = "", error = null) }
+        mutableState.update { it.copy(serverUrl = value, connected = false, providers = emptyList(),
+            providerId = it.binding?.providerId.orEmpty(), model = it.binding?.model.orEmpty(), apiKey = "",
+            conversations = emptyList(), selectedId = null, messages = emptyList(), hasOlder = false,
+            nextBefore = null, viewingOlder = false, documents = emptyList(), draft = "", error = null) }
+        loadProviders()
     }
     fun apiKey(value: String) { mutableState.update { it.copy(apiKey = value, error = null) } }
-    fun model(value: String) { mutableState.update { it.copy(model = value, error = null) } }
+    fun model(value: String) { if (mutableState.value.binding == null) mutableState.update { it.copy(model = value, error = null) } }
     fun draft(value: String) { mutableState.update { it.copy(draft = value) } }
-    fun tab(value: AppTab) { mutableState.update { it.copy(tab = value) } }
     fun dismissError() { mutableState.update { it.copy(error = null, notice = null) } }
     fun provider(id: String) {
+        if (mutableState.value.binding != null) return
         val provider = mutableState.value.providers.find { it.id == id } ?: return
         mutableState.update { it.copy(providerId = id, model = provider.defaultModel, apiKey = "", error = null) }
     }
-    fun loadProviders() = action("检测后端") {
+    fun loadProviders() = action("加载服务商") { loadProviderCatalog() }
+    private suspend fun loadProviderCatalog() {
+        val current = mutableState.value
+        check(current.serverUrl.isNotBlank()) { "此安装包的服务配置尚未完成，请使用已配置的版本" }
         val providers = repository.providers(mutableState.value.serverUrl)
-        val first = providers.firstOrNull() ?: throw IllegalStateException("后端没有配置可用服务商")
-        mutableState.update { it.copy(providers = providers, providerId = first.id, model = first.defaultModel, notice = "后端已连接，请输入服务商 API Key") }
+        check(current.binding == null || providers.any { it.id == current.binding.providerId }) { "已绑定的 AI 暂时不可用，请稍后重试" }
+        val selected = providers.find { it.id == (current.binding?.providerId ?: current.providerId) } ?: providers.firstOrNull()
+            ?: throw IllegalStateException("服务暂时没有可用的 AI 公司，请稍后重试")
+        mutableState.update { it.copy(
+            providers = providers, providerId = selected.id,
+            model = current.binding?.model ?: if (selected.id == current.providerId && current.model.isNotBlank()) current.model else selected.defaultModel,
+            apiKey = if (selected.id == current.providerId) current.apiKey else "",
+        ) }
     }
     fun connect() = action("验证 API Key") {
         val current = mutableState.value
-        repository.login(current.serverUrl, current.providerId, current.apiKey, current.model)
+        val editedProfile = current.profile.takeIf { profileEdited }
+        repository.login(current.serverUrl, current.providerId, current.apiKey, current.model, current.profile)
         val saved = repository.savedConnection() ?: throw IllegalStateException("连接信息保存失败")
-        mutableState.update { it.copy(connected = true, serverUrl = saved.serverUrl, model = saved.model, tab = AppTab.CHAT, error = null, notice = null) }
+        val binding = repository.savedBinding()
+        mutableState.update { it.copy(connected = true, binding = binding, serverUrl = saved.serverUrl, model = saved.model, error = null, notice = null) }
         loadConversations()
+        if (profileEdited && editedProfile?.mode == "custom" && editedProfile != mutableState.value.profile) {
+            val updated = repository.changeProfile(mutableState.value.selectedId!!, editedProfile)
+            val updatedBinding = repository.savedBinding()
+            mutableState.update { it.copy(conversations = listOf(updated), profile = updated.profile, binding = updatedBinding) }
+        }
+        profileEdited = false
         mutableState.update { it.copy(documents = repository.documents()) }
     }
     fun refresh() = action("刷新") {
         loadConversations()
         mutableState.update { it.copy(documents = repository.documents()) }
     }
+    fun loadOlder() = action("读取更早的消息") {
+        val current = mutableState.value
+        val id = current.selectedId ?: return@action
+        val before = current.nextBefore ?: return@action
+        loadHistory(id, before)
+    }
     private suspend fun loadConversations() {
         val conversations = repository.conversations()
-        val current = mutableState.value.selectedId
-        val selected = conversations.find { it.id == current } ?: conversations.firstOrNull()
-        val messages = selected?.let { repository.messages(it.id) }.orEmpty()
-        mutableState.update { it.copy(conversations = conversations, selectedId = selected?.id, messages = messages) }
-    }
-    fun selectConversation(id: String) = action("加载对话") {
-        val messages = repository.messages(id)
-        mutableState.update { it.copy(selectedId = id, messages = messages, draft = "", tab = AppTab.CHAT) }
-    }
-    fun createConversation() = action("创建对话") {
-        createConversationInternal()
-        mutableState.update { it.copy(draft = "") }
-    }
-    private suspend fun createConversationInternal(): Conversation {
         val current = mutableState.value
-        val conversation = repository.createConversation(current.model, current.defaultRag)
-        mutableState.update { it.copy(conversations = listOf(conversation) + it.conversations, selectedId = conversation.id, messages = emptyList(), tab = AppTab.CHAT) }
-        return conversation
+        val selected = conversations.find { it.id == current.selectedId && it.model == current.model }
+            ?: conversations.filter { it.model == current.model }.minWithOrNull(compareBy<Conversation> { it.createdAt }.thenBy { it.id })
+            ?: repository.createConversation(current.model, current.defaultRag, current.profile)
+        mutableState.update { it.copy(conversations = listOf(selected), selectedId = selected.id, profile = selected.profile) }
+        loadHistory(selected.id)
     }
-    fun deleteConversation(id: String) = action("删除对话") {
-        repository.deleteConversation(id)
-        mutableState.update { it.copy(conversations = it.conversations.filterNot { c -> c.id == id }) }
-        loadConversations()
+    private suspend fun loadHistory(id: String, before: String? = null) {
+        val page = repository.history(id, before)
+        check(page.messages.size <= 100 && (!page.hasMore || page.nextBefore != null)) { "会话历史响应不完整" }
+        mutableState.update { it.copy(messages = page.messages, hasOlder = page.hasMore,
+            nextBefore = page.nextBefore, viewingOlder = before != null) }
+    }
+    fun setProfile(value: CompanionProfile?) = action("保存恋人设定") {
+        val profile = CompanionRules.normalize(value)
+        val current = mutableState.value
+        CompanionRules.checkChange(current.binding, profile)
+        if (current.connected) {
+            val id = current.selectedId ?: throw IllegalStateException("对话还未准备好")
+            val updated = repository.changeProfile(id, profile)
+            mutableState.update { it.copy(conversations = listOf(updated), profile = updated.profile, notice = "恋人设定已保存") }
+            val binding = repository.savedBinding()
+            mutableState.update { it.copy(binding = binding) }
+        } else {
+            profileEdited = true
+            mutableState.update { it.copy(profile = profile) }
+        }
     }
     fun setRag(enabled: Boolean) = action("更新检索设置") {
         val selected = mutableState.value.selected
@@ -107,13 +145,19 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
     }
     fun send() = action("AI 正在思考") {
         val content = ConnectionRules.message(mutableState.value.draft)
-        val conversation = mutableState.value.selected ?: createConversationInternal()
+        val conversation = mutableState.value.selected ?: throw IllegalStateException("对话还未准备好，请刷新后重试")
         mutableState.update { it.copy(pendingMessage = content) }
         try {
             val result = repository.sendMessage(conversation.id, content)
-            mutableState.update { it.copy(messages = it.messages + result.first + result.second, draft = "", pendingMessage = null) }
-            val conversations = repository.conversations()
-            mutableState.update { it.copy(conversations = conversations) }
+            val wasViewingOlder = mutableState.value.viewingOlder
+            mutableState.update {
+                val combined = (if (wasViewingOlder) emptyList() else it.messages) + result.first + result.second
+                val messages = combined.takeLast(100)
+                val hasOlder = wasViewingOlder || it.hasOlder || combined.size > messages.size
+                it.copy(messages = messages, hasOlder = hasOlder, nextBefore = if (hasOlder) messages.first().id else null,
+                    draft = "", pendingMessage = null, viewingOlder = false)
+            }
+            if (wasViewingOlder) loadHistory(conversation.id)
         } finally { mutableState.update { it.copy(pendingMessage = null) } }
     }
     fun importDocument(uri: Uri) = action("导入知识库") {
@@ -134,7 +178,7 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
                 if (failure is CancellationException) throw failure
                 error = "本机 Key 已清除；后端会话注销未确认，过期后会自动失效"
             }
-            mutableState.value = AppState(restoring = false, serverUrl = old.serverUrl, providers = old.providers, providerId = old.providerId, model = old.model, error = error)
+            mutableState.value = AppState(restoring = false, binding = old.binding, profile = old.profile, serverUrl = old.serverUrl, providers = old.providers, providerId = old.providerId, model = old.model, error = error)
         }
     }
     private fun action(label: String, block: suspend () -> Unit) {
