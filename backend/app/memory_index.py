@@ -7,6 +7,8 @@ It currently provides lexical retrieval, not vector semantics or Engram.
 
 import sqlite3
 
+from .body_codec import decode_body
+from .body_reads import decoded_turn
 from .memory_ranking import EVENT_TERMS
 from .source_codec import ChatStorageError
 from .vendor_rag.bm25 import _tokenize
@@ -87,14 +89,18 @@ class MemoryIndex:
 
     def backfill_batch(self, db, after: int) -> int | None:
         rows = db.execute("""
-            SELECT m.sequence,m.conversation_id,m.content FROM messages m
+            SELECT m.sequence,m.conversation_id FROM messages m
             WHERE m.sequence>? AND NOT EXISTS (
                 SELECT 1 FROM memory_fragments f WHERE f.message_sequence=m.sequence
             ) ORDER BY m.sequence LIMIT ?
-            """, (after, BACKFILL_BATCH)).fetchall()
+            """, (after, BACKFILL_BATCH))
+        last = None
         for row in rows:
-            self.index_message(db, row["sequence"], row["conversation_id"], row["content"])
-        return rows[-1]["sequence"] if rows else None
+            content = decode_body(db.execute("SELECT content FROM messages WHERE sequence=?", (row["sequence"],)).fetchone()[0])
+            self.index_message(db, row["sequence"], row["conversation_id"], content)
+            del content
+            last = row["sequence"]
+        return last
 
     def candidates(self, db, owner: str, identifier: str, before: int,
                    terms: list[str], limit: int, excerpt_chars: int) -> list[dict]:
@@ -104,13 +110,12 @@ class MemoryIndex:
         tokens = ["t" + term.encode("utf-8").hex() for term in terms]
         query = scope_token(identifier) + " AND (" + " OR ".join(tokens) + ")"
         latest_limit = min(64, max(1, limit // 4))
-        parameters = (query, owner, identifier, before, limit - latest_limit, latest_limit,
-                      excerpt_chars, excerpt_chars)
+        parameters = (query, owner, identifier, before, limit - latest_limit, latest_limit)
         try:
-            rows = db.execute(CANDIDATES_SQL, parameters).fetchall()
+            return [{**decoded_turn(db, row, excerpt_chars), "owner": owner, "conversation_id": identifier}
+                    for row in db.execute(CANDIDATES_SQL, parameters)]
         except sqlite3.Error as error:
             raise MemoryIndexError("聊天 RAG 索引暂时无法检索") from error
-        return [{**dict(row), "owner": owner, "conversation_id": identifier} for row in rows]
 
     def event_candidates(self, db, owner, identifier, before, windows, limit=32, excerpt_chars=768):
         if not windows or limit < 1:
@@ -125,11 +130,11 @@ class MemoryIndex:
         bounds = tuple(time.isoformat() for window in windows for time in (window.start, window.end))
         latest_limit = min(8, max(1, limit // 4))
         try:
-            rows = db.execute(sql, (query, owner, identifier, before, *bounds,
-                                    limit - latest_limit, latest_limit, excerpt_chars, excerpt_chars)).fetchall()
+            parameters = (query, owner, identifier, before, *bounds, limit - latest_limit, latest_limit)
+            return [{**decoded_turn(db, row, excerpt_chars), "owner": owner, "conversation_id": identifier}
+                    for row in db.execute(sql, parameters)]
         except sqlite3.Error as error:
             raise MemoryIndexError("聊天 RAG 事件索引暂时无法检索") from error
-        return [{**dict(row), "owner": owner, "conversation_id": identifier} for row in rows]
 
 
 CANDIDATES_SQL = """
@@ -160,9 +165,7 @@ CANDIDATES_SQL = """
         WHERE turn_sequence IN (SELECT turn_sequence FROM selected)
     )
     SELECT u.sequence,u.id user_id,a.id assistant_id,
-        substr(u.content,COALESCE(bu.char_start,0)+1,?) user_text,
-        substr(a.content,COALESCE(ba.char_start,0)+1,?) assistant_text,
-        length(u.content) user_length,length(a.content) assistant_length,
+        COALESCE(bu.char_start,0) user_start,COALESCE(ba.char_start,0) assistant_start,
         u.created_at user_created_at,a.created_at assistant_created_at
     FROM selected s JOIN messages u ON u.sequence=s.turn_sequence
     JOIN messages a ON a.sequence=u.sequence+1

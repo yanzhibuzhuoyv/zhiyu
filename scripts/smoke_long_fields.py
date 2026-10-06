@@ -119,7 +119,22 @@ def role_storage_counts(db):
     # DISTINCT carries only the tiny role field. Aggregating each role separately
     # streams its canonical originals instead of sorting full chat text in /tmp.
     roles = db.execute(ROLE_ENUMERATION_SQL).fetchall()
-    return [(role, *db.execute(ROLE_AGGREGATE_SQL, (role,)).fetchone()) for role, in roles]
+    results = []
+    for role, in roles:
+        count, size = db.execute(ROLE_AGGREGATE_SQL, (role,)).fetchone()
+        # Keep original UTF-8 and stored encoded payload as separate measurements.
+        for content, in db.execute("SELECT content FROM messages WHERE role IS ? AND typeof(content)='blob'", (role,)):
+            size += len(original_content(content).encode()) - len(content)
+        results.append((role, count, size))
+    return results
+
+
+def original_content(value):
+    if isinstance(value, bytes):
+        from app.body_codec import decode_body
+
+        return decode_body(value)
+    return value
 
 
 def snapshot(path):
@@ -127,6 +142,7 @@ def snapshot(path):
         db.execute("BEGIN")
         counts = role_storage_counts(db)
         result = {"messages": sum(row[1] for row in counts), "content_utf8_bytes": sum(row[2] for row in counts),
+                  "stored_body_bytes": db.execute("SELECT coalesce(sum(length(CAST(content AS BLOB))),0) FROM messages").fetchone()[0],
                   "roles": {role: {"count": count, "utf8_bytes": size} for role, count, size in counts},
                   "conversations": db.execute("SELECT count(*) FROM conversations").fetchone()[0],
                   "fragments": db.execute("SELECT count(*) FROM memory_fragments").fetchone()[0],
@@ -153,7 +169,9 @@ def snapshot(path):
 def verify_all_fragments(path):
     totals = {"messages_verified": 0, "fragments_verified": 0, "long_messages_verified": 0}
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
-        for sequence, chars in db.execute("SELECT sequence,length(content) FROM messages ORDER BY sequence"):
+        for sequence, stored in db.execute("SELECT sequence,content FROM messages ORDER BY sequence"):
+            chars = len(original_content(stored))
+            del stored
             rows = db.execute("SELECT f.char_start,f.char_end,ft.rowid IS NOT NULL FROM memory_fragments f LEFT JOIN memory_fts ft ON ft.rowid=f.id WHERE f.message_sequence=? ORDER BY f.char_start", (sequence,)).fetchall()
             result = verify_fragment_rows(chars, rows)
             totals["messages_verified"] += 1

@@ -11,6 +11,7 @@ coverage.xml
 htmlcov/
 *.egg-info/
 backend/data/
+/data/
 *.log
 android/.gradle/
 android/.kotlin/

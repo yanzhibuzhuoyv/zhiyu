@@ -4,6 +4,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from .body_codec import decode_body, encode_body
+from .body_migration import DEFAULT_BATCH_BYTES, DEFAULT_BATCH_ROWS, migrate_batch, validate_batch
+from .body_reads import decoded_turn
 from .companion import check_profile_change, decode_profile, encode_profile, normalize_profile
 from .memory_index import MemoryIndex
 from .source_codec import ChatStorageError, decode_sources, encode_sources
@@ -154,7 +157,8 @@ class ChatDatabase:
 
     @staticmethod
     def _message(row):
-        return {k: (decode_sources(row[k]) if k == "sources" else row[k])
+        return {k: (decode_sources(row[k]) if k == "sources" else
+                    decode_body(row[k]) if k == "content" else row[k])
                 for k in row.keys() if k not in {"sequence", "conversation_id"}}
 
     def history_page(self, owner: str, identifier: str, limit: int, before: str | None):
@@ -181,25 +185,43 @@ class ChatDatabase:
 
     def recent_turns(self, owner: str, identifier: str, limit: int, char_limit: int):
         with self.connection() as db:
+            db.execute("BEGIN")
             rows = db.execute("""
-                SELECT u.sequence, u.id user_id, a.id assistant_id,
-                    substr(u.content,1,?) user_text, substr(a.content,1,?) assistant_text,
-                    length(u.content) user_length, length(a.content) assistant_length
+                SELECT u.sequence, u.id user_id, a.id assistant_id
                 FROM messages u JOIN messages a ON a.conversation_id=u.conversation_id
                     AND a.sequence=u.sequence+1 AND a.role='assistant'
                 JOIN conversations c ON c.id=u.conversation_id
                 WHERE c.owner=? AND c.id=? AND u.role='user'
                 ORDER BY u.sequence DESC LIMIT ?
-                """, (char_limit, char_limit, owner, identifier, limit)).fetchall()
-        return [dict(row) for row in rows]
+                """, (owner, identifier, limit))
+            return [decoded_turn(db, row, char_limit) for row in rows]
+
+    def migrate_bodies(self, owner: str, identifier: str, *, after=0,
+                       batch_rows=DEFAULT_BATCH_ROWS, byte_limit=DEFAULT_BATCH_BYTES, through=None):
+        validate_batch(after, batch_rows, byte_limit, through)
+        try:
+            with self.connection() as db:
+                db.execute("BEGIN IMMEDIATE")
+                if db.execute("SELECT 1 FROM conversations WHERE id=? AND owner=?",
+                              (identifier, owner)).fetchone() is None:
+                    return None
+                boundary = through if through is not None else max(after, db.execute(
+                    "SELECT coalesce(max(sequence),0) FROM messages WHERE conversation_id=?",
+                    (identifier,),
+                ).fetchone()[0])
+                return migrate_batch(db, identifier, after, batch_rows, byte_limit, boundary)
+        except sqlite3.Error as exc:
+            raise ChatStorageError("聊天正文迁移无法完成") from exc
 
     def memory_candidates(self, owner: str, identifier: str, before: int,
                           terms: list[str], limit: int, excerpt_chars: int):
         with self.connection() as db:
+            db.execute("BEGIN")
             return self.memory.candidates(db, owner, identifier, before, terms, limit, excerpt_chars)
 
     def memory_event_candidates(self, owner, identifier, before, windows, limit=32, excerpt_chars=768):
         with self.connection() as db:
+            db.execute("BEGIN")
             return self.memory.event_candidates(db, owner, identifier, before, windows, limit, excerpt_chars)
 
     def save_turn(self, owner: str, identifier: str, content: str, answer: str, sources: list):
@@ -211,7 +233,7 @@ class ChatDatabase:
                 raise ValueError("会话不存在")
             for message in (user, assistant):
                 cursor = db.execute("INSERT INTO messages (id,conversation_id,role,content,sources,created_at) VALUES (?,?,?,?,?,?)",
-                                    (message["id"], identifier, message["role"], message["content"], encode_sources(message["sources"]), message["created_at"]))
+                                    (message["id"], identifier, message["role"], encode_body(message["content"]), encode_sources(message["sources"]), message["created_at"]))
                 self.memory.index_message(db, cursor.lastrowid, identifier, message["content"])
             title = content[:30] if row["title"] == "新对话" else row["title"]
             db.execute("UPDATE conversations SET title=?,updated_at=? WHERE id=? AND owner=?",

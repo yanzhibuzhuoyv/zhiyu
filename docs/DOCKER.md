@@ -2,6 +2,17 @@
 
 后端运行在 Linux 容器中，默认中文 BM25。Android App 是原生 APK，Docker 负责运行和验证后端。
 
+## 2026-10-06 正文存储版部署
+
+本机8791已升级为`sha256:418a7a857c088b43f1ee61ace24db037cec580f2b7f176318f02917c742f88ed`，health为ok/0.1.1/bm25、演示开启。本机`zhiyu-backend:docker-test`标签也已更新为这个摘要，下面普通启动命令继续使用正式正文读取版。需要固定当前摘要复现时：
+
+```powershell
+$env:ZHIYU_DOCKER_TEST_DEMO = 'true'
+docker compose -p zhiyu-docker-test -f compose.test.yaml -f artifacts/compose.body-storage.override.yaml up -d --no-deps --no-build --wait backend
+```
+
+override仅是本机留证，不提交Git；其他机器先从当前源码构建。升级前保留完整测试卷及身份文件备份，见[正文格式、迁移和回退边界](BODY_STORAGE.md)。旧镜像不认识新压缩BLOB，不能直接换回旧缓存标签当作数据回退。最终全量后端两平台各481 passed/95.29%，工具各106 passed。新写千轮与20k副本迁移在先前d36d镜像分别通过，正文核心与最终镜像SHA相同，差异仅未接入生产的策略去重；没有重跑整个旧版`Test-Docker.ps1`，结果按各实际入口留证。
+
 ## 一键测试
 
 Windows 上启动 Docker Desktop 的 Linux 引擎，在项目根目录运行：

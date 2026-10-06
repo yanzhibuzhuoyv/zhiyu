@@ -125,5 +125,5 @@ async def send(identifier: str, body: NewMessage, request: Request, session: Ses
         )
         async with state.upstream_slots:
             answer = await state.provider.complete(session.provider_id, session.api_key, conversation["model"], prompt(history, body.content, sources, memory_refs, conversation["companion_profile"]))
-        saved = state.chat.save_turn(session.owner, identifier, body.content, answer, sources)
+        saved = await run_in_threadpool(state.chat.save_turn, session.owner, identifier, body.content, answer, sources)
         return {**saved, "memory_refs": memory_refs}
