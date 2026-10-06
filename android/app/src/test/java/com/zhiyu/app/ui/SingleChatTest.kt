@@ -115,6 +115,9 @@ private class CompanionRepository : ChatRepository {
         return Message("new-user", "user", content, emptyList(), "now") to Message("new-ai", "assistant", "记得", emptyList(), "now")
     }
     override suspend fun documents() = emptyList<Document>()
+    override suspend fun memory(id: String, before: String?): MemoryPage = error("Unused")
+    override suspend fun messageMemory(id: String, messageId: String): MemoryEntry = error("Unused")
+    override suspend fun changeMemory(id: String, messageId: String, change: MemoryChange): MemoryEntry = error("Unused")
     override suspend fun upload(file: UploadedFile): Document = error("Unused")
     override suspend fun deleteDocument(id: String): Unit = error("Unused")
 }

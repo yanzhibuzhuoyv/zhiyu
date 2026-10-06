@@ -51,6 +51,9 @@ interface ChatRepository {
     suspend fun deleteConversation(id: String)
     suspend fun messages(id: String): List<Message>
     suspend fun history(id: String, before: String? = null): MessagePage
+    suspend fun memory(id: String, before: String? = null): MemoryPage
+    suspend fun messageMemory(id: String, messageId: String): MemoryEntry
+    suspend fun changeMemory(id: String, messageId: String, change: MemoryChange): MemoryEntry
     suspend fun sendMessage(id: String, content: String): Pair<Message, Message>
     suspend fun documents(): List<Document>
     suspend fun upload(file: UploadedFile): Document

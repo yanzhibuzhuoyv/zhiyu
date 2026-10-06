@@ -53,7 +53,7 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         mutableState.update { it.copy(serverUrl = value, connected = false, providers = emptyList(),
             providerId = it.binding?.providerId.orEmpty(), model = it.binding?.model.orEmpty(), apiKey = "",
             conversations = emptyList(), selectedId = null, messages = emptyList(), hasOlder = false,
-            nextBefore = null, viewingOlder = false, documents = emptyList(), draft = "", error = null) }
+            nextBefore = null, viewingOlder = false, memory = MemoryPanelState(), documents = emptyList(), draft = "", error = null) }
         loadProviders()
     }
     fun apiKey(value: String) { mutableState.update { it.copy(apiKey = value, error = null) } }
@@ -85,7 +85,8 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         repository.login(current.serverUrl, current.providerId, current.apiKey, current.model, current.profile)
         val saved = repository.savedConnection() ?: throw IllegalStateException("连接信息保存失败")
         val binding = repository.savedBinding()
-        mutableState.update { it.copy(connected = true, binding = binding, serverUrl = saved.serverUrl, model = saved.model, error = null, notice = null) }
+        mutableState.update { it.copy(connected = true, binding = binding, serverUrl = saved.serverUrl, model = saved.model,
+            memory = MemoryPanelState(), error = null, notice = null) }
         loadConversations()
         if (profileEdited && editedProfile?.mode == "custom" && editedProfile != mutableState.value.profile) {
             val updated = repository.changeProfile(mutableState.value.selectedId!!, editedProfile)
@@ -111,7 +112,8 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         val selected = conversations.find { it.id == current.selectedId && it.model == current.model }
             ?: conversations.filter { it.model == current.model }.minWithOrNull(compareBy<Conversation> { it.createdAt }.thenBy { it.id })
             ?: repository.createConversation(current.model, current.defaultRag, current.profile)
-        mutableState.update { it.copy(conversations = listOf(selected), selectedId = selected.id, profile = selected.profile) }
+        mutableState.update { it.copy(conversations = listOf(selected), selectedId = selected.id, profile = selected.profile,
+            memory = if (it.selectedId == selected.id) it.memory else MemoryPanelState()) }
         loadHistory(selected.id)
     }
     private suspend fun loadHistory(id: String, before: String? = null) {
@@ -119,6 +121,74 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         check(page.messages.size <= 100 && (!page.hasMore || page.nextBefore != null)) { "会话历史响应不完整" }
         mutableState.update { it.copy(messages = page.messages, hasOlder = page.hasMore,
             nextBefore = page.nextBefore, viewingOlder = before != null) }
+    }
+    fun openMemory() {
+        if (mutableState.value.isBusy || mutableState.value.restoring || !mutableState.value.connected) return
+        mutableState.update { it.copy(memory = MemoryPanelState(open = true)) }
+        loadMemoryPage()
+    }
+    fun closeMemory() { mutableState.update { it.copy(memory = MemoryPanelState()) } }
+    fun olderMemory() {
+        val before = mutableState.value.memory.nextBefore ?: return
+        loadMemoryPage(before)
+    }
+    fun recentMemory() = loadMemoryPage()
+    fun backToMemoryList() {
+        if (mutableState.value.memory.entries.isEmpty()) openMemory()
+        else mutableState.update { it.copy(memory = it.memory.copy(focusId = null, selected = null)) }
+    }
+    private fun loadMemoryPage(before: String? = null) = action("读取记忆") {
+        val id = mutableState.value.selectedId ?: return@action
+        val page = MemoryRules.page(repository.memory(id, before), before)
+        mutableState.update {
+            if (!it.memory.open || it.selectedId != id) it
+            else it.copy(memory = it.memory.copy(entries = page.messages, hasMore = page.hasMore,
+                nextBefore = page.nextBefore, viewingOlder = before != null,
+                automaticAnnotations = page.automaticAnnotations, focusId = null, selected = null))
+        }
+    }
+    fun openMessageMemory(messageId: String) {
+        if (mutableState.value.isBusy || mutableState.value.restoring || !mutableState.value.connected) return
+        mutableState.update { it.copy(memory = it.memory.copy(open = true, focusId = messageId, selected = null)) }
+        action("读取这句原话的记忆") {
+            val id = mutableState.value.selectedId ?: return@action
+            val entry = MemoryRules.entry(repository.messageMemory(id, messageId))
+            check(entry.messageId == messageId) { "记忆来源与所选消息不一致" }
+            updateMemory(id, entry)
+        }
+    }
+    fun changeMemoryTier(tier: String) = changeMemory(tier = tier)
+    fun archiveMemory() = changeMemory(indexState = "cold")
+    fun restoreMemory() = changeMemory(indexState = "active")
+    fun confirmIndependentMemory() = changeMemory(confirmIndependent = true)
+    private fun changeMemory(tier: String? = null, indexState: String? = null, confirmIndependent: Boolean = false) = action("保存记忆设置") {
+        val current = mutableState.value
+        val id = current.selectedId ?: return@action
+        val entry = current.memory.selected ?: return@action
+        val change = MemoryRules.change(entry, tier, indexState, confirmIndependent)
+        try {
+            val updated = MemoryRules.entry(repository.changeMemory(id, entry.messageId, change))
+            check(updated.messageId == entry.messageId) { "记忆来源与所选消息不一致" }
+            updateMemory(id, updated)
+        } catch (failure: ApiFailure) {
+            if (failure.status == 409 && mutableState.value.memory.open) {
+                try {
+                    val latest = MemoryRules.entry(repository.messageMemory(id, entry.messageId))
+                    check(latest.messageId == entry.messageId) { "记忆来源与所选消息不一致" }
+                    updateMemory(id, latest)
+                } catch (refresh: Exception) {
+                    if (refresh is CancellationException) throw refresh
+                    failure.addSuppressed(refresh)
+                }
+            }
+            throw failure
+        }
+    }
+    private fun updateMemory(id: String, entry: MemoryEntry) {
+        mutableState.update {
+            if (!it.memory.open || it.selectedId != id || it.memory.focusId != entry.messageId) it
+            else it.copy(memory = it.memory.updated(entry))
+        }
     }
     fun setProfile(value: CompanionProfile?) = action("保存恋人设定") {
         val profile = CompanionRules.normalize(value)
@@ -187,7 +257,11 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
             mutableState.update { it.copy(busy = label, error = null, notice = null) }
             try { connectionCleanup?.await(); block() } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                mutableState.update { it.copy(error = friendly(error), connected = if (error is ApiFailure && error.status == 401) false else it.connected) }
+                mutableState.update {
+                    val expired = error is ApiFailure && error.status == 401
+                    it.copy(error = friendly(error), connected = if (expired) false else it.connected,
+                        memory = if (expired) MemoryPanelState() else it.memory)
+                }
             } finally { mutableState.update { it.copy(busy = null) } }
         }
     }

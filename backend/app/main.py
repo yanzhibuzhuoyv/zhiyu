@@ -13,6 +13,7 @@ from .chat_routes import router as chat_router
 from .config import Settings
 from .database import ChatDatabase
 from .knowledge_routes import router as knowledge_router
+from .memory_routes import router as memory_router
 from .providers import ProviderClient, ProviderError
 from .rag import RagService, RagStorageError
 from .rag_semantic import RagSemanticError
@@ -37,7 +38,8 @@ def create_app(settings: Settings | None = None, provider_client=None) -> FastAP
     state.settings = settings
     state.sessions = Sessions(settings.data_dir, settings.session_hours)
     state.login_limiter = LoginLimiter()
-    state.chat = ChatDatabase(settings.data_dir)
+    state.chat = ChatDatabase(settings.data_dir, auto_annotations=settings.auto_memory_annotations,
+                              annotation_mode=settings.memory_annotation_mode)
     state.rag = RagService(settings.data_dir, embedding_model=settings.embedding_model)
     state.provider = provider_client or ProviderClient(allow_demo=settings.allow_demo)
     state.upstream_slots = asyncio.Semaphore(8)
@@ -74,6 +76,7 @@ def create_app(settings: Settings | None = None, provider_client=None) -> FastAP
 
     application.include_router(auth_router)
     application.include_router(chat_router)
+    application.include_router(memory_router)
     application.include_router(knowledge_router)
     return application
 

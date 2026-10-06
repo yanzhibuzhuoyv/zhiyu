@@ -2,9 +2,21 @@
 
 后端运行在 Linux 容器中，默认中文 BM25。Android App 是原生 APK，Docker 负责运行和验证后端。
 
-## 2026-10-06 正文存储版部署
+## 2026-10-06晚间：语义标签与冷归档版
 
-本机8791已升级为`sha256:418a7a857c088b43f1ee61ace24db037cec580f2b7f176318f02917c742f88ed`，health为ok/0.1.1/bm25、演示开启。本机`zhiyu-backend:docker-test`标签也已更新为这个摘要，下面普通启动命令继续使用正式正文读取版。需要固定当前摘要复现时：
+当前8791运行`sha256:1c69b81f21422a094bea093813f3597736a7e1a4ce0f5a22a362848f696b1495`，health为ok，演示与自动标注开启，mode=semantic。demo没有真实语义模型，返回unavailable；普通用户仍只选公司和Key。两平台各718/95.18%，新版APK63unit与28模拟器联测通过。固定本机已构建摘要启动：
+
+```powershell
+docker compose -p zhiyu-docker-test -f compose.test.yaml -f artifacts/compose.memory-tiers.override.yaml up -d --no-build --wait backend
+```
+
+override在本机artifacts留证，其他电脑先构建源码。docker-test/unit-test标签已指向当前运行/测试镜像。22:06升级前完整原应用卷三文件SHA一致备份`zhiyu-memory-predeploy-5bf379457ca149df9e6373dbdb92a2d4`，包括身份文件；21:43的`zhiyu-memory-predeploy-8d234629f3de4457bfa28c907eda69b0`及旧正文备份保留。首次helper以root但cap_drop ALL无法读取0600身份文件，失败日志保留；随后仅准备新备份目录所有权，实际复制使用运行UID10001后通过，原数据权限未改。
+
+两万条冷归档/千轮及28项安卓联测用较早冻结0eb镜像；最终镜像只修更正链与节选选取，核心存储、冷目录与负载helper SHA同。最终两平台全量回归、小型真实HTTP另通过，不称重跑这三份证明。[完整证据与局限](VALIDATION.md)。
+
+## 2026-10-06 17:08正文存储版部署（历史）
+
+17:08本机8791曾运行`sha256:418a7a857c088b43f1ee61ace24db037cec580f2b7f176318f02917c742f88ed`，health为ok/0.1.1/bm25、演示开启；现已由页首镜像取代。下面body-storage override属于历史复现入口，当前使用页首memory-tiers override：
 
 ```powershell
 $env:ZHIYU_DOCKER_TEST_DEMO = 'true'

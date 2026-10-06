@@ -8,9 +8,10 @@ from starlette.concurrency import run_in_threadpool
 
 from .auth import Session
 from .companion import CompanionConflict, companion_system
-from .conversation_memory import conversation_context
-from .database import HistoryCursorError
+from .conversation_memory import conversation_context_result
+from .database import HistoryCursorError, timestamp
 from .dependencies import current_session
+from .memory_semantic import identify_turn
 from .schemas import EditConversation, NewConversation, NewMessage
 
 router = APIRouter(prefix="/api/conversations")
@@ -78,9 +79,11 @@ def history(identifier: str, request: Request,
 
 
 def prompt(history: list, content: str, sources: list, memory_refs: list | None = None,
-           companion_profile: dict | None = None):
+           companion_profile: dict | None = None, memory_complete: bool = True):
     system = "你是知语，一位清楚、诚实的 AI 恋人。自然地陪伴和交流，无法确认的信息请明确说明，不编造共同经历。"
     system += companion_system(companion_profile)
+    if not memory_complete:
+        system += "\n本次旧记忆检索尚未遍历完归档；找不到原话不代表用户从未说过，不能断言记忆不存在。"
     system += f"\n当前服务器时间（UTC）：{datetime.now(UTC).isoformat()}。用户当地日期可能不同，必要时先确认。"
     if sources:
         references = [{"index": index, "name": source["name"], "text": source["text"]}
@@ -99,6 +102,8 @@ def prompt(history: list, content: str, sources: list, memory_refs: list | None 
             "nearby_event 仅表示附近的原文检索候选，relation_confirmed=false 表示关联未确认，"
             "不证明是同一天或同一事件。只有原文分别支持事件和日期时才能联系作答，否则应询问确认。"
             "这些原文独立并列，不合并、改写或摘要为新记忆。"
+            "memory_tier只影响检索优先级，不证明事实真实或关系成立；source_current=false是已被更正的历史说法。"
+            "未明确公历/农历及年份的生日原话不能擅自转换成确定日期。"
             "没有可靠记录时坦诚说明记忆不足，不编造共同经历。"
             f"\n<conversation_memory>\n{memories}\n</conversation_memory>"
         )
@@ -120,10 +125,21 @@ async def send(identifier: str, body: NewMessage, request: Request, session: Ses
     async with turn_lock(request, identifier):
         conversation = owned(request, session, identifier)
         sources = await run_in_threadpool(state.rag.search, session.owner, body.content, 5) if conversation["use_rag"] else []
-        history, memory_refs = await run_in_threadpool(
-            conversation_context, state.chat, session.owner, identifier, body.content
+        context = await run_in_threadpool(
+            conversation_context_result, state.chat, session.owner, identifier, body.content
         )
         async with state.upstream_slots:
-            answer = await state.provider.complete(session.provider_id, session.api_key, conversation["model"], prompt(history, body.content, sources, memory_refs, conversation["companion_profile"]))
-        saved = await run_in_threadpool(state.chat.save_turn, session.owner, identifier, body.content, answer, sources)
-        return {**saved, "memory_refs": memory_refs}
+            answer = await state.provider.complete(session.provider_id, session.api_key, conversation["model"], prompt(context.history, body.content, sources, context.references, conversation["companion_profile"], context.complete))
+        recognition = None
+        if state.chat.auto_annotations and state.chat.annotation_mode == "semantic":
+            catalogue = await run_in_threadpool(state.chat.recognition_catalogue, session.owner, identifier)
+            async with state.upstream_slots:
+                recognition = await identify_turn(state.provider, session.provider_id, session.api_key,
+                    conversation["model"], {"user": {"content": body.content, "created_at": timestamp()},
+                                            "assistant": {"content": answer, "created_at": timestamp()}}, catalogue=catalogue)
+        saved = await run_in_threadpool(state.chat.save_turn, session.owner, identifier, body.content, answer, sources,
+                                       recognition=recognition)
+        return {**saved, "memory_refs": context.references,
+                "memory_recognition": {"mode": state.chat.annotation_mode,
+                                       "status": recognition["status"] if recognition else "literal" if state.chat.auto_annotations else "disabled"},
+                "memory_search": {"complete": context.complete, "next_cursor": context.next_cursor}}

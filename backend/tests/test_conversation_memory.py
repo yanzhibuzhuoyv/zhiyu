@@ -118,14 +118,14 @@ def test_candidate_count_is_bounded_and_memory_is_not_copied_to_database(memory_
     for index in range(400):
         chat.save_turn(owner, identifier, f"纪念日计划{index}。", "送鲜花。", [])
     seen = []
-    original = chat.memory_candidates
+    original = chat.memory_lookup
 
     def capture(*args, **kwargs):
         candidates = original(*args, **kwargs)
-        seen.append(len(candidates))
+        seen.append(len(candidates["turns"]))
         return candidates
 
-    monkeypatch.setattr(chat, "memory_candidates", capture)
+    monkeypatch.setattr(chat, "memory_lookup", capture)
     before = chat.list_messages(owner, identifier)
     _, refs = conversation_context(chat, owner, identifier, "纪念日计划")
     assert seen == [256]

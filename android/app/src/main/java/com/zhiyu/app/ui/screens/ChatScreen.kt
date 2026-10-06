@@ -1,5 +1,6 @@
 package com.zhiyu.app.ui.screens
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -57,7 +58,9 @@ import com.zhiyu.app.ui.ChatViewModel
                         else Text("这段聊天从这里开始", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                items(state.messages, key = { it.id }) { MessageBubble(it) }
+                items(state.messages, key = { it.id }) { message ->
+                    MessageBubble(message, !state.isBusy) { viewModel.openMessageMemory(message.id) }
+                }
                 state.pendingMessage?.let { pending ->
                     item { PendingBubble(pending) }
                     item {
@@ -80,15 +83,17 @@ import com.zhiyu.app.ui.ChatViewModel
 }
 
 @Suppress("DEPRECATION")
-@Composable private fun MessageBubble(message: Message) {
+@Composable private fun MessageBubble(message: Message, enabled: Boolean, memory: () -> Unit) {
     val user = message.role == "user"
     val clipboard = LocalClipboardManager.current
     var expanded by remember(message.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (user) Alignment.End else Alignment.Start) {
         Text(if (user) "你" else "知语", Modifier.padding(horizontal = 4.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Surface(shape = MaterialTheme.shapes.large, color = if (user) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.widthIn(max = 640.dp)) {
+        Surface(shape = MaterialTheme.shapes.large, color = if (user) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+            modifier = Modifier.widthIn(max = 640.dp).testTag("message_${message.id}")
+                .combinedClickable(enabled = enabled, onClick = {}, onLongClickLabel = "管理这句原话的记忆", onLongClick = memory)) {
             Column(Modifier.padding(16.dp)) {
-                SelectionContainer { Text(message.content, style = MaterialTheme.typography.bodyLarge) }
+                Text(message.content, style = MaterialTheme.typography.bodyLarge)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     if (message.sources.isNotEmpty()) TextButton(onClick = { expanded = !expanded }) {
                         Icon(Icons.Outlined.Description, null, Modifier.size(16.dp))
@@ -96,6 +101,7 @@ import com.zhiyu.app.ui.ChatViewModel
                         Text("${message.sources.size} 条知识引用")
                     }
                     Spacer(Modifier.weight(1f))
+                    IconButton(onClick = memory, enabled = enabled, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.BookmarkBorder, "管理消息记忆", Modifier.size(16.dp)) }
                     IconButton(onClick = { clipboard.setText(AnnotatedString(message.content)) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.ContentCopy, "复制消息", Modifier.size(16.dp)) }
                 }
                 if (expanded) message.sources.forEach { source ->

@@ -62,6 +62,9 @@ private class CatalogRepository : ChatRepository {
     override suspend fun history(id: String, before: String?): MessagePage = error("Unused")
     override suspend fun sendMessage(id: String, content: String): Pair<Message, Message> = error("Unused")
     override suspend fun documents(): List<Document> = error("Unused")
+    override suspend fun memory(id: String, before: String?): MemoryPage = error("Unused")
+    override suspend fun messageMemory(id: String, messageId: String): MemoryEntry = error("Unused")
+    override suspend fun changeMemory(id: String, messageId: String, change: MemoryChange): MemoryEntry = error("Unused")
     override suspend fun upload(file: UploadedFile): Document = error("Unused")
     override suspend fun deleteDocument(id: String): Unit = error("Unused")
 }

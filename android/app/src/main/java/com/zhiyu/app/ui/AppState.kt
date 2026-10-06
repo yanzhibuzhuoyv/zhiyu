@@ -19,6 +19,7 @@ data class AppState(
     val hasOlder: Boolean = false,
     val nextBefore: String? = null,
     val viewingOlder: Boolean = false,
+    val memory: MemoryPanelState = MemoryPanelState(),
     val documents: List<Document> = emptyList(),
     val draft: String = "",
     val defaultRag: Boolean = true,

@@ -44,6 +44,8 @@ import com.zhiyu.app.ui.screens.*
                                 onClick = { menuOpen = false; viewModel.refresh() })
                             DropdownMenuItem(text = { Text("资料") }, leadingIcon = { Icon(Icons.Outlined.FolderOpen, null) },
                                 onClick = { menuOpen = false; libraryOpen = true })
+                            DropdownMenuItem(text = { Text("记忆") }, leadingIcon = { Icon(Icons.Outlined.BookmarkBorder, null) },
+                                onClick = { menuOpen = false; viewModel.openMemory() })
                             DropdownMenuItem(text = { Text("恋人设定") }, leadingIcon = { Icon(Icons.Outlined.FavoriteBorder, null) },
                                 onClick = { menuOpen = false; styleOpen = true })
                             DropdownMenuItem(text = { Text("重新验证 API Key") }, leadingIcon = { Icon(Icons.Outlined.Key, null) },
@@ -90,6 +92,7 @@ import com.zhiyu.app.ui.screens.*
     )
     if (developerSettings && BuildConfig.DEBUG) DevelopmentServerDialog(state, viewModel) { developerSettings = false }
     if (styleOpen && state.connected) CompanionProfileDialog(state, viewModel) { styleOpen = false }
+    if (state.memory.open && state.connected) MemoryDialog(state, viewModel)
 }
 
 @Composable private fun Feedback(text: String, isError: Boolean, dismiss: () -> Unit) {

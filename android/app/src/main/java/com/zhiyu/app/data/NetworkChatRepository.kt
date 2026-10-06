@@ -98,6 +98,16 @@ class NetworkChatRepository(store: CredentialStore, private val allowHttp: Boole
         return MessagePage(json.getJSONArray("messages").mapObjects { it.message() }, json.getBoolean("has_more"),
             if (json.isNull("next_before")) null else json.getString("next_before"))
     }
+    private fun memoryPath(id: String) = "/api/conversations/${encoded(id)}/memory"
+    private fun encoded(value: String) = java.net.URLEncoder.encode(value, Charsets.UTF_8.name())
+    override suspend fun memory(id: String, before: String?): MemoryPage {
+        val cursor = before?.let { "&before=${encoded(it)}" }.orEmpty()
+        return JSONObject(request("${memoryPath(id)}?limit=50$cursor")).memoryPage(before)
+    }
+    override suspend fun messageMemory(id: String, messageId: String) =
+        JSONObject(request("${memoryPath(id)}/messages/${encoded(messageId)}")).memoryEntry()
+    override suspend fun changeMemory(id: String, messageId: String, change: MemoryChange) =
+        JSONObject(request("${memoryPath(id)}/messages/${encoded(messageId)}", "PUT", change.json())).memoryEntry()
     override suspend fun sendMessage(id: String, content: String): Pair<Message, Message> {
         val json = JSONObject(request("/api/conversations/$id/messages", "POST", JSONObject().put("content", ConnectionRules.message(content))))
         return json.getJSONObject("user_message").message() to json.getJSONObject("assistant_message").message()

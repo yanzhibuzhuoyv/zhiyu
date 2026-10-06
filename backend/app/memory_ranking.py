@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
+from .memory_priority import source_factor
 from .vendor_rag.bm25 import BM25Index, _tokenize
 
 
@@ -147,8 +148,9 @@ def rank_direct(candidates: Sequence[Mapping], terms: Sequence[str], *, now: dat
         user = _coverage(turn["user_text"], query)
         assistant = _coverage(turn["assistant_text"], query)
         roles = tuple(role for role, coverage in (("user", user), ("assistant", assistant)) if coverage)
-        direct = max(_role_score(user, scores[index * 2], peak, weights),
-                     _role_score(assistant, scores[index * 2 + 1], peak, weights) * weights.assistant_weight)
+        direct = max(_role_score(user, scores[index * 2], peak, weights) * source_factor(turn, "user", query),
+                     _role_score(assistant, scores[index * 2 + 1], peak, weights)
+                     * weights.assistant_weight * source_factor(turn, "assistant", query))
         if direct > 0:
             ranked.append(RankedTurn(turn, direct + _time_bonus(turn, roles, current, weights.recency_bonus), direct, user, roles))
     return sorted(ranked, key=lambda item: (item.score, item.turn["sequence"]), reverse=True)
@@ -244,6 +246,31 @@ def _reserve_user_context(ranked, chosen, max_turns, max_chars):
     return chosen, protected
 
 
+def _reserve_linked_corrections(candidates, chosen, scope, max_turns, max_chars, protected):
+    anchors = {item.turn["user_id"] for item in chosen}
+    linked = [turn for turn in _unique(candidates, scope) if anchors.intersection(turn.get("correction_of", ()))]
+    for turn in sorted(linked, key=lambda item: item["sequence"], reverse=True):
+        if any(item.turn["sequence"] == turn["sequence"] for item in chosen):
+            continue
+        anchor_ids = tuple(sorted(anchors.intersection(turn["correction_of"])))
+        correction = RankedTurn(turn, max(item.score for item in chosen), 0, 0, ("user",),
+                                "source_correction", anchor_ids, True)
+        proposal = [*chosen, correction]
+        if len(proposal) > max_turns:
+            removable = [item for item in chosen if item.reason != "source_correction"
+                         and item.turn["sequence"] not in protected
+                         and item.turn["user_id"] not in anchor_ids]
+            if not removable:
+                removable = [item for item in chosen if item.turn["user_id"] in anchor_ids]
+            weakest = min(removable, key=lambda item: item.score, default=None)
+            if weakest is None:
+                continue
+            proposal = [item for item in chosen if item is not weakest] + [correction]
+        if _fits(proposal, max_chars):
+            chosen = proposal
+    return chosen
+
+
 def select_memory(candidates: Sequence[Mapping], terms: Sequence[str], *, nearby_events: Sequence[Mapping] = (),
                   now: datetime | None = None, scope: tuple[str, str] | None = None,
                   weights: RankingWeights = DEFAULT_WEIGHTS, max_turns: int = 4,
@@ -276,4 +303,5 @@ def select_memory(candidates: Sequence[Mapping], terms: Sequence[str], *, nearby
         if _fits(proposal, max_chars):
             chosen = proposal
             added_events += 1
+    chosen = _reserve_linked_corrections(candidates, chosen, scope, max_turns, max_chars, protected_sequences)
     return sorted(chosen, key=lambda item: item.turn["sequence"])

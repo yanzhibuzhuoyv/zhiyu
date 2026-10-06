@@ -74,6 +74,9 @@ class MemoryIndex:
 
     def index_message(self, db, sequence: int, identifier: str, content: str):
         try:
+            if (db.execute("SELECT 1 FROM sqlite_schema WHERE name='memory_index_state' AND type='table'").fetchone()
+                    and db.execute("SELECT 1 FROM memory_index_state WHERE sequence=? AND state='cold'", (sequence,)).fetchone()):
+                return
             if db.execute("SELECT 1 FROM memory_fragments WHERE message_sequence=? LIMIT 1", (sequence,)).fetchone():
                 return
             scope = scope_token(identifier)
@@ -91,6 +94,8 @@ class MemoryIndex:
         rows = db.execute("""
             SELECT m.sequence,m.conversation_id FROM messages m
             WHERE m.sequence>? AND NOT EXISTS (
+                SELECT 1 FROM memory_index_state s WHERE s.sequence=m.sequence AND s.state='cold'
+            ) AND NOT EXISTS (
                 SELECT 1 FROM memory_fragments f WHERE f.message_sequence=m.sequence
             ) ORDER BY m.sequence LIMIT ?
             """, (after, BACKFILL_BATCH))

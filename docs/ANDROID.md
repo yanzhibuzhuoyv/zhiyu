@@ -41,7 +41,7 @@ $env:JAVA_HOME = 'C:\Program Files\Java\jdk-23'
 .\gradlew.bat --no-daemon --offline --max-workers=1 '-Dorg.gradle.jvmargs=-Xmx768m -XX:MaxMetaspaceSize=384m -Dfile.encoding=UTF-8' :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease
 ```
 
-APK输出`android/app/build/outputs/apk/debug/app-debug.apk`，最终副本`artifacts/ZhiYu-0.1.1-debug.apk`；正式分发仍需HTTPS与发布签名。
+APK输出`android/app/build/outputs/apk/debug/app-debug.apk`，当前记忆版副本`artifacts/ZhiYu-0.1.1-memory-debug.apk`，旧`artifacts/ZhiYu-0.1.1-debug.apk`保留；正式分发仍需HTTPS与发布签名。
 
 Gradle wrapper 脚本与 JAR 复用本机 WakeDeck 项目的 Gradle 9.5.0 标准 wrapper，保留脚本内原有 Apache 2.0 版权；分发来源为 [Gradle 官方](https://services.gradle.org/distributions/gradle-9.5.0-bin.zip)。没有复用 WakeDeck 应用源码或凭据。
 
@@ -50,3 +50,19 @@ Gradle wrapper 脚本与 JAR 复用本机 WakeDeck 项目的 Gradle 9.5.0 标准
 ## 验证记录
 
 2026-10-05新版39项unit通过，debug/debugAndroidTest/release R8构建通过；真实API36模拟器连接Docker8791，8项Keystore和5项UI用例通过。UI测试覆盖首选取消/确认、单页聊天引用资料、退出重验保持绑定、preset只读、custom修改取消与保存后退出/Activity重建恢复。首轮13项中一项密码显示断言错误，修为显示Key后断言，受影响UI5项全部重测绿色。未用真实云Key、真机或公网HTTPS。[完整验证](VALIDATION.md) · [记忆与设定](CONVERSATION_MEMORY.md) · [空间优化](STORAGE.md)。
+
+## 2026-10-06 记忆管理客户端
+
+聊天仍为同一个页面。“更多设置→记忆”打开弹窗，每批最多50条原话节选；长按消息或点消息旁的书签可精确查看该句的来源作者、保存时间、层级和归档状态。原话逐句独立保留，不通过这些操作编辑、删除或合并。消息复制按钮继续可用。
+
+可手动指定中期、长期、永久，或恢复自动判断；自动识别是否开启由后端响应标记。归档显示“已归档，原话完整保留”，可恢复活跃状态。长期、永久及受保护的约定在界面禁用归档，后端仍负责最终校验。“确认这是一次独立表达”只在后端确认这句用户自述具备条件时显示，不由客户端猜测意图。
+
+每次更新携带读取时的版本；409明确显示原因并重新读取当前状态，不自动覆盖或重试修改。切服务、会话身份变化、401和重新认证会清空原记忆弹窗数据，保留既有公司、模型与人格绑定规则。客户端只取最多768码点节选，不下载全部长聊天数据库。
+
+列表与详细页区分“语义识别”“规则识别”和“未识别”，依据后端实际识别结果展示，失败或未调用模型时不显示语义成功。失败、不可用或过长跳过时提醒“原话已保留，层级可手动确认”。弹窗说明启用语义标注将使用所选AI额外识别一次，可能产生额外费用，判断仍可手动调整。旧响应缺识别字段时兼容为`none/unavailable`；未知枚举、null或非字符串拒绝处理，不猜测分类。
+
+63项单位测试通过（新增24项），覆盖Unicode/NUL原文、分页边界、版本携带、冲突刷新、归档/恢复、身份隔离和识别状态兼容；debug、debugAndroidTest、release R8构建通过。2026-10-06 21:48–21:49，在实际API36模拟器`medium_phone / emulator-5554`连接升级后的Docker8791，28项instrumentation首轮全部通过（35.561秒）：13项真实Android JSON映射、2项新记忆UI、5项既有绑定/资料/设定UI、8项Keystore。日志`artifacts/android-memory-instrumentation.log`明确`OK (28 tests)`，运行记录`artifacts/android-memory-instrumentation-runtime.json`。
+
+记忆UI联测覆盖长按、永久层级归档保护、恢复自动、归档/恢复、原话不变、768码点Unicode节选以及关闭应用重新启动后保留归档状态。测试只使用隔离的合成demo Key；后端语义模式下demo无法调用真实模型，界面明确显示“未识别”和原话保留提示。真实云端语义质量、真实Key、真机和公网HTTPS仍未验证。本阶段没有失败后的重试，测试期间新旧APK哈希均未变化。
+
+新调试副本为 `artifacts/ZhiYu-0.1.1-memory-debug.apk`（18,798,982字节，SHA256 `D2175EFDB97C80BF84F90C0DE9580F7BC6EC89953B4FCA4EE0D860247102806D`）；旧 `ZhiYu-0.1.1-debug.apk` 保留。此构建增加记忆界面但沿用0.1.1版本号，正式分发仍需HTTPS和发布签名。
