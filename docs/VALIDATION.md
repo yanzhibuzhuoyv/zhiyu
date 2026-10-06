@@ -1,8 +1,18 @@
 # 实际验证记录
 
-## 最新0.1.1：AI恋人单页、长期记忆与体积优化
+## 2026-10-06：双方长字段万轮及大库删除修复
 
-2026-10-05（北京时间）。以本节为当前版本证据，后文保留首版历史。
+实际从零完成10,000轮/20,000消息，千轮与万轮检查点12项原文探针、全部分页哈希/作者/时间/出处、150,802片段覆盖与同Key实例重建恢复通过。长字段主库566,444,032B（540.20MiB），原文225,919,087B、索引320,917,504B；不是首版短回复40.46MiB负载。最终删除失败，**该万轮report仍failed、1次意外HTTP失败、driver exit1**，专用卷保留诊断。
+
+删除修复后Windows与Linux各 **275 passed、94.55%覆盖率**，Ruff通过。旧实现600消息回归3失败/1通过，新实现2200消息4通过；中后段故障完整回滚、安全503、重试204、身份隔离及health并发均覆盖。新生产镜像在原万轮库的独立副本上通过真实HTTP故障→回滚→重试，两万条删除约98.70秒，其他会话保留，FTS integrity/quick_check与源文件哈希核验通过。这是删除修复独立证据，不把旧failed改称完整万轮成功。
+
+测试工具Windows/Linux64项、PowerShell卷归属9项回归通过；224MiB原文/128MiB临时目录的真实SQLite统计反例通过。新镜像千轮端到端已通过：1000轮/2000消息、6探针、重建前后全20页哈希、14979片段覆盖与身份隔离通过，1051次HTTP零意外失败；清理回到0消息/0索引、driver exit0、脚本hash稳定且专用卷移除。详细负载、限制、增长与各次独立失败见[长字段耐久报告](LONG_FIELDS_ENDURANCE.md)。Android没有改动，以下39单元＋8存储＋5UI与APK证据继续有效。
+
+原8791后端本次恢复命令受到自动审批拦截，仅返回 `blocked by policy`；仍离线，不能把历史healthy当作当前状态。新测试均使用独立容器和数据卷。
+
+## 0.1.1首次验证：AI恋人单页、长期记忆与体积优化
+
+2026-10-05（北京时间）的历史验证；2026-10-06删除修复与最新回归以页首记录为准，后文保留首版历史。
 
 | 验证 | 实际结果 |
 | --- | --- |
@@ -79,7 +89,7 @@ $env:JAVA_HOME = 'C:\Program Files\Java\jdk-23'
 
 2026-10-04 23:13（北京时间），`scripts/Test-Docker.ps1` 整体退出码 **0**，包括构建、121 自动测试、ruff、真实 HTTP 与两种恢复验证。复跑时设置冲突环境变量 `COMPOSE_PROJECT_NAME=zhiyu-isolation-check`，测试仍只操作 `zhiyu-docker-test`，冲突项目下没有创建容器。Docker Desktop 4.88.1，Linux Engine 29.7.2，Python 3.13.15。运行镜像只含生产依赖，实际 `pip check` 无依赖冲突，未包含 pytest 或测试源代码。Docker 构建内容改为白名单，额外 `.venv-semantic` 与私人数据不会进入上下文。两份 SQLite 的 `PRAGMA integrity_check` 均为 ok。
 
-当前测试服务为 `http://127.0.0.1:8791`，独立项目与数据卷；运行镜像本次 ID 为 `sha256:1f6a0beb4b26c37dea996178d75f86ea40676aade68d60ddfe7fc05b0ea56343`，本地大小约60.1MiB。实际证据位于 `artifacts/docker-unit-tests.log` 与 `artifacts/docker-validation.json`。Docker Desktop 临时 socket 故障的处理和重跑步骤见 [DOCKER.md](DOCKER.md)。Android APK 没有因本轮后端容器测试而重新构建。
+当时测试服务为 `http://127.0.0.1:8791`，独立项目与数据卷；运行镜像本次 ID 为 `sha256:1f6a0beb4b26c37dea996178d75f86ea40676aade68d60ddfe7fc05b0ea56343`，本地大小约60.1MiB。实际证据位于 `artifacts/docker-unit-tests.log` 与 `artifacts/docker-validation.json`。Docker Desktop 临时 socket 故障的处理和重跑步骤见 [DOCKER.md](DOCKER.md)。Android APK 没有因本轮后端容器测试而重新构建。
 
 ## 尚未执行的外部验证
 

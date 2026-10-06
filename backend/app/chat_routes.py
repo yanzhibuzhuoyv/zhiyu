@@ -54,7 +54,7 @@ def update(identifier: str, body: EditConversation, request: Request, session: S
 async def delete(identifier: str, request: Request, session: Session = Depends(current_session)):
     owned(request, session, identifier)
     async with turn_lock(request, identifier):
-        if not request.app.state.chat.delete_conversation(session.owner, identifier):
+        if not await run_in_threadpool(request.app.state.chat.delete_conversation, session.owner, identifier):
             raise HTTPException(404, "会话不存在")
     return Response(status_code=204)
 

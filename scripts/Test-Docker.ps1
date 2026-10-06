@@ -21,6 +21,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw '恋人设定、长聊记忆与分页联调失败。' }
     & "$projectRoot/backend/.venv/Scripts/python.exe" -m pytest scripts/tests -q
     if ($LASTEXITCODE -ne 0) { throw '压力测试工具自身回归失败。' }
+    & "$PSScriptRoot/tests/Test-LongFieldsEndurance.ps1"
+    if ($LASTEXITCODE -ne 0) { throw '临时数据卷归属校验回归失败。' }
+    & "$PSScriptRoot/Test-StatisticsTmpfs.ps1"
     & "$PSScriptRoot/Test-LongFields.ps1"
 } finally {
     Pop-Location

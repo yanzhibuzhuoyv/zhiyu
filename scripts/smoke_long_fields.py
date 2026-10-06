@@ -27,6 +27,8 @@ import httpx
 HAN = "山河星海林间青翠暮云晨光舟桥花叶风雨湖岸书笺窗灯影歌声沙石白紫金月日光暖清凉远近红蓝绿玉竹露泉水雾谷庭鸟木禾露棠兰梅苇荷桃"
 LONG_TURNS = 36
 FILLER_TURNS = 25
+ROLE_ENUMERATION_SQL = "SELECT DISTINCT role FROM messages"
+ROLE_AGGREGATE_SQL = "SELECT count(*),coalesce(sum(length(CAST(content AS BLOB))),0) FROM messages WHERE role IS ?"
 
 
 class CheckFailure(AssertionError):
@@ -113,9 +115,17 @@ def verify_snapshot_integrity(result):
     require(result["fragments"] == result["fts_rows"], "FTS/fragment counts differ")
 
 
+def role_storage_counts(db):
+    # DISTINCT carries only the tiny role field. Aggregating each role separately
+    # streams its canonical originals instead of sorting full chat text in /tmp.
+    roles = db.execute(ROLE_ENUMERATION_SQL).fetchall()
+    return [(role, *db.execute(ROLE_AGGREGATE_SQL, (role,)).fetchone()) for role, in roles]
+
+
 def snapshot(path):
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
-        counts = db.execute("SELECT role,count(*),coalesce(sum(length(CAST(content AS BLOB))),0) FROM messages GROUP BY role").fetchall()
+        db.execute("BEGIN")
+        counts = role_storage_counts(db)
         result = {"messages": sum(row[1] for row in counts), "content_utf8_bytes": sum(row[2] for row in counts),
                   "roles": {role: {"count": count, "utf8_bytes": size} for role, count, size in counts},
                   "conversations": db.execute("SELECT count(*) FROM conversations").fetchone()[0],

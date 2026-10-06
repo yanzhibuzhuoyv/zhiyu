@@ -6,7 +6,10 @@ from uuid import uuid4
 
 from .companion import check_profile_change, decode_profile, encode_profile, normalize_profile
 from .memory_index import MemoryIndex
-from .source_codec import decode_sources, encode_sources
+from .source_codec import ChatStorageError, decode_sources, encode_sources
+
+DELETE_BATCH_ROWS = 768
+DELETE_BATCH_BYTES = 8 * 1024 * 1024
 
 
 def timestamp() -> str:
@@ -112,8 +115,36 @@ class ChatDatabase:
         return self.get_conversation(owner, identifier)
 
     def delete_conversation(self, owner: str, identifier: str):
-        with self.connection() as db:
-            return db.execute("DELETE FROM conversations WHERE id=? AND owner=?", (identifier, owner)).rowcount > 0
+        try:
+            with self.connection() as db:
+                db.execute("BEGIN IMMEDIATE")
+                if db.execute("SELECT 1 FROM conversations WHERE id=? AND owner=?",
+                              (identifier, owner)).fetchone() is None:
+                    return False
+                while identifiers := self._delete_batch(db, identifier):
+                    placeholders = ",".join("?" for _ in identifiers)
+                    db.execute(f"DELETE FROM messages WHERE conversation_id=? AND sequence IN ({placeholders})",
+                               (identifier, *identifiers))
+                return db.execute("DELETE FROM conversations WHERE id=? AND owner=?",
+                                  (identifier, owner)).rowcount > 0
+        except sqlite3.Error as exc:
+            raise ChatStorageError("聊天会话无法删除") from exc
+
+    @staticmethod
+    def _delete_batch(db, identifier: str):
+        # Bound each statement's rollback journal, while keeping all batches atomic.
+        # Read byte lengths rather than materializing the original long messages.
+        rows = db.execute("""SELECT sequence,
+            length(CAST(content AS BLOB)) + length(CAST(sources AS BLOB)) AS payload_bytes
+            FROM messages WHERE conversation_id=? ORDER BY sequence LIMIT ?""",
+                          (identifier, DELETE_BATCH_ROWS)).fetchall()
+        identifiers, size = [], 0
+        for row in rows:
+            if identifiers and size + row["payload_bytes"] > DELETE_BATCH_BYTES:
+                break
+            identifiers.append(row["sequence"])
+            size += row["payload_bytes"]
+        return identifiers
 
     def list_messages(self, owner: str, identifier: str):
         with self.connection() as db:

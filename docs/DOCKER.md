@@ -24,7 +24,7 @@ HTTP 联调使用独立的 `zhiyu-docker-test` 项目、`127.0.0.1:8791` 端口�
 - UID 10001、只读根目录、删除 capabilities、只发布回环地址、数据卷没有测试 Key 原文。
 - 文档/会话删除与退出连接。
 
-单测日志在 `artifacts/docker-unit-tests.log`，HTTP通过后生成 `artifacts/docker-validation.json` 与 `artifacts/companion-validation.json`，只记录容器、健康与测试结果，不写Key/token。最新0.1.1逐消息FTS/权重版271测试/94.60%覆盖率，真实万轮通过，见[验证报告](VALIDATION.md)。这些本地证据不提交Git。
+单测日志在 `artifacts/docker-unit-tests.log`，HTTP通过后生成 `artifacts/docker-validation.json` 与 `artifacts/companion-validation.json`，只记录容器、健康与测试结果，不写Key/token。2026-10-05的0.1.1逐消息FTS/权重版271测试/94.60%覆盖率，短回复真实万轮通过，见[验证报告](VALIDATION.md)。这些本地证据不提交Git。
 
 测试成功后保留演示容器供查看：API文档 <http://127.0.0.1:8791/docs>，健康检查 <http://127.0.0.1:8791/health>。新版debug APK已内置模拟器地址`http://10.0.2.2:8791`，不需要普通用户填写服务器；选择“本地演示”并输入`demo-key`。演示回复明确标记，无云端请求。真实用户版本需构建配置自己的HTTPS服务。
 
@@ -71,3 +71,9 @@ docker compose up --build -d --wait
 逐消息FTS与权重版本完整驱动271项通过、94.60%覆盖率、30压力工具回归。千轮/万轮真实HTTP需单独执行，过程、版本摘要和只读存储测量见[长聊实测](LONG_CHAT_TEST.md)。
 
 后来新增长字段工具16反例，Windows/LinuxDocker全部工具46 passed、ruff通过；新增`Test-LongFields.ps1`单独真实Docker exit0。当前Test-Docker.ps1已加入全scripts检查与此helper，新增步骤分别验证，未重复重建和运行原驱动。已有运行镜像时直接`./scripts/Test-LongFields.ps1`：独立network-none临时容器、只读脚本、loopback HTTP，输出每次新的artifacts/long-fields-*报告。双方16k及4条64k合成AI回复、原文中尾/分页/重启/超限检查与空间数据见[长字段实测](LONG_FIELDS_TEST.md)。
+
+长字段耐久另用 `./scripts/Test-LongFieldsEndurance.ps1 -Turns 1000` 或 `-Turns 10000`，数据库放全新带scope/runID标签的磁盘卷，报告单独保存在host。结束后重新核对完整卷名和两项标签，仅移除本次测试卷；不挂现有8791卷。单轮长文本写入与检索使万轮运行耗时较长，普通一键测试不自动执行它。[耐久方法和执行证据](LONG_FIELDS_ENDURANCE.md)。新增13个工具反例后，Windows/Linux工具回归共59项、ruff通过；Test-Docker.ps1另加入9项PowerShell卷归属反例，使用模拟docker调用、无实际卷修改。新步骤分别验证，未据此声称整个更新后的驱动重新执行过。
+
+修复大原文字节统计后工具回归共64项。`./scripts/Test-StatisticsTmpfs.ps1`已纳入一键测试：128MiB /tmp、另一512MiB /workdata临时fixture，224MiB原文让旧GROUP BY实际报FULL，新流式统计准确通过；没有挂现有数据卷。显式 `-KeepFailedVolume` 可让失败耐久测试保留自身专用卷供诊断，仍非零退出；成功照常删除。新完整万轮结果与旧6,696轮中断记录分别保存。
+
+2026-10-06生产大库删除修复已构建为独立测试镜像 `zhiyu-backend:delete-fix-20261006`（固定SHA见耐久报告）；两平台新后端各275项/94.55%通过。新镜像执行 `./scripts/Test-LongFieldsEndurance.ps1 -Turns 1000 -Image zhiyu-backend:delete-fix-20261006` 完整通过，driver exit0、临时卷移除；两万条大库副本真实HTTP故障回滚与重试删除也通过。旧完整长字段万轮检查点通过、最终删除失败，报告保持failed；没有合并为新镜像完整万轮成功。原8791恢复命令本次被自动审批拒绝（仅blocked by policy），最终只读检查仍exited/health无法连接，未重试；上述验证使用独立network-none容器。诊断COPY卷核验归属与无挂载后移除，历史失败源卷保留。

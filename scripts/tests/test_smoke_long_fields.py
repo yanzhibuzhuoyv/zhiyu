@@ -1,6 +1,8 @@
 """Counterexamples for the long-field real-HTTP smoke harness."""
 
 import importlib.util
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -150,3 +152,34 @@ def test_server_listener_closes_even_if_worker_refuses_to_stop():
     with pytest.raises(smoke.CheckFailure, match="failed to stop"):
         server.stop()
     assert events == ["listener_closed"] and server.server.force_exit is True
+
+
+@pytest.mark.parametrize("rows", [[], [("user", "汉字🌙"), ("assistant", "ASCII reply"),
+                                      ("user", "多行\n原文"), ("tool", "外部角色"),
+                                      (None, "NULL角色"), (None, None), ("assistant", None)]])
+def test_per_role_byte_statistics_match_old_group_by_including_empty_and_nullable_values(rows):
+    with closing(sqlite3.connect(":memory:")) as db:
+        db.execute("CREATE TABLE messages(role TEXT,content TEXT)")
+        db.executemany("INSERT INTO messages(role,content) VALUES(?,?)", rows)
+        old = db.execute("SELECT role,count(*),coalesce(sum(length(CAST(content AS BLOB))),0) FROM messages GROUP BY role").fetchall()
+        new = smoke.role_storage_counts(db)
+        assert {role: (count, size) for role, count, size in new} == {
+            role: (count, size) for role, count, size in old}
+        assert sum(row[1] for row in new) == len(rows)
+        assert sum(row[2] for row in new) == sum(len(content.encode()) for _, content in rows if content is not None)
+
+
+def test_statistics_query_plan_and_vm_never_sort_or_copy_full_content_into_a_temp_record():
+    with closing(sqlite3.connect(":memory:")) as db:
+        db.execute("CREATE TABLE messages(role TEXT,content TEXT)")
+        db.executemany("INSERT INTO messages VALUES(?,?)", [("user", "长用户原文" * 8000),
+                                                           ("assistant", "长AI回复" * 8000)])
+        require_no_sort = db.execute("EXPLAIN QUERY PLAN " + smoke.ROLE_AGGREGATE_SQL, ("user",)).fetchall()
+        assert all("TEMP B-TREE" not in row[-1] for row in require_no_sort)
+        aggregate_ops = db.execute("EXPLAIN " + smoke.ROLE_AGGREGATE_SQL, ("user",)).fetchall()
+        assert not {row[1] for row in aggregate_ops} & {"SorterOpen", "SorterInsert", "Sort", "MakeRecord", "IdxInsert"}
+        role_ops = db.execute("EXPLAIN " + smoke.ROLE_ENUMERATION_SQL).fetchall()
+        # Only messages column zero (role) reaches DISTINCT's tiny temporary index.
+        assert {row[3] for row in role_ops if row[1] == "Column"} == {0}
+        old_ops = db.execute("EXPLAIN SELECT role,count(*),coalesce(sum(length(CAST(content AS BLOB))),0) FROM messages GROUP BY role").fetchall()
+        assert "SorterInsert" in {row[1] for row in old_ops}

@@ -1,5 +1,21 @@
 # 代码审查记录
 
+## 2026-10-06 大库删除修复
+
+长字段万轮最后删除失败后，在隔离副本复现SQLite FULL(13)，保留源卷与失败报告。新增故障/回滚及health并发回归先在旧600消息实现3红/1绿；最终2200消息版在新实现4绿。单事务内校验owner、限定目标conversation与sequence分批删除；最终父会话删除同一事务，sqlite.Error包括提交失败均映射脱敏503，HTTP在工作线程等待。独立只读审查未发现新增CRITICAL/HIGH。
+
+新生产镜像大库真实HTTP覆盖末段故障全部原文/出处/fragment/FTS回滚、重试204、同身份其他会话与跨身份保留、FTS完整性，源三文件哈希未变；删除98.70秒在当前120秒客户端预算内，但不承诺更大库或其他机器同样耗时。8MiB是批预算，超大旧单条例外；整个事务持SQLite写锁，health响应不等于多用户并发写入证明。Windows/Linux各275项、94.55%，Ruff绿。详细报告见[长字段耐久](LONG_FIELDS_ENDURANCE.md)。
+
+## 双方长字段耐久工具独立复核（2026-10-05）
+
+新增`stress_long_fields.py`、driver和对应反例在冻结运行前完成独立终审，无未修复CRITICAL/HIGH。CLI只接受1,000/10,000避免检查点重叠；探针轮包含在总轮数内，64k边界排除探针轮，实际长度分布与数量另报。保存全部签名而非第二份全文；运行中原子记录进度，HTTP失败不重试掩盖，主错误与清理失败都不能变为通过。
+
+新命名卷以完整runID和scope标签验证；删除前重新inspect精确名称及两项标签。9项归属正常/反例使用模拟Docker，无实际删除。修复统计后Windows/Linux工具回归64项与ruff通过。只读采样helper同时核对容器名、scope/run标签和/data卷；SQL统计在一致读事务内，文件和资源随后采集，不宣称同一瞬间，复核无CRITICAL/HIGH。显式KeepFailedVolume只在已有失败且归属校验后保留自身卷供诊断，失败状态与非零退出保持；成功仍移除。
+
+首轮万轮在6,696已核轮主动中断并保留failed证据，不算万轮通过。约六千轮外部统计发现128MiB /tmp排序溢出；新统计枚举小role字段后分别流式聚合、BEGIN一致快照。224MiB原文真实Docker反例确认旧查询SQLITE_FULL、新查询全部数量/字节/原文/quick_check通过，无共享卷。KeyboardInterrupt独立脱敏aborted终态及清理异常保留主因的2反例通过。统计、反例driver与测试入口最终独立复核无CRITICAL/HIGH，应用未改。
+
+独立增长审查未发现必须中断实测的问题。保留P2：每请求重排与分词有重复固定成本，宽词FTS匹配再聚合仍会随历史增长；仅本地小型EXPLAIN的selected物化建议还未确认运行容器计划。索引约占已完成千轮主库57%，关闭detail会改变当前contentless BM25排序，不能直接作为无损优化。32词查询、每消息768字片段与48k近期预算仍有限制，精确marker召回不代表自然长文接续或所有语义通过。[耐久方法与结果](LONG_FIELDS_ENDURANCE.md)。
+
 ## 双方长字段测试工具审查（2026-10-05）
 
 独审发现HIGH：测量/客户端关闭异常可能跳过server.stop和报告，停服超时也可能漏关socket。已修为分别记录清理失败、继续关闭客户端和服务器，停服失败以finally关闭listener；线程为daemon且异常通过安全check传播。新增故障回归保留原始断言、不回显敏感错误、不假绿。另补quick_check必须ok及FTS计数一致的断言。审查代理在完整终审前额度中断，root接手最终源码复核、16新增回归、真实Docker执行和结果核对；不称最终独立审核已完成。
@@ -49,3 +65,5 @@ RAG 子 Agent 对父 Agent 后端做独立只读审查，发现 HIGH：仅检查
 2026-10-04，独立 Docker 审查发现 HIGH：只依赖 Compose 顶层 `name`，`COMPOSE_PROJECT_NAME` 环境变量可以改变项目名，进而令测试脚本重建其他项目的同名 backend。已让 PowerShell、Python 与测试启停文档中的所有测试命令显式指定 `-p zhiyu-docker-test`；设置冲突环境变量重跑整套脚本实际通过，未在冲突项目下创建容器。独立复核确认修复，无未处理 CRITICAL/HIGH。[Compose 官方优先级](https://docs.docker.com/compose/how-tos/project-name/)说明 `-p` 高于环境变量。
 
 HTTP 报告中的固定单测计数/覆盖率字段已移除，单测结果由实际日志留证；报告只记录本次 HTTP 测试。独立审查确认锁定测试依赖没有 editable/VCS/本地路径、测试和运行镜像分离、文档明确没有实测真实云端 Key、容器内 BGE 或安卓连接 Docker 端口。
+
+收尾复核：新生产千轮完整端到端passed、driver0/脚本hash不变/仅本次卷移除；真实两万条副本修复、275两平台与64工具/9归属反例共同覆盖此次删除和测试工具改动。全新万轮保存/检索路径未再重复，独立审查认为这次仅删除变化的验证范围合理，原failed保留。旧失败driver没有执行成功后的hash尾检，后续独立复核另存source-hash-independent-verification.json。应用与测试源码最终hash核对一致，原8791离线和审批拒绝如实记录。

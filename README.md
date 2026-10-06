@@ -56,4 +56,8 @@ Docker 部署：`docker compose up --build -d --wait`，默认绑定电脑回环
 
 已有镜像时可单独运行`.\scripts\Test-LongFields.ps1`验证双方16k和合成64k回复的保存/索引/分页/重启，使用无网络临时容器。[长字段实测](docs/LONG_FIELDS_TEST.md)。
 
+双方长字段耐久使用`.\scripts\Test-LongFieldsEndurance.ps1 -Turns 1000`或`-Turns 10000`，普通用户消息2k–4k字符、合成AI回复4k–8k字符，穿插16k/64k边界。使用独立磁盘卷和固定镜像，不调用云端AI。[负载、执行状态与证据](docs/LONG_FIELDS_ENDURANCE.md)。
+
 [首版架构与范围](docs/ARCHITECTURE.md) · [实际验证结果](docs/VALIDATION.md)
+
+最新长字段结果：一万轮/两万条的保存、原文检索及全历史恢复检查点通过，主库约540.20MiB（索引306.05MiB），最终删除曾失败，原报告保留failed。已修复为单事务分批删除，新镜像两万条副本真实HTTP删除/故障回滚验证通过；新镜像千轮完整流程和Windows/Linux各275项通过。[完整证据与检索、容量边界](docs/LONG_FIELDS_ENDURANCE.md)。不做记忆融合；这些合成测试不代表真实云模型回复正确率。
