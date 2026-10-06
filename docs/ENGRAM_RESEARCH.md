@@ -6,9 +6,11 @@
 
 ## 已核实的原理
 
-截至2026-10-05，DeepSeek官方仓库将Engram描述为模型内部的条件记忆：利用N-gram确定性寻址查表，并将查得的静态记忆与动态hidden states融合。官方demo展示多头hash、embedding表和上下文门控，标准Attention/MoE等部件有所简化。[官方仓库与demo](https://github.com/deepseek-ai/Engram)、[论文](https://arxiv.org/abs/2601.07372)。
+截至2026-10-06，已复核DeepSeek官方仓库及2026-07-12修订的论文v2：Engram为模型内部的条件记忆，利用N-gram确定性寻址查表，并将查得的静态记忆与动态hidden states融合。官方demo展示多头hash、embedding表和上下文门控，标准Attention/MoE等部件有所简化。[官方仓库与demo](https://github.com/deepseek-ai/Engram)、[论文与版本](https://arxiv.org/abs/2601.07372)。
 
 论文中的常数时间查表针对该模块的寻址，不能直接推成整个聊天RAG检索、模型推理或任意长历史查询都是常数时间。我们调用厂商API时无法修改其内部embedding表和hidden states；应用侧索引是另一层可独立实现的工程。
+
+用户新增三层记忆设想，并选择完整原文保留、优先无损压缩/退出活跃索引/降权。具体[生命周期设计](MEMORY_LIFECYCLE.md)区分层级、事实有效性与物理存储，不生成融合事实。论文中的多级存储并不提供应用侧重要度识别或自动遗忘规则；本轮只交付设计与离线压缩研究，没有启用生产晋升、冷却或正文压缩。
 
 ## 本应用的实现顺序
 
