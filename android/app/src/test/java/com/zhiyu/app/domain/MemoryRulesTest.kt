@@ -74,6 +74,19 @@ class MemoryRulesTest {
         rejects { MemoryRules.entry(entry().copy(recognitionMode = "engram")) }
         rejects { MemoryRules.entry(entry().copy(recognitionStatus = "success")) }
     }
+    @Test fun backgroundRecognitionStatesPreserveOriginalAndAllowManualConfirmation() {
+        listOf("pending", "running", "waiting_auth").forEach { status ->
+            val value = MemoryRules.entry(entry().copy(recognitionMode = "semantic", recognitionStatus = status))
+            assertEquals(entry().text, value.text)
+            assertEquals(entry().messageId, value.messageId)
+            assertEquals(entry().revision, MemoryRules.change(value, tier = "permanent").expectedRevision)
+            assertEquals(status, value.recognitionStatus)
+        }
+    }
+    @Test fun backgroundCompatibilityDoesNotAcceptUnspecifiedStatuses() {
+        rejects { MemoryRules.entry(entry().copy(recognitionStatus = "processing")) }
+        rejects { MemoryRules.entry(entry().copy(recognitionStatus = "awaiting_auth")) }
+    }
     private fun rejects(block: () -> Unit) {
         try { block(); fail("Expected invalid memory metadata/change") } catch (_: IllegalArgumentException) { }
     }

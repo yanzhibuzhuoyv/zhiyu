@@ -9,9 +9,8 @@ from starlette.concurrency import run_in_threadpool
 from .auth import Session
 from .companion import CompanionConflict, companion_system
 from .conversation_memory import conversation_context_result
-from .database import HistoryCursorError, timestamp
+from .database import HistoryCursorError
 from .dependencies import current_session
-from .memory_semantic import identify_turn
 from .schemas import EditConversation, NewConversation, NewMessage
 
 router = APIRouter(prefix="/api/conversations")
@@ -57,6 +56,7 @@ async def delete(identifier: str, request: Request, session: Session = Depends(c
     async with turn_lock(request, identifier):
         if not await run_in_threadpool(request.app.state.chat.delete_conversation, session.owner, identifier):
             raise HTTPException(404, "会话不存在")
+        request.app.state.memory_attention.forget(session.owner, identifier)
     return Response(status_code=204)
 
 
@@ -82,6 +82,9 @@ def prompt(history: list, content: str, sources: list, memory_refs: list | None 
            companion_profile: dict | None = None, memory_complete: bool = True):
     system = "你是知语，一位清楚、诚实的 AI 恋人。自然地陪伴和交流，无法确认的信息请明确说明，不编造共同经历。"
     system += companion_system(companion_profile)
+    system += ("\n先回应当前分享与情绪；旧记忆是可选背景，只有有助当前回应时自然带出，不因为曾做过某事就劝阻。"
+               "recently_offered仅说明近期提供给模型，不说明用户事实变化；用户明确追问、更正或核对约定时，"
+               "仍按原话回答，不能因为presentation_hint而忽略证据。")
     if not memory_complete:
         system += "\n本次旧记忆检索尚未遍历完归档；找不到原话不代表用户从未说过，不能断言记忆不存在。"
     system += f"\n当前服务器时间（UTC）：{datetime.now(UTC).isoformat()}。用户当地日期可能不同，必要时先确认。"
@@ -122,24 +125,23 @@ def prompt(history: list, content: str, sources: list, memory_refs: list | None 
 async def send(identifier: str, body: NewMessage, request: Request, session: Session = Depends(current_session)):
     owned(request, session, identifier)
     state = request.app.state
-    async with turn_lock(request, identifier):
+    async with turn_lock(request, identifier), state.memory_worker.foreground():
         conversation = owned(request, session, identifier)
         sources = await run_in_threadpool(state.rag.search, session.owner, body.content, 5) if conversation["use_rag"] else []
         context = await run_in_threadpool(
             conversation_context_result, state.chat, session.owner, identifier, body.content
         )
+        references = state.memory_attention.decorate(session.owner, identifier, context.references)
         async with state.upstream_slots:
-            answer = await state.provider.complete(session.provider_id, session.api_key, conversation["model"], prompt(context.history, body.content, sources, context.references, conversation["companion_profile"], context.complete))
-        recognition = None
-        if state.chat.auto_annotations and state.chat.annotation_mode == "semantic":
-            catalogue = await run_in_threadpool(state.chat.recognition_catalogue, session.owner, identifier)
-            async with state.upstream_slots:
-                recognition = await identify_turn(state.provider, session.provider_id, session.api_key,
-                    conversation["model"], {"user": {"content": body.content, "created_at": timestamp()},
-                                            "assistant": {"content": answer, "created_at": timestamp()}}, catalogue=catalogue)
+            answer = await state.provider.complete(session.provider_id, session.api_key, conversation["model"], prompt(context.history, body.content, sources, references, conversation["companion_profile"], context.complete))
+        deferred = {"provider_id": session.provider_id, "model": conversation["model"]} if state.chat.auto_annotations and state.chat.annotation_mode == "semantic" else None
         saved = await run_in_threadpool(state.chat.save_turn, session.owner, identifier, body.content, answer, sources,
-                                       recognition=recognition)
-        return {**saved, "memory_refs": context.references,
+                                       deferred_recognition=deferred)
+        state.memory_attention.remember(session.owner, identifier, references)
+        # Effective request authentication has already activated the in-memory owner.
+        # Re-activate after COMMIT so the durable task exists before any cloud call.
+        state.memory_worker.activate(request.state.session_token, session)
+        return {**saved, "memory_refs": references,
                 "memory_recognition": {"mode": state.chat.annotation_mode,
-                                       "status": recognition["status"] if recognition else "literal" if state.chat.auto_annotations else "disabled"},
+                                       "status": "pending" if deferred else "literal" if state.chat.auto_annotations else "disabled"},
                 "memory_search": {"complete": context.complete, "next_cursor": context.next_cursor}}

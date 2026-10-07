@@ -324,7 +324,7 @@ def test_semantic_synonymous_independent_originals_progress_without_fused_memory
     assert {item["tier"] for item in values.values()} == {"long"}
     assert all(item["annotations"][0]["kind"] == "wish" for item in values.values())
     assert all(item["annotations"][0]["confidence"] == 0.95 for item in values.values())
-    assert all(item["annotations"][0]["classification_version"].startswith("semantic-v1:") for item in values.values())
+    assert all(item["annotations"][0]["classification_version"].startswith("semantic-v2:") for item in values.values())
 
 
 def test_semantic_multiple_exact_spans_birthday_and_preference_remain_separate(db):

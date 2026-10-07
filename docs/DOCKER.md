@@ -2,9 +2,25 @@
 
 后端运行在 Linux 容器中，默认中文 BM25。Android App 是原生 APK，Docker 负责运行和验证后端。
 
-## 2026-10-06晚间：语义标签与冷归档版
+## 2026-10-07 10:10：后台记忆第一版
 
-当前8791运行`sha256:1c69b81f21422a094bea093813f3597736a7e1a4ce0f5a22a362848f696b1495`，health为ok，演示与自动标注开启，mode=semantic。demo没有真实语义模型，返回unavailable；普通用户仍只选公司和Key。两平台各718/95.18%，新版APK63unit与28模拟器联测通过。固定本机已构建摘要启动：
+本机8791运行 `sha256:2ab853fb3244d3ceb7f604d9a7cdfbb09cd2df343215d79f7846454712c071ad`，容器 `zhiyu-docker-test-backend-1` healthy，`/health` 为 ok / 0.1.1 / bm25。当前自动标注 mode=semantic、演示开启；聊天先保存完整双方原文和待处理任务并返回 pending，后台随后处理。demo 没有语义模型，最终 metadata 为 unavailable，没有冒充识别成功。
+
+```powershell
+docker compose -p zhiyu-docker-test -f compose.test.yaml -f artifacts/compose.memory-background.override.yaml up -d --no-build --wait backend
+```
+
+这个 override 固定本机已构建镜像摘要，未提交 Git；其他电脑先构建源码。实际核验容器全部45个应用 Python 文件 SHA 与工作区一致，UID/GID=10001、只读根目录、cap_drop ALL、no-new-privileges、端口仅绑定127.0.0.1。继续使用原卷 `zhiyu-docker-test_test-data`；停止状态下完整三文件（chat.sqlite3、rag.sqlite3、identity.secret）一致备份至 `zhiyu-background-predeploy-f02dd20417dd41aa9eb58d21a24d1e7c`，源与备份 SHA 全部一致。实际复制以UID10001完成，原权限未改。证据为本机 `artifacts/memory-background-predeploy.json` 与 `memory-background-deployment.json`，旧备份均保留。
+
+54次实际 HTTP 请求全部符合预期状态，14,827字符含换行、引号、emoji、组合字符的合成用户原话完整保存，两次聊天22.958 / 11.619毫秒均返回 pending。双方四条消息的完整内容、作者、ID、时间和来源经过分页、层级/归档操作和同Key重新连接后逐条一致。固定preset、永久保护、冷查原文区间与恢复、stale 409、跨Key读/改/删/查404、16001字符422且无写入、注销旧token401，以及仅清理自己的会话均通过；没有云调用。日志为 `artifacts/memory-background-final-http.json` / `.log`。第一次harness把12,548字符误断言为至少14,000，发送前失败且已清理；保留 `-first.json` / `-first.log` 和原harness，修正合成长文本后通过，应用未因此修改。
+
+demo后台完成很快，metadata读取时已全部 unavailable，因此这份HTTP烟测不证明 pending/running 归档竞争、真实云等待时间、语义准确率或拟人效果。受阻识别期间仍可继续聊天及保护活跃索引由可控provider专项验证；新版真实官方短对话验证另见[后台记忆实测](MEMORY_ATTENTION_EVAL.md)，Android19项实际模拟器联测见[Android记录](ANDROID.md)。旧千轮与两万条容量证明未重跑。
+
+本次启动前 Docker Desktop 报 `docker-secrets-engine/engine.sock` 无法访问。检查仅零字节socket目录并停止已核验的Docker进程后，保留旧目录为 `C:/Users/32202/AppData/Local/Docker/run.zhiyu-recovery-20261007-095519` 与 `C:/Users/32202/AppData/Local/docker-secrets-engine.zhiyu-recovery-20261007-095519`，重建空运行目录后引擎29.7.2恢复。本机证据为 `artifacts/docker-socket-recovery-20261007.json`；未reset/prune或删除任何数据卷，这次恢复不证明Docker根因已永久修复，下次仍须核验易失状态。
+
+## 2026-10-06晚间：语义标签与冷归档版（历史）
+
+当时8791运行`sha256:1c69b81f21422a094bea093813f3597736a7e1a4ce0f5a22a362848f696b1495`，health为ok，演示与自动标注开启，mode=semantic，现已由页首镜像替代。demo没有真实语义模型，返回unavailable；普通用户仍只选公司和Key。两平台各718/95.18%，新版APK63unit与28模拟器联测通过。以下命令仅为历史复现：
 
 ```powershell
 docker compose -p zhiyu-docker-test -f compose.test.yaml -f artifacts/compose.memory-tiers.override.yaml up -d --no-build --wait backend

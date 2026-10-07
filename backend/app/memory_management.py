@@ -76,6 +76,8 @@ class MemoryManagement:
                 state = self.chat.cold.get_state(db, sequence)
                 if state["revision"] != edit.expected_revision:
                     raise MemoryConflict("记忆设置已更新，请刷新后重试")
+                if edit.index_state == "cold" and self.chat.cold.pending_turn(db, sequence, identifier):
+                    raise MemoryConflict("原文仍在等待识别，需要保留活跃检索入口")
                 if edit.tier is not None:
                     self.chat.annotations.set_manual(db, sequence, edit.tier)
                 if edit.confirm_independent:

@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-SEMANTIC_VERSION = "semantic-v1"
+SEMANTIC_VERSION = "semantic-v2"
 MAX_SOURCE_CHARS = 16000
 MAX_RESPONSE_CHARS = 65536
 MAX_CLAIMS = 8
@@ -201,6 +201,11 @@ def _messages(sources, catalogue):
         "promise_state(null/pending/fulfilled/cancelled)、date_basis(null/gregorian/lunar)、event_date(null或原文日期)。"
         "可选start/end为Python Unicode字符位置且必须成对；quote重复时必须提供。禁止新增ID、URL、正文或解释字段。"
         "user生日主题用user:birthday。分清本人、第三人、引用、假设、否定与历史状态；不能把AI回声当用户事实。"
+        "只识别用户真实自述的资料、偏好、愿望、习惯及双方现实中的承诺。"
+        "本次写作、角色扮演、翻译、格式或输出长度要求是任务指令，不标为个人偏好或愿望；"
+        "虚构人物、故事情节以及示例不当作用户真实经历。原话另外明确自述实际偏好时，只引用该自述。"
+        "explicit_keep只在用户明确要求跨以后对话长久记住这条本人原话时为true；"
+        "本轮需要使用、强调、重复、字段重要或可能有用都不等于明确长久保存请求，默认false。"
         "assistant只可标其本人承诺。没有可靠证据返回空数组；不确定subject用other、polarity用uncertain。"
         "topic只能在作者、kind一致且含义相同的情况下复用目录，不凭重复愿望推断永久爱好。"
         "更正/撤回只在原话明确支持时标correction，不推断承诺全部兑现。fulfilled/cancelled必须有明确已完成/取消原话。"

@@ -1,5 +1,19 @@
 # 实际验证记录
 
+## 2026-10-07 10:10：旧事适时呈现与后台记忆第一版
+
+聊天先回应当下分享与情绪，仅在有帮助时带出独立旧原话；近期已提供的来源附提示，仍保留原文和证据。双方原文、索引、pending状态和后台任务原子保存后，HTTP即可返回；语义识别随后在后台完成。没有增加同步云意图分类调用，没有融合或删改原文，固定AI与preset规则未变。[行为与边界](MEMORY_ATTENTION.md)。
+
+最终Windows / Docker Linux各 **752 passed，覆盖率95.02%**（3412语句、170未覆盖），各一项现有Starlette依赖警告；日志为 `artifacts/memory-background-final-windows-r2.log` 与 `-final-linux.log`。全部脚本回归180项通过，13.04秒，未重跑旧千轮、两万条或180次冻结付费实验。首次全后端19失败/728通过均为旧冷归档夹具缺少生产已有的recognition表；补齐夹具并新增缺表安全拒绝反例后通过，没有放松生产保护。
+
+有效TDD包含后台pending映射、受阻识别时第二次聊天与原文保存、owner FIFO、凭据失效/重连、lease和源SHA保护、识别失败与双方标注故障回滚、未认证重启不发云请求、pending原文对不能冷却、近期来源提示隔离/删除与保存失败，以及semantic-v2对任务指令的边界。独立审查最终118项专项通过，无未解决CRITICAL/HIGH/P2；与全量结果重叠，不相加。三个已复现P2（release故障后恢复缓存、旧token清除新token、lifespan异常跳过provider关闭）已用四个真实断言失败记录修复并独立复测。证据见本机 `artifacts/background-review-20261007/README.md`。
+
+新镜像 `sha256:2ab853fb3244d3ceb7f604d9a7cdfbb09cd2df343215d79f7846454712c071ad` 已在原数据卷部署，healthy；45个应用Python文件SHA、UID10001、只读根、cap_drop ALL和回环端口均核验。升级前完整三文件和身份备份SHA一致，旧卷/备份保留。[部署与socket恢复](DOCKER.md)。54次真实Docker HTTP请求全部符合预期；14,827字符合成用户原文、双方四条完整消息和分页/重新连接后元数据不变，两次发送22.958 / 11.619毫秒均先返回pending，demo后台最终unavailable且无语义标签。preset固定、永久保护、冷查原文区间/恢复、stale409、跨身份404、超限422无写、注销401及自身数据清理通过。首harness长度断言错误在发送前失败，原结果保留，修后重跑通过；未改应用。demo后台过快，公开metadata未观测pending/running竞争，该竞争以blocking-provider专项证据为准；演示耗时不等于真实模型延迟。
+
+隔离完整FastAPI ASGI应用使用已授权Key和官方HTTPS，新合成5轮共 **11次调用**（连接1、聊天5、后台5，无重试）；每次HTTP都先返回pending，随后任务各attempt1/ok。含实际本地旧原文检索的完整回复0.510–1.437秒，中位1.263秒，回复后后台整理0.436–0.879秒、中位0.620秒。64条双方消息与保存时完整字典逐条一致；只读SQLite quick_check、10条job源SHA和1条标签区间SHA通过，源码与原Key配置SHA前后不变。结果只证明这个生产路径小样本；`ok`为格式/来源/事务通过，不是100%语义准确率或长期自然度结论。时间不含Android绘制/跨设备网络，不能与不同题目、模式和时段的旧串行报告计算加速比。[新样本与限制](MEMORY_ATTENTION_EVAL.md)。
+
+Android **65项unit通过**，debug/debugAndroidTest构建通过。重新验证SDK、adb和服务后，API36模拟器连接新镜像8791的 **19项instrumentation首轮全绿，15.128秒**：14映射、3后台状态Compose UI、2实际记忆管理流程。新APK及测试APK SHA与构建时一致；旧28项属于历史阶段，不重复计入。[APK与实际联测](ANDROID.md)。本轮未做真机、公网HTTPS/签名发布、独立语义意图路由或全双工语音；当前自然呈现依赖同一次聊天模型的选择，还需更广泛自然对话评测。
+
 ## 2026-10-06 22:41–23:36：DeepSeek Flash 真实模式与完整等待
 
 用户授权读取原RAG配置中的Key，仅向官方HTTPS发送合成输入。`deepseek-flash`思考开启（high）与关闭，两轮各12语义+4回复×2次×2模式，128/128 HTTP200。首轮4096预算、第二轮16384；原Key文件与各冻结源码SHA均不变，无重试或事后改题。思考内容不落盘。独立调用前审查无未解决C/H；四个执行器合计57离线测试/92%覆盖、Ruff通过。[完整方法、结果与定性盲评](DEEPSEEK_FLASH_EVAL.md)。

@@ -11,9 +11,11 @@ from .companion import check_profile_change, decode_profile, encode_profile, nor
 from .memory_annotations import AnnotationsStore
 from .memory_cold import ColdIndex
 from .memory_index import MemoryIndex
+from .memory_jobs import MemoryJobs
 from .memory_lookup import events as lookup_events
 from .memory_lookup import lookup
 from .memory_restore import restore_protected
+from .memory_semantic import SEMANTIC_VERSION
 from .memory_transaction import transaction
 from .source_codec import ChatStorageError, decode_sources, encode_sources
 
@@ -40,6 +42,7 @@ class ChatDatabase:
         self.cold = ColdIndex()
         self.auto_annotations = auto_annotations
         self.annotation_mode = annotation_mode
+        self.memory_jobs = MemoryJobs(self)
         with self.connection() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS conversations (
@@ -69,6 +72,7 @@ class ChatDatabase:
             db.execute("""CREATE TABLE IF NOT EXISTS memory_recognition (
                 sequence INTEGER PRIMARY KEY REFERENCES messages(sequence) ON DELETE CASCADE,
                 mode TEXT NOT NULL, status TEXT NOT NULL, version TEXT NOT NULL)""")
+            self.memory_jobs.initialize(db)
         after = 0
         while after is not None:
             with self.connection() as db:
@@ -247,42 +251,52 @@ class ChatDatabase:
     def memory_events(self, owner, identifier, before, windows):
         return lookup_events(self, owner, identifier, before, windows)
 
-    def recognition_catalogue(self, owner, identifier):
+    def recognition_catalogue(self, owner, identifier, *, before=None):
+        if before is not None and (type(before) is not int or before < 1):
+            raise ValueError("记忆主题边界无效")
+        boundary = " AND a.message_sequence<?" if before is not None else ""
+        parameters = (owner, identifier, before) if before is not None else (owner, identifier)
         with transaction(self) as db:
             return [dict(row) for row in db.execute("""SELECT a.kind,a.subject,a.topic_key
                 FROM memory_annotations a JOIN conversations c ON c.id=a.conversation_id
-                WHERE c.owner=? AND c.id=? AND a.validity='current'
+                WHERE c.owner=? AND c.id=? AND a.validity='current'""" + boundary + """
                 GROUP BY a.kind,a.subject,a.topic_key ORDER BY max(a.message_sequence) DESC LIMIT 64""",
-                                                   (owner, identifier))]
+                                                   parameters)]
 
-    def save_turn(self, owner: str, identifier: str, content: str, answer: str, sources: list, *, recognition=None):
+    def save_turn(self, owner: str, identifier: str, content: str, answer: str, sources: list, *, recognition=None, deferred_recognition=None):
+        if deferred_recognition and (recognition is not None or not self.auto_annotations or self.annotation_mode != "semantic"):
+            raise ValueError("后台识别配置冲突")
         user = {"id": uuid4().hex, "role": "user", "content": content, "sources": [], "created_at": timestamp()}
         assistant = {"id": uuid4().hex, "role": "assistant", "content": answer, "sources": sources, "created_at": timestamp()}
         with transaction(self, write=True) as db:
             row = db.execute("SELECT title FROM conversations WHERE id=? AND owner=?", (identifier, owner)).fetchone()
             if row is None:
                 raise ValueError("会话不存在")
+            sequences = []
             for message in (user, assistant):
                 cursor = db.execute("INSERT INTO messages (id,conversation_id,role,content,sources,created_at) VALUES (?,?,?,?,?,?)",
                                     (message["id"], identifier, message["role"], encode_body(message["content"]), encode_sources(message["sources"]), message["created_at"]))
                 self.memory.index_message(db, cursor.lastrowid, identifier, message["content"])
-                annotations = self._record_recognition(db, message, cursor.lastrowid, recognition)
+                sequences.append(cursor.lastrowid)
+                annotations = self._record_recognition(db, message, cursor.lastrowid, recognition, pending=deferred_recognition is not None)
                 if annotations and annotations[0].get("status") != "skipped":
                     restore_protected(self, db, identifier)
+            if deferred_recognition is not None:
+                self.memory_jobs.enqueue(db, owner, identifier, (user, assistant), sequences, deferred_recognition)
             title = content[:30] if row["title"] == "新对话" else row["title"]
             db.execute("UPDATE conversations SET title=?,updated_at=? WHERE id=? AND owner=?",
                        (title, assistant["created_at"], identifier, owner))
         return {"user_message": user, "assistant_message": assistant}
 
-    def _record_recognition(self, db, message, sequence, recognition):
+    def _record_recognition(self, db, message, sequence, recognition, *, pending=False):
         status, version = "disabled", "none"
         annotations = []
         if self.auto_annotations and self.annotation_mode == "literal":
             annotations = self.annotations.record_auto(db, message, sequence, True)
             status, version = "literal", "literal-zh-v1"
         elif self.auto_annotations:
-            status = recognition["roles"][message["role"]] if recognition else "unavailable"
-            version = recognition["version"] if recognition else "semantic-v1"
+            status = "pending" if pending else recognition["roles"][message["role"]] if recognition else "unavailable"
+            version = recognition["version"] if recognition else SEMANTIC_VERSION
             claims = recognition["claims"][message["role"]] if recognition else []
             if claims:
                 annotations = self.annotations.record_semantic(db, sequence, claims)

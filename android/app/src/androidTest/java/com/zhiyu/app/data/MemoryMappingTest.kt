@@ -89,6 +89,15 @@ class MemoryMappingTest {
             rejects { entry().put("recognition_status", value).memoryEntry() }
         }
     }
+    @Test fun backgroundRecognitionStatusesKeepExactSourceAndRevision() {
+        listOf("pending", "running", "waiting_auth").forEach { status ->
+            val value = entry().put("recognition_mode", "semantic").put("recognition_status", status).memoryEntry()
+            assertEquals(status, value.recognitionStatus)
+            assertEquals("苹果🍎\u0000e\u0301", value.text)
+            assertEquals("m-1", value.messageId)
+            assertEquals(4, value.revision)
+        }
+    }
     private fun rejects(block: () -> Unit) {
         try { block(); fail("Expected invalid JSON metadata") } catch (_: IllegalArgumentException) { }
     }

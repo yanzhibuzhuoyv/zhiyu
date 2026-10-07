@@ -75,8 +75,7 @@ import java.time.format.DateTimeFormatter
                     Text(entry.text, maxLines = 4, style = MaterialTheme.typography.bodyMedium)
                     Text("${tierLabel(entry.tier)} · ${modeLabel(entry)} · ${indexLabel(entry)}", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(recognitionLabel(entry), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (needsRecognitionHelp(entry)) Text("原话已保留，层级可手动确认", style = MaterialTheme.typography.bodySmall)
+                    MemoryRecognitionInfo(entry)
                 }
             }
         }
@@ -98,8 +97,7 @@ import java.time.format.DateTimeFormatter
         }
         HorizontalDivider()
         Text("${tierLabel(entry.tier)} · ${modeLabel(entry)}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("memory_status"))
-        Text(recognitionLabel(entry), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("memory_recognition"))
-        if (needsRecognitionHelp(entry)) Text("原话已保留，层级可手动确认", style = MaterialTheme.typography.bodySmall)
+        MemoryRecognitionInfo(entry, Modifier.testTag("memory_recognition"))
         if (entry.recognitionStatus == "partial") Text("部分内容未识别，请核对判断或手动调整。", style = MaterialTheme.typography.bodySmall)
         Text("中期保留日常与近期约定；长期关注反复表达；永久重视稳定信息。", style = MaterialTheme.typography.bodySmall)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -131,7 +129,14 @@ private fun author(entry: MemoryEntry) = if (entry.role == "user") "你说" else
 private fun tierLabel(tier: String) = when (tier) { "permanent" -> "永久"; "long" -> "长期"; else -> "中期" }
 private fun modeLabel(entry: MemoryEntry) = if (entry.manualTier == null) "自动判断" else "手动指定"
 private fun indexLabel(entry: MemoryEntry) = if (entry.indexState == "cold") "已归档，原话完整保留" else "活跃记忆"
+@Composable internal fun MemoryRecognitionInfo(entry: MemoryEntry, modifier: Modifier = Modifier) {
+    Text(recognitionLabel(entry), modifier, style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (needsRecognitionHelp(entry)) Text("原话已保留，层级可手动确认", style = MaterialTheme.typography.bodySmall)
+}
 private fun recognitionLabel(entry: MemoryEntry) = when {
+    entry.recognitionStatus in setOf("pending", "running") -> "正在整理记忆，聊天可以继续"
+    entry.recognitionStatus == "waiting_auth" -> "重新连接后继续整理记忆"
     entry.recognitionMode == "semantic" && entry.recognitionStatus in setOf("ok", "partial") -> "语义识别"
     entry.recognitionMode == "literal" && entry.recognitionStatus == "literal" -> "规则识别"
     else -> "未识别"

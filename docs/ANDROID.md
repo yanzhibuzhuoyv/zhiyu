@@ -66,3 +66,15 @@ Gradle wrapper 脚本与 JAR 复用本机 WakeDeck 项目的 Gradle 9.5.0 标准
 记忆UI联测覆盖长按、永久层级归档保护、恢复自动、归档/恢复、原话不变、768码点Unicode节选以及关闭应用重新启动后保留归档状态。测试只使用隔离的合成demo Key；后端语义模式下demo无法调用真实模型，界面明确显示“未识别”和原话保留提示。真实云端语义质量、真实Key、真机和公网HTTPS仍未验证。本阶段没有失败后的重试，测试期间新旧APK哈希均未变化。
 
 新调试副本为 `artifacts/ZhiYu-0.1.1-memory-debug.apk`（18,798,982字节，SHA256 `D2175EFDB97C80BF84F90C0DE9580F7BC6EC89953B4FCA4EE0D860247102806D`）；旧 `ZhiYu-0.1.1-debug.apk` 保留。此构建增加记忆界面但沿用0.1.1版本号，正式分发仍需HTTPS和发布签名。
+
+## 2026-10-07 后台整理记忆状态
+
+客户端接受后台识别的`pending`、`running`和`waiting_auth`状态。列表和详细页对前两种状态显示“正在整理记忆，聊天可以继续”，等待凭据时显示“重新连接后继续整理记忆”。这些状态保持原话、来源与版本，不显示语义识别成功或失败提示，也不把整理状态设为聊天忙碌。设备加密Key、公司/模型绑定和固定预设继续沿用现有实现。
+
+先运行新增后台状态用例，旧校验真实拒绝`pending`，1项预期红色失败已保存为`artifacts/android-background-memory-tdd-red.log`及XML。放行三种已确认状态后，65项单位测试通过，debug/debugAndroidTest构建通过（`artifacts/android-background-memory-build.log`）。
+
+2026-10-07 10:07，重新核验SDK、adb与服务易失状态，在后台启动的API36模拟器`medium_phone / emulator-5554`安装上述已编译的两份APK，连接实际新Docker8791镜像`sha256:2ab853fb3244d3ceb7f604d9a7cdfbb09cd2df343215d79f7846454712c071ad`。19项instrumentation首轮全部通过，运行15.128秒：14项真实Android JSON映射、3项后台状态Compose UI、2项实际后端记忆管理流程。证据`artifacts/android-background-memory-instrumentation.log`明确`OK (19 tests)`，运行及哈希记录在`artifacts/android-background-memory-instrumentation-runtime.json`。上一轮28项属于旧语义版，未重复计入本轮结果。
+
+新增映射与UI覆盖`pending/running/waiting_auth`、原话Unicode与来源/版本保留、“聊天可以继续”与等待凭据的提示，不误报识别成功或失败。实际demo联测再次验证长按原话、永久层级归档保护、恢复自动、归档/恢复、768码点节选、Activity重新启动后归档与绑定不变。只使用合成demo凭据，本轮无云端请求；模拟器状态测试不能代表实际云端语义判断准确率、真机或公网HTTPS。两份本轮APK与两份历史APK的SHA在测试前后均未改变，服务测试后仍healthy。
+
+本轮包单独保存为`artifacts/ZhiYu-0.1.1-background-memory-debug.apk`（18,798,982字节，SHA256 `882AEAECEE9633FD426DC82C3CE708A99C6A739755A8C27C33DC60EFD58242FC`），测试包`artifacts/ZhiYu-0.1.1-background-memory-androidTest.apk`（SHA256 `EF3800291ED46CC3AC4CF029457DC2E79C868D7E347D5EA2F9E807B62D86897E`）。上一轮已联测的`memory-debug`包与原始`debug`包均保留且哈希未变。

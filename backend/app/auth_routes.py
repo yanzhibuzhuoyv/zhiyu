@@ -32,12 +32,13 @@ async def login(body: Login, request: Request):
         if not model:
             raise HTTPException(400, "请填写已开通的模型名称或接入点 ID")
     key = body.api_key.get_secret_value()
-    async with state.upstream_slots:
+    async with state.memory_worker.foreground(), state.upstream_slots:
         await state.provider.validate(body.provider_id, key, model)
     try:
         token, session = state.sessions.issue(body.provider_id, key, model)
     except ValueError as error:
         raise HTTPException(503, str(error)) from error
+    state.memory_worker.activate(token, session)
     return {"token": token, "provider_id": session.provider_id, "model": session.model,
             "expires_at": session.expires_at.isoformat()}
 
@@ -49,7 +50,8 @@ def me(session: Session = Depends(current_session)):
 
 
 @router.delete("/auth/session", status_code=204)
-def logout(request: Request, session: Session = Depends(current_session),
+async def logout(request: Request, session: Session = Depends(current_session),
            credentials: HTTPAuthorizationCredentials = Depends(bearer)):
     request.app.state.sessions.revoke(credentials.credentials)
+    await request.app.state.memory_worker.revoke(credentials.credentials)
     return Response(status_code=204)

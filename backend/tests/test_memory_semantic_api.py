@@ -8,6 +8,19 @@ from app.config import Settings
 from app.main import create_app
 from app.providers import ProviderError
 
+_clients = []
+
+
+@pytest.fixture(autouse=True)
+def close_clients():
+    yield
+    while _clients:
+        _clients.pop().__exit__(None, None, None)
+
+
+def drain(client):
+    client.portal.call(client.app.state.memory_worker.wait_idle)
+
 
 def claim(quote, kind="profile", topic="user:birthday", **extra):
     return {"quote": quote, "kind": kind, "subject": "user", "polarity": "affirm",
@@ -37,6 +50,8 @@ def setup(tmp_path, payload, *, enabled=True):
     app = create_app(Settings(data_dir=tmp_path, auto_memory_annotations=enabled,
                               memory_annotation_mode="semantic", allow_demo=True), provider_client=provider)
     client = TestClient(app)
+    client.__enter__()
+    _clients.append(client)
     headers = login(client)
     cid = client.post("/api/conversations", headers=headers, json={"use_rag": False}).json()["id"]
     return client, headers, cid, provider, app
@@ -47,9 +62,10 @@ def test_semantic_paraphrase_becomes_source_tag_with_same_selected_identity_and_
     quote = "十月六号是我生日"
     client, headers, cid, provider, app = setup(tmp_path, {"user": [claim(quote)], "assistant": []})
     response = client.post(f"/api/conversations/{cid}/messages", headers=headers, json={"content": text})
+    drain(client)
     assert response.status_code == 200
     assert response.json()["user_message"]["content"] == text
-    assert response.json()["memory_recognition"] == {"mode": "semantic", "status": "ok"}
+    assert response.json()["memory_recognition"] == {"mode": "semantic", "status": "pending"}
     assert len(provider.calls) == 2 and provider.identities[0] == provider.identities[1]
     mid = response.json()["user_message"]["id"]
     meta = client.get(f"/api/conversations/{cid}/memory/messages/{mid}", headers=headers).json()
@@ -65,8 +81,9 @@ def test_failed_recognition_keeps_successful_chat_and_reports_safe_status(tmp_pa
     client, headers, cid, provider, _ = setup(tmp_path, payload)
     response = client.post(f"/api/conversations/{cid}/messages", headers=headers,
                            json={"content": "不同说法的原话仍然保存"})
+    drain(client)
     assert response.status_code == 200 and "PRIVATE" not in response.text
-    assert response.json()["memory_recognition"]["status"] == "failed"
+    assert response.json()["memory_recognition"]["status"] == "pending"
     meta = client.get(f"/api/conversations/{cid}/memory/messages/{response.json()['user_message']['id']}", headers=headers).json()
     assert meta["tier"] == "mid" and not meta["annotations"] and meta["recognition_status"] == "failed"
     assert len(provider.calls) == 2
@@ -85,7 +102,10 @@ def test_demo_never_pretends_rule_matching_is_semantic_model(tmp_path):
     cid = client.post("/api/conversations", headers=headers, json={"use_rag": False}).json()["id"]
     response = client.post(f"/api/conversations/{cid}/messages", headers=headers,
                            json={"content": "我的生日是3月6日"})
-    assert response.status_code == 200 and response.json()["memory_recognition"]["status"] == "unavailable"
+    drain(client)
+    assert response.status_code == 200 and response.json()["memory_recognition"]["status"] == "pending"
+    mid = response.json()["user_message"]["id"]
+    assert client.get(f"/api/conversations/{cid}/memory/messages/{mid}", headers=headers).json()["recognition_status"] == "unavailable"
     assert len(provider.calls) == 1
 
 
@@ -93,10 +113,12 @@ def test_failed_semantic_turn_does_not_relabel_or_mutate_existing_source(tmp_pat
     client, headers, cid, provider, _ = setup(tmp_path, {"user": [claim("十月六号是我生日")], "assistant": []})
     original = client.post(f"/api/conversations/{cid}/messages", headers=headers,
                            json={"content": "十月六号是我生日"}).json()["user_message"]
+    drain(client)
     url = f"/api/conversations/{cid}/memory/messages/{original['id']}"
     before = client.get(url, headers=headers).json()
     provider.payload = "invalid-format"
     response = client.post(f"/api/conversations/{cid}/messages", headers=headers, json={"content": "其实我说错了"})
+    drain(client)
     assert response.status_code == 200
     assert client.get(url, headers=headers).json() == before
 
@@ -131,12 +153,15 @@ def test_multiple_independent_spans_have_separate_ids_and_survive_app_reconstruc
                         claim("闲下来的时候我总爱读诗", "preference", "like:poetry")], "assistant": []}
     client, headers, cid, _, _ = setup(tmp_path, payload)
     response = client.post(f"/api/conversations/{cid}/messages", headers=headers, json={"content": text})
+    drain(client)
     assert response.status_code == 200
     mid = response.json()["user_message"]["id"]
     before = client.get(f"/api/conversations/{cid}/memory/messages/{mid}", headers=headers).json()
     assert len(before["annotations"]) == 2 and len({a["id"] for a in before["annotations"]}) == 2
     app = create_app(Settings(data_dir=tmp_path), provider_client=FakeProvider())
     rebuilt = TestClient(app)
+    rebuilt.__enter__()
+    _clients.append(rebuilt)
     fresh = login(rebuilt)
     assert rebuilt.get(f"/api/conversations/{cid}/memory/messages/{mid}", headers=fresh).json() == before
 
@@ -148,11 +173,13 @@ def test_semantic_correction_near_long_source_tail_is_recalled_at_its_exact_offs
         "user": [claim("我的生日其实是2000-03-06")], "assistant": []})
     original = client.post(f"/api/conversations/{cid}/messages", headers=headers,
                            json={"content": "我的生日其实是2000-03-06"}).json()["user_message"]
+    drain(client)
     corrected_quote = "更正一下，2001-04-07才是我的公历生日"
     text = "平常风景和日记。" * 800 + corrected_quote
     provider.payload = {"user": [claim(corrected_quote, correction=True, date_basis="gregorian")], "assistant": []}
     corrected = client.post(f"/api/conversations/{cid}/messages", headers=headers,
                             json={"content": text}).json()["user_message"]
+    drain(client)
     owner = app.state.sessions.get(headers["Authorization"][7:]).owner
     for _ in range(25):
         app.state.chat.save_turn(owner, cid, "日常散步", "轻松休息", [])

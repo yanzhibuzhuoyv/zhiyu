@@ -13,7 +13,9 @@ from .chat_routes import router as chat_router
 from .config import Settings
 from .database import ChatDatabase
 from .knowledge_routes import router as knowledge_router
+from .memory_attention import MemoryAttention
 from .memory_routes import router as memory_router
+from .memory_worker import MemoryWorker
 from .providers import ProviderClient, ProviderError
 from .rag import RagService, RagStorageError
 from .rag_semantic import RagSemanticError
@@ -26,12 +28,17 @@ def create_app(settings: Settings | None = None, provider_client=None) -> FastAP
 
     @asynccontextmanager
     async def lifespan(application):
-        yield
-        close = getattr(application.state.provider, "aclose", None)
-        if close:
-            result = close()
-            if inspect.isawaitable(result):
-                await result
+        try:
+            yield
+        finally:
+            try:
+                await application.state.memory_worker.aclose()
+            finally:
+                close = getattr(application.state.provider, "aclose", None)
+                if close:
+                    result = close()
+                    if inspect.isawaitable(result):
+                        await result
 
     application = FastAPI(title="知语 API", version="0.1.1", lifespan=lifespan)
     state = application.state
@@ -45,6 +52,8 @@ def create_app(settings: Settings | None = None, provider_client=None) -> FastAP
     state.upstream_slots = asyncio.Semaphore(8)
     state.parse_slots = asyncio.Semaphore(2)
     state.turn_locks = WeakValueDictionary()
+    state.memory_worker = MemoryWorker(state.chat, state.sessions, state.provider)
+    state.memory_attention = MemoryAttention()
 
     @application.exception_handler(ProviderError)
     async def provider_error(request: Request, error: ProviderError):

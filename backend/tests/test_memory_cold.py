@@ -21,6 +21,9 @@ def cold_db():
     db.execute("""CREATE TABLE messages(sequence INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE,
         conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,role TEXT,
         content TEXT,sources TEXT,created_at TEXT)""")
+    db.execute("""CREATE TABLE memory_recognition(sequence INTEGER PRIMARY KEY
+        REFERENCES messages(sequence) ON DELETE CASCADE,mode TEXT NOT NULL,
+        status TEXT NOT NULL,version TEXT NOT NULL)""")
     index, cold = MemoryIndex(), ColdIndex()
     index.initialize(db)
     cold.initialize(db)
@@ -85,6 +88,17 @@ def test_default_active_cool_warm_revisions_and_originals_remain_exact(cold_db):
     assert db.execute("SELECT count(*) FROM memory_fts").fetchone()[0] == 1
     assert snapshot(db)["messages"] == original
     db.execute("INSERT INTO memory_fts(memory_fts) VALUES('integrity-check')")
+
+
+def test_missing_recognition_schema_fails_closed_without_removing_index(cold_db):
+    db, index, cold = cold_db
+    numbers = seed(db, index)
+    db.execute("DROP TABLE memory_recognition")
+    db.commit()
+    before = snapshot(db)
+    with pytest.raises(ChatStorageError):
+        cool_pair(db, index, cold, numbers)
+    assert snapshot(db) == before
 
 
 def test_idempotent_state_operations_and_tier_only_revision_bump(cold_db):

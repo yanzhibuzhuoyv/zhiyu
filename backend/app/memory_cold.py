@@ -70,6 +70,18 @@ def _original_terms(original):
 
 
 class ColdIndex:
+    @staticmethod
+    def pending_turn(db, sequence, identifier):
+        source = db.execute("SELECT role FROM messages WHERE sequence=? AND conversation_id=?",
+                            (sequence, identifier)).fetchone()
+        if source is None:
+            return False
+        first = sequence - int(source["role"] == "assistant")
+        return db.execute("""SELECT 1 FROM memory_recognition r JOIN messages m ON m.sequence=r.sequence
+            WHERE m.conversation_id=? AND m.sequence IN (?,?)
+              AND r.status IN ('pending','running','waiting_auth') LIMIT 1""",
+                          (identifier, first, first + 1)).fetchone() is not None
+
     @_storage
     def initialize(self, db):
         statements = (
@@ -117,6 +129,8 @@ class ColdIndex:
     def cool(self, db, sequence, identifier, original, indexer) -> dict:
         _transaction(db)
         digest = _canonical(db, sequence, identifier, original)
+        if self.pending_turn(db, sequence, identifier):
+            raise ChatStorageError("原文仍在等待识别，需要保留活跃检索入口")
         if self.is_cold(db, sequence):
             _verify_directory(db, sequence, original, digest)
             return self.get_state(db, sequence)

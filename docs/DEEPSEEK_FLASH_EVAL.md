@@ -4,6 +4,8 @@
 
 本轮北京时间22:41–23:36，完成两轮固定题128次、等待路径48次、真实长回复4次，共180次生成请求，另有只读模型元数据查询。最新四个执行器合计57项离线测试通过、覆盖率92%，Ruff与diff检查通过。首轮6次思考预算截断如实保留；其余174次都收到完整最终响应。仅新增测试与文档，应用默认与APK未改。
 
+以上为2026-10-06的冻结实测阶段（提交88e087a，semantic-v1、串行路径）；后续用户另授权的后台第一版与semantic-v2见[MEMORY_ATTENTION.md](MEMORY_ATTENTION.md)。后续实现不能改变以下原结果或把旧延迟冒称新版延迟；复现原题需使用各证据目录中的冻结源码。
+
 ## 首轮预先固定的方法（4096token）
 
 - 官方 `deepseek-flash`，思考开启时 `reasoning_effort=high`，关闭时显式 `thinking.type=disabled`。当前官方名称对应 DeepSeek-V4.1-Flash；[模式说明](https://api-docs.deepseek.com/guides/thinking_mode/)、[模型与价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)。

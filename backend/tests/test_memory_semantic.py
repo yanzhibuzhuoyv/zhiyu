@@ -42,7 +42,7 @@ async def test_one_extra_model_call_keeps_both_original_sources_and_selected_com
     provider = Provider()
     result = await identify_turn(provider, "deepseek", "synthetic-semantic-key", "test-model", sources(),
                                  catalogue=[{"kind": "wish", "subject": "user", "topic_key": "吃:苹果"}])
-    assert result["status"] == "ok" and result["version"] == "semantic-v1"
+    assert result["status"] == "ok" and result["version"] == "semantic-v2"
     assert len(provider.calls) == 1
     company, key, model, messages, tokens = provider.calls[0]
     assert (company, key, model, tokens) == ("deepseek", "synthetic-semantic-key", "test-model", 4096)

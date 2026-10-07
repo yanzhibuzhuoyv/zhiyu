@@ -29,7 +29,8 @@ object MemoryRules {
         require(value.createdAt.isNotBlank() && value.createdAt.length <= 128 && value.reason.length <= 512) { "记忆信息不完整" }
         require(value.manualTier == null || value.manualTier in tiers) { "手动记忆状态无法识别" }
         require(value.recognitionMode in setOf("semantic", "literal", "none") &&
-            value.recognitionStatus in setOf("ok", "partial", "failed", "unavailable", "skipped_large", "disabled", "literal")) {
+            value.recognitionStatus in setOf("ok", "partial", "failed", "unavailable", "skipped_large", "disabled", "literal",
+                "pending", "running", "waiting_auth")) {
             "记忆识别状态无法识别，请更新应用"
         }
         return value
