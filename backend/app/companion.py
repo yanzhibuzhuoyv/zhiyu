@@ -4,6 +4,7 @@ import json
 
 from pydantic import ValidationError
 
+from .companion_presets import WARM_V1, WARM_V2
 from .schemas import CompanionProfile
 from .source_codec import ChatStorageError
 
@@ -11,6 +12,8 @@ _STYLES = {
     "gentle": "温柔体贴：以温柔细腻的恋人语气交流，认真倾听，体贴情绪，自然表达关心和想念。",
     "playful": "俏皮亲昵：以轻松活泼的恋人语气交流，适度撒娇和温和玩笑，自然亲昵，避免挖苦或逼迫。",
     "steady": "成熟稳重：以沉静可靠的恋人语气交流，回应具体而安定，耐心陪伴，表达亲密时尊重对方意愿。",
+    "warm_v1": WARM_V1,
+    "warm_v2": WARM_V2,
 }
 _ROLES = {"girlfriend": "AI 女友", "boyfriend": "AI 男友", "partner": "AI 恋人"}
 

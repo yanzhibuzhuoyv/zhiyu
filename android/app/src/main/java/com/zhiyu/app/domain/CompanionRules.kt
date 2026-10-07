@@ -5,7 +5,7 @@ object CompanionRules {
     fun normalize(value: CompanionProfile?): CompanionProfile? {
         if (value == null) return null
         require(value.mode in setOf("preset", "custom")) { "请选择有效的恋人设定方式" }
-        require(value.style in setOf("gentle", "playful", "steady")) { "请选择有效的恋人性格" }
+        require(value.style in setOf("gentle", "playful", "steady", "warm_v1", "warm_v2")) { "请选择有效的恋人性格" }
         require(value.role in setOf("girlfriend", "boyfriend", "partner")) { "请选择有效的恋人形象" }
         val cleaned = value.copy(name = value.name.trim(), userName = value.userName.trim(), instructions = value.instructions.trim())
         require(cleaned.name.codePointCount(0, cleaned.name.length) <= 24 && cleaned.userName.codePointCount(0, cleaned.userName.length) <= 24) { "名字与称呼最多24个字" }

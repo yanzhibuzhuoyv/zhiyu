@@ -104,4 +104,30 @@ class SecureCredentialStoreTest {
         assertThrows(IllegalStateException::class.java) { store.writeBinding(updated.copy(profile = CompanionProfile())) }
         assertThrows(IllegalStateException::class.java) { store.writeBinding(updated.copy(model = "different")) }
     }
+    @Test fun warmPresetRestoresFromEncryptedStorageAndCannotBeReplaced() {
+        val profile = CompanionProfile(style = "warm_v1", name = "合成名字", userName = "合成称呼")
+        val binding = CompanionBinding("deepseek", "test-model", profile)
+        store.writeBinding(binding)
+        store.clear()
+        val restored = SecureCredentialStore(context, prefsName, alias)
+        assertEquals(binding, restored.readBinding())
+        assertThrows(IllegalStateException::class.java) {
+            restored.writeBinding(binding.copy(profile = profile.copy(style = "gentle")))
+        }
+        assertThrows(IllegalStateException::class.java) { restored.writeBinding(binding.copy(profile = null)) }
+        assertEquals(binding, restored.readBinding())
+    }
+    @Test fun warmV2PresetRestoresWithoutUnlockingOrChangingVersion() {
+        val profile = CompanionProfile(style = "warm_v2", name = "合成名字", userName = "合成称呼")
+        val binding = CompanionBinding("deepseek", "test-model", profile)
+        store.writeBinding(binding)
+        store.clear()
+        val restored = SecureCredentialStore(context, prefsName, alias)
+        assertEquals(binding, restored.readBinding())
+        assertThrows(IllegalStateException::class.java) {
+            restored.writeBinding(binding.copy(profile = profile.copy(style = "warm_v1")))
+        }
+        assertThrows(IllegalStateException::class.java) { restored.writeBinding(binding.copy(profile = null)) }
+        assertEquals(binding, restored.readBinding())
+    }
 }

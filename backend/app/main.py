@@ -21,6 +21,7 @@ from .rag import RagService, RagStorageError
 from .rag_semantic import RagSemanticError
 from .request_guard import RequestGuard
 from .source_codec import ChatStorageError
+from .trial_routes import router as trial_router
 
 
 def create_app(settings: Settings | None = None, provider_client=None) -> FastAPI:
@@ -87,6 +88,7 @@ def create_app(settings: Settings | None = None, provider_client=None) -> FastAP
     application.include_router(chat_router)
     application.include_router(memory_router)
     application.include_router(knowledge_router)
+    application.include_router(trial_router)
     return application
 
 

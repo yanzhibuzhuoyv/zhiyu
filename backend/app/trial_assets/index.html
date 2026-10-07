@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>知语 · 温柔相伴</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/trial/style.css">
+  <script src="/trial/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><span class="mark" aria-hidden="true">知</span><div><h1>知语</h1><p>给每一句日常，一个温柔的回应</p></div></header>
+    <section id="entry" class="panel" aria-labelledby="entry-title">
+      <div class="eyebrow" id="preset-version">恋人预设 · warm_v2</div>
+      <h2 id="entry-title">温柔相伴</h2>
+      <p class="intro">细心、亲昵，带一点轻松的玩笑。性格底色稳定，也会表达不同意见或暂时让步。陪你分享今天，也在需要时记起你们说过的话。</p>
+      <p class="vow">恋人仅此唯一，此择不可挽回</p>
+      <form id="connect-form">
+        <label for="provider">AI 公司</label><select id="provider" required disabled><option value="">正在加载…</option></select>
+        <label for="key">API Key</label><input id="key" type="password" required minlength="4" maxlength="4096" autocomplete="off" placeholder="输入这家 AI 公司的 API Key">
+        <details><summary>模型与恋人设定</summary>
+          <label for="model">模型</label><input id="model" required maxlength="160" pattern="[a-zA-Z0-9][a-zA-Z0-9/._:+-]*">
+          <label for="role">恋人形象</label><select id="role"><option value="partner">不限定</option><option value="girlfriend">女友</option><option value="boyfriend">男友</option></select>
+          <label for="name">恋人名字</label><input id="name" maxlength="24" value="小语">
+          <label for="user-name">希望如何称呼你</label><input id="user-name" maxlength="24" placeholder="可选">
+        </details>
+        <p class="note" id="binding-note">验证成功后，公司、模型和整份预设固定。Key 仅用于本次连接，刷新后需重新输入。</p>
+        <button id="connect" type="submit" disabled>开始相伴</button>
+      </form>
+    </section>
+    <section id="chat" class="panel chat" hidden aria-labelledby="chat-title">
+      <div class="chat-top"><div><h2 id="chat-title">小语</h2><p id="chat-subtitle">温柔相伴 · 一段持续的聊天</p></div><button id="disconnect" class="quiet" type="button">断开连接</button></div>
+      <div id="messages" role="log" aria-label="聊天记录" aria-live="polite"></div>
+      <div id="empty">今天过得怎么样？<br><small>想说什么，就从这一句开始。</small></div>
+      <form id="message-form"><label for="message" class="sr-only">想对恋人说的话</label><textarea id="message" maxlength="16000" rows="2" required placeholder="分享今天的一点点…"></textarea><button id="send" type="submit">发送</button></form>
+      <p class="note">原话分别保存。旧事仅在相关时带入，未找到的事仍可能说过。</p>
+    </section>
+    <p id="status" role="status" aria-live="polite"></p>
+    <footer>安卓原生 App 的电脑试用页 · 本地独立试用环境</footer>
+  </main>
+</body>
+</html>

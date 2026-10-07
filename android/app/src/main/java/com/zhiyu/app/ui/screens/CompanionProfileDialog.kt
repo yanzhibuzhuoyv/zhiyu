@@ -15,7 +15,7 @@ import com.zhiyu.app.domain.CompanionProfile
 import com.zhiyu.app.ui.AppState
 import com.zhiyu.app.ui.ChatViewModel
 
-private val styles = listOf("gentle" to "温柔体贴", "playful" to "俏皮亲昵", "steady" to "成熟稳重")
+private val styles = listOf("warm_v2" to "温柔相伴·试用版", "warm_v1" to "温柔相伴·初版", "gentle" to "温柔体贴", "playful" to "俏皮亲昵", "steady" to "成熟稳重")
 private val roles = listOf("girlfriend" to "女友", "boyfriend" to "男友", "partner" to "不限定")
 internal fun styleLabel(profile: CompanionProfile?): String = styles.find { it.first == profile?.style }?.second ?: "温柔体贴"
 internal fun roleLabel(profile: CompanionProfile?): String = roles.find { it.first == profile?.role }?.second ?: "不限定"
@@ -65,7 +65,7 @@ internal fun profileDetails(profile: CompanionProfile): String = buildString {
                 if (mode == "preset" || enabled) {
                     if (mode == "preset") {
                         Text("性格", style = MaterialTheme.typography.labelLarge)
-                        styles.forEach { (id, label) -> ProfileChoice(label, style == id, !state.isBusy, "style_$id") { style = id } }
+                        PresetStyleChoices(style, !state.isBusy) { style = it }
                     }
                     Text("恋人形象", style = MaterialTheme.typography.labelLarge)
                     roles.forEach { (id, label) -> ProfileChoice(label, role == id, !state.isBusy, "role_$id") { role = id } }
@@ -86,7 +86,18 @@ internal fun profileDetails(profile: CompanionProfile): String = buildString {
     )
 }
 
-@Composable private fun FixedCompanionProfileDialog(profile: CompanionProfile, dismiss: () -> Unit) {
+@Composable internal fun PresetStyleChoices(style: String, enabled: Boolean, choose: (String) -> Unit) {
+    styles.filter { it.first != "warm_v1" || style == "warm_v1" }
+        .forEach { (id, label) -> ProfileChoice(label, style == id, enabled, "style_$id") { choose(id) } }
+    val description = when (style) {
+        "warm_v2" -> "性格底色稳定，也会表达不同意见或暂时让步。"
+        "warm_v1" -> "亲昵自然，陪你分享日常；需要时再一起忆旧。"
+        else -> null
+    }
+    if (description != null) Text(description, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("warm_preset_description"))
+}
+
+@Composable internal fun FixedCompanionProfileDialog(profile: CompanionProfile, dismiss: () -> Unit) {
     AlertDialog(onDismissRequest = dismiss, title = { Text("已固定的恋人设定") },
         text = {
             Column(Modifier.testTag("profile_locked"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
