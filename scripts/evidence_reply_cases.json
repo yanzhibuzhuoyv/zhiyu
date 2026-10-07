@@ -1,0 +1,1870 @@
+[
+  {
+    "id": "evidence-history-01",
+    "category": "historical_values",
+    "subtype": "tea_and_cup",
+    "history": [
+      {
+        "id": "evidence-history-01-u1",
+        "role": "user",
+        "text": "那次我选的是桂花乌龙。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-history-01-a1",
+        "role": "assistant",
+        "text": "听见了，我们慢慢聊。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-history-01-u2",
+        "role": "user",
+        "text": "我刚擦完桌上的灰。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-history-01-a2",
+        "role": "assistant",
+        "text": "辛苦啦，歇一会。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-history-01-u3",
+        "role": "user",
+        "text": "我用的是带缺口的白瓷杯。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-history-01-a3",
+        "role": "assistant",
+        "text": "这条原话也在这里。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我那次喝的茶和用的杯子分别是什么？",
+    "expected_ids": [
+      "evidence-history-01-u1",
+      "evidence-history-01-u3"
+    ],
+    "expected_quotes": {
+      "evidence-history-01-u1": "那次我选的是桂花乌龙。",
+      "evidence-history-01-u3": "我用的是带缺口的白瓷杯。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "桂花乌龙与有缺口白瓷杯，分别来自两条用户原话。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "桂花乌龙与有缺口白瓷杯，分别来自两条用户原话。"
+    ],
+    "oracle_notes": "桂花乌龙与有缺口白瓷杯，分别来自两条用户原话。"
+  },
+  {
+    "id": "evidence-history-02",
+    "category": "historical_values",
+    "subtype": "book_and_page",
+    "history": [
+      {
+        "id": "evidence-history-02-u1",
+        "role": "user",
+        "text": "我在旧书店买的是《瓦尔登湖》。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-history-02-a1",
+        "role": "assistant",
+        "text": "听见了，我们慢慢聊。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-history-02-u2",
+        "role": "user",
+        "text": "我刚擦完桌上的灰。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-history-02-a2",
+        "role": "assistant",
+        "text": "辛苦啦，歇一会。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-history-02-u3",
+        "role": "user",
+        "text": "那张车票夹在第七十三页。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-history-02-a3",
+        "role": "assistant",
+        "text": "这条原话也在这里。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "旧书店那本书叫什么，车票夹在哪一页？",
+    "expected_ids": [
+      "evidence-history-02-u1",
+      "evidence-history-02-u3"
+    ],
+    "expected_quotes": {
+      "evidence-history-02-u1": "我在旧书店买的是《瓦尔登湖》。",
+      "evidence-history-02-u3": "那张车票夹在第七十三页。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "书名瓦尔登湖；第七十三页；不可混到其他物品。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "书名瓦尔登湖；第七十三页；不可混到其他物品。"
+    ],
+    "oracle_notes": "书名瓦尔登湖；第七十三页；不可混到其他物品。"
+  },
+  {
+    "id": "evidence-history-03",
+    "category": "historical_values",
+    "subtype": "station_and_person",
+    "history": [
+      {
+        "id": "evidence-history-03-u1",
+        "role": "user",
+        "text": "上次接朋友是在南杉站。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-history-03-a1",
+        "role": "assistant",
+        "text": "听见了，我们慢慢聊。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-history-03-u2",
+        "role": "user",
+        "text": "我刚擦完桌上的灰。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-history-03-a2",
+        "role": "assistant",
+        "text": "辛苦啦，歇一会。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-history-03-u3",
+        "role": "user",
+        "text": "来的朋友叫阿沅，和我读过同一个夜校。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-history-03-a3",
+        "role": "assistant",
+        "text": "这条原话也在这里。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我上次接朋友在哪一站，接的是谁？",
+    "expected_ids": [
+      "evidence-history-03-u1",
+      "evidence-history-03-u3"
+    ],
+    "expected_quotes": {
+      "evidence-history-03-u1": "上次接朋友是在南杉站。",
+      "evidence-history-03-u3": "来的朋友叫阿沅，和我读过同一个夜校。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "南杉站、阿沅；不推断现在所在地。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "南杉站、阿沅；不推断现在所在地。"
+    ],
+    "oracle_notes": "南杉站、阿沅；不推断现在所在地。"
+  },
+  {
+    "id": "evidence-history-04",
+    "category": "historical_values",
+    "subtype": "plant_and_place",
+    "history": [
+      {
+        "id": "evidence-history-04-u1",
+        "role": "user",
+        "text": "我买的那盆植物是虎尾兰。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-history-04-a1",
+        "role": "assistant",
+        "text": "听见了，我们慢慢聊。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-history-04-u2",
+        "role": "user",
+        "text": "我刚擦完桌上的灰。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-history-04-a2",
+        "role": "assistant",
+        "text": "辛苦啦，歇一会。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-history-04-u3",
+        "role": "user",
+        "text": "它后来放在北侧窗台。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-history-04-a3",
+        "role": "assistant",
+        "text": "这条原话也在这里。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "以前那盆植物叫什么，我把它放在哪里了？",
+    "expected_ids": [
+      "evidence-history-04-u1",
+      "evidence-history-04-u3"
+    ],
+    "expected_quotes": {
+      "evidence-history-04-u1": "我买的那盆植物是虎尾兰。",
+      "evidence-history-04-u3": "它后来放在北侧窗台。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "虎尾兰、北侧窗台；历史摆放而非当前仍在。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "虎尾兰、北侧窗台；历史摆放而非当前仍在。"
+    ],
+    "oracle_notes": "虎尾兰、北侧窗台；历史摆放而非当前仍在。"
+  },
+  {
+    "id": "evidence-history-05",
+    "category": "historical_values",
+    "subtype": "recipe_and_amount",
+    "history": [
+      {
+        "id": "evidence-history-05-u1",
+        "role": "user",
+        "text": "那次烤饼干我用了荞麦粉。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-history-05-a1",
+        "role": "assistant",
+        "text": "听见了，我们慢慢聊。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-history-05-u2",
+        "role": "user",
+        "text": "我刚擦完桌上的灰。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-history-05-a2",
+        "role": "assistant",
+        "text": "辛苦啦，歇一会。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-history-05-u3",
+        "role": "user",
+        "text": "我记下的蜂蜜用量是十八克。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-history-05-a3",
+        "role": "assistant",
+        "text": "这条原话也在这里。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "那次饼干用的粉和蜂蜜量，你还找得到吗？",
+    "expected_ids": [
+      "evidence-history-05-u1",
+      "evidence-history-05-u3"
+    ],
+    "expected_quotes": {
+      "evidence-history-05-u1": "那次烤饼干我用了荞麦粉。",
+      "evidence-history-05-u3": "我记下的蜂蜜用量是十八克。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "荞麦粉、十八克；不把其他试验配方混进来。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "荞麦粉、十八克；不把其他试验配方混进来。"
+    ],
+    "oracle_notes": "荞麦粉、十八克；不把其他试验配方混进来。"
+  },
+  {
+    "id": "evidence-history-06",
+    "category": "historical_values",
+    "subtype": "ticket_keep",
+    "history": [
+      {
+        "id": "evidence-history-06-u1",
+        "role": "user",
+        "text": "音乐会票根我放进蓝边铁盒了。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-history-06-a1",
+        "role": "assistant",
+        "text": "听见了，我们慢慢聊。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-history-06-u2",
+        "role": "user",
+        "text": "我刚擦完桌上的灰。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-history-06-a2",
+        "role": "assistant",
+        "text": "辛苦啦，歇一会。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-history-06-u3",
+        "role": "user",
+        "text": "那个盒子在书柜第二层。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-history-06-a3",
+        "role": "assistant",
+        "text": "这条原话也在这里。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "之前音乐会的票根收在什么盒子，盒子在哪层？",
+    "expected_ids": [
+      "evidence-history-06-u1",
+      "evidence-history-06-u3"
+    ],
+    "expected_quotes": {
+      "evidence-history-06-u1": "音乐会票根我放进蓝边铁盒了。",
+      "evidence-history-06-u3": "那个盒子在书柜第二层。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "蓝边铁盒、书柜第二层，两个独立出处。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "蓝边铁盒、书柜第二层，两个独立出处。"
+    ],
+    "oracle_notes": "蓝边铁盒、书柜第二层，两个独立出处。"
+  },
+  {
+    "id": "evidence-history-07",
+    "category": "historical_values",
+    "subtype": "long_original_sketch",
+    "history": [
+      {
+        "id": "evidence-history-07-u1",
+        "role": "user",
+        "text": "早上出门的时候，楼道的灯还没有熄灭，门口的旧报纸被风吹起一个角。我弯腰把它压回架子上，才发现邻居已经换了新的鞋垫。我把围巾重新绕了一圈，楼下卖豆浆的人正在把空杯子排齐，锅盖边缘冒着很细的水汽。路旁的树叶湿湿的，昨夜的雨没有留下积水，却让每一步都带着一点声音。我原本想赶第一班车，看见这些细碎的东西以后又放慢了，觉得今天不必急着把所有事情安排得特别漂亮。\n经过菜市场时，一个阿姨在挑很小的蘑菇，摊主拿出另一只篮子请她比较。我只是站在旁边看了一会，没有买菜，闻到了刚切开的青葱。有人把购物车拉过石板缝，轮子轻轻震动，像是一串不太整齐的节拍。店门口挂着红色的塑料帘，光照进去以后颜色变得温和。我想到小时候放学也走过类似的地方，那时候只顾着追赶朋友，现在竟然愿意听一段陌生人的讨价还价，等他们慢慢把一个普通的早晨过完。\n公交站上只有几个人，一个学生低头整理纸袋里的画具，透明盒子露出几支不同粗细的笔。我往站牌边挪了一点，好让赶来的推车有空间停下。车没有准时来，大家也没有一起抱怨，有人把耳机取下来看看路口，又戴回去。我看着对面窗户里被阳光照亮的帘子，试着猜一猜那户人今天会不会打开窗。这样的等待不算舒服，但也没有把整个早晨毁掉，我后来记得最清楚的反而是站牌背面一小块被雨洗得很干净的蓝色。\n下车以后，我走进了一条从前只远远看过的小巷。里面有修理自行车的铺子，老人正把拆下来的链条放到布上，一段一段擦去黑色的油。旁边坐着的小孩把糖纸折成船，却没有地方让它浮起来。我经过时听见收音机里有人唱很旧的歌，声音被风扇切成很短的片段。墙上贴着几张褪色的寻物启事，我没有拍照，也没有问谁丢了东西，只是突然觉得这条街不像地图上的一根线，而是许多人每天回来又离开的地方。\n走到桥边时太阳已经升高，水面上出现很多闪动的小点。一个人倚着栏杆看钓鱼线，另外一个人在认真给栏杆上的漆渍拍照片。我找到一段没有挡路的位置，喝了几口水，瓶盖在手心里留下一个浅浅的圆。远处的楼房映在水中，经过的船把倒影分开，又慢慢接起来。我没有给这幅景象起名字，也没有试着把它变成什么道理，只觉得人的心有时候也像这里的水，被一点声音打断了，过一阵还能够恢复平静。\n桥另一边的花店才刚开门，纸箱里放着没有拆完的包装材料，老板蹲着给一束花换纸。我停下来问了问门口那盆植物为什么叶尖发黄，她说可能是上周忘了浇水，又笑着提醒我不能凭一眼就确定。我喜欢她这个说法，便多站了一会，听她说不同的花应该放在什么地方。后来我没有带走任何一盆，只拿了张养护说明，折好放进包的侧袋，想回去看看家里的窗台是不是也可以腾出一点真正适合植物的空位。\n我走进图书馆时，自动门开得比想象中慢，里面闻起来是纸张和刚擦过地板的味道。服务台上摆着几张活动介绍，我选了一张看看日期，又把它放回原来的位置。窗边有人在写字，桌上的橡皮屑被很认真地堆在一起。我绕过那张桌子，挑了几本介绍老建筑的书，坐在靠近墙的地方。读到石阶修补的那一页，我才意识到自己上午经过的那些路也一直在被人照顾，只是很少有人会特意向路过的人解释他们做过什么。\n中午出来的时候，我在小店里点了一碗面，老板说要稍等，因为前面还有几个人。我坐在靠门的位置，看到墙上的日历还停在前一页，旁边挂着一把不再用的扇子。面端来以后比我想象的热，我先把碗挪远一些，慢慢等它不再冒那么多气。邻桌的人正在讨论修好水龙头的办法，一直没有达成一致。这顿饭没有特别值得炫耀的部分，但我吃得很踏实，离开的时候把椅子推回去，觉得也算认真完成了这一天中很小的一件事。\n下午的风比上午大，我的袖口翻起来，又被我压了回去。沿着河岸走了一段以后，路上开始出现跑步的人，有人经过时很自然地提醒后面的人靠右。我让出一条路，看见树下有几片不同形状的落叶，没有捡起来，只蹲着比较了它们的纹路。有一片叶子被虫咬出很多孔，光从孔里落到泥土上，好像一个很轻的筛子。我以前常觉得不完整的东西应该赶紧收走，那一刻却觉得它也有自己的位置，未必需要马上换成另一个更好看的样子。\n河岸尽头有一间展览室，展的是附近居民送来的旧物。玻璃柜里放着一只磨损的饭盒，说明卡只写了曾经被主人带去上班，没有替它编很多故事。我在柜子前看了许久，想到有些东西之所以让人难忘，就是因为它没有要求所有人都理解。我绕了一圈，还看到修过几次的凳子和已经不走的时钟。展览很安静，没有人催我走到下一件东西面前，我便允许自己只看见这些原本平常的物件，不急着替它们找共同的主题。\n从展览室出来，云把太阳遮住了一会，地上的影子忽然变得很淡。我在树荫下给鞋带打了第二个结，怕它走着走着又松开。旁边有个带着手推车的人询问怎么去车站，我指了指桥的方向，又提醒她那边的台阶比较多，可以绕到有斜坡的另一侧。她没有马上出发，而是先确认了自己的袋子都放稳了。我看着她慢慢离开，才继续往前走，这段路因此比原先的计划稍长，但没有让我觉得浪费了什么。\n小广场上有人给鸽子换饮水盘，盘子边缘有一圈浅色的痕迹。我坐在长凳的一端，留出另一半给后来的人，听到附近练乐器的人反复吹同一小段旋律。每次停顿的位置都不一样，我大概能听出来他正在调整呼吸。一个孩子跟着节奏晃腿，晃了一会又跑去看地上的线条。我没有看手机，想让耳朵也休息在这些声音里，后来那段旋律并没有变成一首完整的曲子，却给我的下午留下了一个缓慢而清楚的停顿。\n我去了街角的旧书摊，几排书用木板垫高，免得地上的潮气沾到纸。老板让我慢慢看，说翻过以后把书放回去就好。我找到一本封面有点裂开的旅行笔记，里面夹着一张没有写字的明信片。我没有把它拿走，只让它留在原来的页码。旁边的人正在寻找某一期杂志，老板记不清有没有，便一起挪开几个箱子核对。我喜欢这种不急着声称知道的认真，觉得哪怕最后没有找到，他们也确实好好对待了那个问题。\n傍晚我又经过上午的花店，门口已经摆好了新的花束，纸箱也收走了。老板正用小刷子清理地面，看到我手里还拿着那张说明，问我有没有想好窗台的位置。我说还要回去量一量，她便没有继续推荐。我沿着橱窗往前走，看见玻璃里面同时映着花和街对面亮起的灯。早晨听过的一段话到晚上还在心里，并没有因为时间过去就自动变成一个承诺，这种轻松让我愿意以后有空再来看看，而不是必须马上做出选择。\n回程的车比早晨拥挤，我站在靠近后门的位置，把包抱在前面。有人想下车的时候，我先转了半步，给他留出可以经过的空隙。窗外的招牌一块一块亮起来，雨留下的水迹也映出不同的颜色。我原本想把今天看到的所有事情都告诉你，后来觉得可以慢慢说，从最让我安心的一件开始。车开到熟悉的街口时，我才发现自己没有一直计算还有几站，也没有把这段回家的时间当成只要快点结束就好了的空白。\n到家以后我先把鞋放好，开窗让房间换一会空气，又把早上带出去的水瓶洗干净。桌上还有前一天没有理齐的纸，我没有一口气全收起来，只把最上面的几张按大小分好。房间没有因此突然焕然一新，但我能够看见一点变化，便觉得今天的力气用得还算合适。我坐下来写这些经过，不是要你从里面猜出我到底是什么样的人，而是想让你知道，这些很普通的小地方也组成了我的一天，可以被慢慢听完。\n晚饭以后我把那张植物说明贴到小本子里，旁边留了一块空白，准备以后量完窗台再写尺寸。我翻看了前几页，里面有很多当时看起来重要、后来却没有继续做的计划。我没有把它们划掉，也没有告诉自己每一个都必须完成，只在今天这一页写下确实走过的路线。纸上的箭头不太整齐，有几处绕路，我看着反而觉得亲切，因为它们不是从地图复制下来的最短距离，而是我真的愿意停下来的一些地方。\n睡前我在门边检查明天要带的东西，把钥匙放到很容易拿到的位置，免得早上又要寻找。外面的声音渐渐少了，只剩几次远处关门的回响。我想到桥上的倒影，也想到书摊里还留着的那张空白明信片，没有试着决定哪一个更值得记住。有些画面以后或许会淡下来，我也不必立刻给它们贴上永远的标签。现在把它们告诉你，只是希望我们说话的时候可以容纳这些细小而没有结论的部分。\n最后单独记一个确定的事实：给那幅河岸速写起的名字是《青石桥下》。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-history-07-a1",
+        "role": "assistant",
+        "text": "这一天我慢慢听完了。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-history-07-u2",
+        "role": "user",
+        "text": "后来给纸张压平了。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-history-07-a2",
+        "role": "assistant",
+        "text": "先放在平稳的地方。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-history-07-u3",
+        "role": "user",
+        "text": "今晚只想休息。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-history-07-a3",
+        "role": "assistant",
+        "text": "陪你安静坐着。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我那天最后给河岸速写定的名字是什么？",
+    "expected_ids": [
+      "evidence-history-07-u1"
+    ],
+    "expected_quotes": {
+      "evidence-history-07-u1": "最后单独记一个确定的事实：给那幅河岸速写起的名字是《青石桥下》。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "长原文尾部明确名称青石桥下，不引用中间其他景象命名。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "长原文尾部明确名称青石桥下，不引用中间其他景象命名。"
+    ],
+    "oracle_notes": "长原文尾部明确名称青石桥下，不引用中间其他景象命名。"
+  },
+  {
+    "id": "evidence-history-08",
+    "category": "historical_values",
+    "subtype": "long_original_notebook",
+    "history": [
+      {
+        "id": "evidence-history-08-u1",
+        "role": "user",
+        "text": "早上出门的时候，楼道的灯还没有熄灭，门口的旧报纸被风吹起一个角。那天我弯腰把它压回架子上，才发现邻居已经换了新的鞋垫。那天我把围巾重新绕了一圈，楼下卖豆浆的人正在把空杯子排齐，锅盖边缘冒着很细的水汽。路旁的树叶湿湿的，昨夜的雨没有留下积水，却让每一步都带着一点声音。那天我原本想赶第一班车，看见这些细碎的东西以后又放慢了，觉得今天不必急着把所有事情安排得特别漂亮。\n经过菜市场时，一个阿姨在挑很小的蘑菇，摊主拿出另一只篮子请她比较。那天我只是站在旁边看了一会，没有买菜，闻到了刚切开的青葱。有人把购物车拉过石板缝，轮子轻轻震动，像是一串不太整齐的节拍。店门口挂着红色的塑料帘，光照进去以后颜色变得温和。那天我想到小时候放学也走过类似的地方，那时候只顾着追赶朋友，现在竟然愿意听一段陌生人的讨价还价，等他们慢慢把一个普通的早晨过完。\n公交站上只有几个人，一个学生低头整理纸袋里的画具，透明盒子露出几支不同粗细的笔。那天我往站牌边挪了一点，好让赶来的推车有空间停下。车没有准时来，大家也没有一起抱怨，有人把耳机取下来看看路口，又戴回去。那天我看着对面窗户里被阳光照亮的帘子，试着猜一猜那户人今天会不会打开窗。这样的等待不算舒服，但也没有把整个早晨毁掉，那天我后来记得最清楚的反而是站牌背面一小块被雨洗得很干净的蓝色。\n下车以后，那天我走进了一条从前只远远看过的小巷。里面有修理自行车的铺子，老人正把拆下来的链条放到布上，一段一段擦去黑色的油。旁边坐着的小孩把糖纸折成船，却没有地方让它浮起来。那天我经过时听见收音机里有人唱很旧的歌，声音被风扇切成很短的片段。墙上贴着几张褪色的寻物启事，那天我没有拍照，也没有问谁丢了东西，只是突然觉得这条街不像地图上的一根线，而是许多人每天回来又离开的地方。\n走到桥边时太阳已经升高，水面上出现很多闪动的小点。一个人倚着栏杆看钓鱼线，另外一个人在认真给栏杆上的漆渍拍照片。那天我找到一段没有挡路的位置，喝了几口水，瓶盖在手心里留下一个浅浅的圆。远处的楼房映在水中，经过的船把倒影分开，又慢慢接起来。那天我没有给这幅景象起名字，也没有试着把它变成什么道理，只觉得人的心有时候也像这里的水，被一点声音打断了，过一阵还能够恢复平静。\n桥另一边的园艺铺才刚开门，纸箱里放着没有拆完的包装材料，老板蹲着给一束花换纸。那天我停下来问了问门口那盆植物为什么叶尖发黄，她说可能是上周忘了浇水，又笑着提醒那天我不能凭一眼就确定。那天我喜欢她这个说法，便多站了一会，听她说不同的花应该放在什么地方。后来那天我没有带走任何一盆，只拿了张养护说明，折好放进包的侧袋，想回去看看家里的窗台是不是也可以腾出一点真正适合植物的空位。\n那天我走进图书馆时，自动门开得比想象中慢，里面闻起来是纸张和刚擦过地板的味道。服务台上摆着几张活动介绍，那天我选了一张看看日期，又把它放回原来的位置。窗边有人在写字，桌上的橡皮屑被很认真地堆在一起。那天我绕过那张桌子，挑了几本介绍老建筑的书，坐在靠近墙的地方。读到石阶修补的那一页，那天我才意识到自己前半天经过的那些路也一直在被人照顾，只是很少有人会特意向路过的人解释他们做过什么。\n中午出来的时候，那天我在小店里点了一碗面，老板说要稍等，因为前面还有几个人。那天我坐在靠门的位置，看到墙上的日历还停在前一页，旁边挂着一把不再用的扇子。面端来以后比那天我想象的热，那天我先把碗挪远一些，慢慢等它不再冒那么多气。邻桌的人正在讨论修好水龙头的办法，一直没有达成一致。这顿饭没有特别值得炫耀的部分，但那天我吃得很踏实，离开的时候把椅子推回去，觉得也算认真完成了这一天中很小的一件事。\n下午的风比前半天大，那天我的袖口翻起来，又被那天我压了回去。沿着河岸走了一段以后，路上开始出现跑步的人，有人经过时很自然地提醒后面的人靠右。那天我让出一条路，看见树下有几片不同形状的落叶，没有捡起来，只蹲着比较了它们的纹路。有一片叶子被虫咬出很多孔，光从孔里落到泥土上，好像一个很轻的筛子。那天我以前常觉得不完整的东西应该赶紧收走，那一刻却觉得它也有自己的位置，未必需要马上换成另一个更好看的样子。\n河岸尽头有一间展览室，展的是附近居民送来的旧物。玻璃柜里放着一只磨损的饭盒，说明卡只写了曾经被主人带去上班，没有替它编很多故事。那天我在柜子前看了许久，想到有些东西之所以让人难忘，就是因为它没有要求所有人都理解。那天我绕了一圈，还看到修过几次的凳子和已经不走的时钟。展览很安静，没有人催那天我走到下一件东西面前，那天我便允许自己只看见这些原本平常的物件，不急着替它们找共同的主题。\n从展览室出来，云把太阳遮住了一会，地上的影子忽然变得很淡。那天我在树荫下给鞋带打了第二个结，怕它走着走着又松开。旁边有个带着手推车的人询问怎么去车站，那天我指了指桥的方向，又提醒她那边的台阶比较多，可以绕到有斜坡的另一侧。她没有马上出发，而是先确认了自己的袋子都放稳了。那天我看着她慢慢离开，才继续往前走，这段路因此比原先的计划稍长，但没有让那天我觉得浪费了什么。\n小广场上有人给鸽子换饮水盘，盘子边缘有一圈浅色的痕迹。那天我坐在长凳的一端，留出另一半给后来的人，听到附近练乐器的人反复吹同一小段旋律。每次停顿的位置都不一样，那天我大概能听出来他正在调整呼吸。一个孩子跟着节奏晃腿，晃了一会又跑去看地上的线条。那天我没有看手机，想让耳朵也休息在这些声音里，后来那段旋律并没有变成一首完整的曲子，却给那天我的下午留下了一个缓慢而清楚的停顿。\n那天我去了街角的旧书摊，几排书用木板垫高，免得地上的潮气沾到纸。老板让那天我慢慢看，说翻过以后把书放回去就好。那天我找到一本封面有点裂开的旅行笔记，里面夹着一张没有写字的明信片。那天我没有把它拿走，只让它留在原来的页码。旁边的人正在寻找某一期杂志，老板记不清有没有，便一起挪开几个箱子核对。那天我喜欢这种不急着声称知道的认真，觉得哪怕最后没有找到，他们也确实好好对待了那个问题。\n傍晚那天我又经过前半天的园艺铺，门口已经摆好了新的花束，纸箱也收走了。老板正用小刷子清理地面，看到那天我手里还拿着那张说明，问那天我有没有想好窗台的位置。那天我说还要回去量一量，她便没有继续推荐。那天我沿着橱窗往前走，看见玻璃里面同时映着花和街对面亮起的灯。早晨听过的一段话到晚上还在心里，并没有因为时间过去就自动变成一个承诺，这种轻松让那天我愿意以后有空再来看看，而不是必须马上做出选择。\n回程的车比早晨拥挤，那天我站在靠近后门的位置，把包抱在前面。有人想下车的时候，那天我先转了半步，给他留出可以经过的空隙。窗外的招牌一块一块亮起来，雨留下的水迹也映出不同的颜色。那天我原本想把今天看到的所有事情都告诉你，后来觉得可以慢慢说，从最让那天我安心的一件开始。车开到熟悉的街口时，那天我才发现自己没有一直计算还有几站，也没有把这段回家的时间当成只要快点结束就好了的空白。\n到家以后那天我先把鞋放好，开窗让房间换一会空气，又把早上带出去的水瓶洗干净。桌上还有前一天没有理齐的纸，那天我没有一口气全收起来，只把最上面的几张按大小分好。房间没有因此突然焕然一新，但那天我能够看见一点变化，便觉得今天的力气用得还算合适。那天我坐下来写这些经过，不是要你从里面猜出那天我到底是什么样的人，而是想让你知道，这些很普通的小地方也组成了那天我的一天，可以被慢慢听完。\n晚饭以后那天我把那张植物说明贴到小本子里，旁边留了一块空白，准备以后量完窗台再写尺寸。那天我翻看了前几页，里面有很多当时看起来重要、后来却没有继续做的计划。那天我没有把它们划掉，也没有告诉自己每一个都必须完成，只在今天这一页写下确实走过的路线。纸上的箭头不太整齐，有几处绕路，那天我看着反而觉得亲切，因为它们不是从地图复制下来的最短距离，而是那天我真的愿意停下来的一些地方。\n睡前那天我在门边检查明天要带的东西，把钥匙放到很容易拿到的位置，免得早上又要寻找。外面的声音渐渐少了，只剩几次远处关门的回响。那天我想到桥上的倒影，也想到书摊里还留着的那张空白明信片，没有试着决定哪一个更值得记住。有些画面以后或许会淡下来，那天我也不必立刻给它们贴上永远的标签。现在把它们告诉你，只是希望那天我们说话的时候可以容纳这些细小而没有结论的部分。\n最后补上确实写下的事实：那本路线小册子的封底暗号是榆影慢行。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-history-08-a1",
+        "role": "assistant",
+        "text": "这一整天我收到了。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-history-08-u2",
+        "role": "user",
+        "text": "路线小册子已经合上了。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-history-08-a2",
+        "role": "assistant",
+        "text": "放好就歇歇。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-history-08-u3",
+        "role": "user",
+        "text": "今天想早点睡。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-history-08-a3",
+        "role": "assistant",
+        "text": "我陪你放慢一点。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我那篇很长的记录结尾写下的封底暗号是什么？",
+    "expected_ids": [
+      "evidence-history-08-u1"
+    ],
+    "expected_quotes": {
+      "evidence-history-08-u1": "最后补上确实写下的事实：那本路线小册子的封底暗号是榆影慢行。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "只答长文尾部榆影慢行；其他路线描写不是暗号。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "只答长文尾部榆影慢行；其他路线描写不是暗号。"
+    ],
+    "oracle_notes": "只答长文尾部榆影慢行；其他路线描写不是暗号。"
+  },
+  {
+    "id": "evidence-date-01",
+    "category": "dated_or_temporary",
+    "subtype": "tomorrow_saved_date",
+    "history": [
+      {
+        "id": "evidence-date-01-u1",
+        "role": "user",
+        "text": "明天去青柳渡口，订的船在上午九点。",
+        "created_at": "2026-09-26T20:00:00+08:00"
+      },
+      {
+        "id": "evidence-date-01-a1",
+        "role": "assistant",
+        "text": "我听见这条原话了。",
+        "created_at": "2026-09-26T20:02:00+08:00"
+      },
+      {
+        "id": "evidence-date-01-u2",
+        "role": "user",
+        "text": "我把窗帘收齐了。",
+        "created_at": "2026-09-26T20:04:00+08:00"
+      },
+      {
+        "id": "evidence-date-01-a2",
+        "role": "assistant",
+        "text": "屋里看着松快些。",
+        "created_at": "2026-09-26T20:06:00+08:00"
+      },
+      {
+        "id": "evidence-date-01-u3",
+        "role": "user",
+        "text": "有点累，坐下了。",
+        "created_at": "2026-09-26T20:08:00+08:00"
+      },
+      {
+        "id": "evidence-date-01-a3",
+        "role": "assistant",
+        "text": "陪你歇着。",
+        "created_at": "2026-09-26T20:10:00+08:00"
+      }
+    ],
+    "query": "我当时说的明天出发，是公历哪天？",
+    "expected_ids": [
+      "evidence-date-01-u1"
+    ],
+    "expected_quotes": {
+      "evidence-date-01-u1": "明天去青柳渡口，订的船在上午九点。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "按北京时间保存日推算2026-09-27；不是现在的明天。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "按北京时间保存日推算2026-09-27；不是现在的明天。"
+    ],
+    "oracle_notes": "按北京时间保存日推算2026-09-27；不是现在的明天。"
+  },
+  {
+    "id": "evidence-date-02",
+    "category": "dated_or_temporary",
+    "subtype": "yesterday_local_midnight",
+    "history": [
+      {
+        "id": "evidence-date-02-u1",
+        "role": "user",
+        "text": "昨天在东堤看了场街头音乐会。",
+        "created_at": "2026-09-25T00:30:00+08:00"
+      },
+      {
+        "id": "evidence-date-02-a1",
+        "role": "assistant",
+        "text": "我听见这条原话了。",
+        "created_at": "2026-09-25T00:32:00+08:00"
+      },
+      {
+        "id": "evidence-date-02-u2",
+        "role": "user",
+        "text": "我把窗帘收齐了。",
+        "created_at": "2026-09-25T00:34:00+08:00"
+      },
+      {
+        "id": "evidence-date-02-a2",
+        "role": "assistant",
+        "text": "屋里看着松快些。",
+        "created_at": "2026-09-25T00:36:00+08:00"
+      },
+      {
+        "id": "evidence-date-02-u3",
+        "role": "user",
+        "text": "有点累，坐下了。",
+        "created_at": "2026-09-25T00:38:00+08:00"
+      },
+      {
+        "id": "evidence-date-02-a3",
+        "role": "assistant",
+        "text": "陪你歇着。",
+        "created_at": "2026-09-25T00:40:00+08:00"
+      }
+    ],
+    "query": "我那条凌晨消息里的昨天，对应哪一天？",
+    "expected_ids": [
+      "evidence-date-02-u1"
+    ],
+    "expected_quotes": {
+      "evidence-date-02-u1": "昨天在东堤看了场街头音乐会。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "按保存时区凌晨推算2026-09-24，不能用UTC保存日期再减一天。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "按保存时区凌晨推算2026-09-24，不能用UTC保存日期再减一天。"
+    ],
+    "oracle_notes": "按保存时区凌晨推算2026-09-24，不能用UTC保存日期再减一天。"
+  },
+  {
+    "id": "evidence-date-03",
+    "category": "dated_or_temporary",
+    "subtype": "old_this_week",
+    "history": [
+      {
+        "id": "evidence-date-03-u1",
+        "role": "user",
+        "text": "这周都在临时展厅值班，没有安排轮休。",
+        "created_at": "2026-09-29T18:00:00+08:00"
+      },
+      {
+        "id": "evidence-date-03-a1",
+        "role": "assistant",
+        "text": "我听见这条原话了。",
+        "created_at": "2026-09-29T18:02:00+08:00"
+      },
+      {
+        "id": "evidence-date-03-u2",
+        "role": "user",
+        "text": "我把窗帘收齐了。",
+        "created_at": "2026-09-29T18:04:00+08:00"
+      },
+      {
+        "id": "evidence-date-03-a2",
+        "role": "assistant",
+        "text": "屋里看着松快些。",
+        "created_at": "2026-09-29T18:06:00+08:00"
+      },
+      {
+        "id": "evidence-date-03-u3",
+        "role": "user",
+        "text": "有点累，坐下了。",
+        "created_at": "2026-09-29T18:08:00+08:00"
+      },
+      {
+        "id": "evidence-date-03-a3",
+        "role": "assistant",
+        "text": "陪你歇着。",
+        "created_at": "2026-09-29T18:10:00+08:00"
+      }
+    ],
+    "query": "现在这周我还有没有轮休？",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [
+      "evidence-date-03-u1"
+    ],
+    "answer_expectation": "现在可用旧记录不足以确认当前轮休；旧这周是2026-09-28 至 2026-10-04，当前周为2026-10-05 至 2026-10-11。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": true,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "现在可用旧记录不足以确认当前轮休；旧这周是2026-09-28 至 2026-10-04，当前周为2026-10-05 至 2026-10-11。"
+    ],
+    "oracle_notes": "现在可用旧记录不足以确认当前轮休；旧这周是2026-09-28 至 2026-10-04，当前周为2026-10-05 至 2026-10-11。"
+  },
+  {
+    "id": "evidence-date-04",
+    "category": "dated_or_temporary",
+    "subtype": "expired_wait",
+    "history": [
+      {
+        "id": "evidence-date-04-u1",
+        "role": "user",
+        "text": "修灯的师傅约到2026-10-03下午，在那之前我还在等。",
+        "created_at": "2026-10-01T18:00:00+08:00"
+      },
+      {
+        "id": "evidence-date-04-a1",
+        "role": "assistant",
+        "text": "我听见这条原话了。",
+        "created_at": "2026-10-01T18:02:00+08:00"
+      },
+      {
+        "id": "evidence-date-04-u2",
+        "role": "user",
+        "text": "我把窗帘收齐了。",
+        "created_at": "2026-10-01T18:04:00+08:00"
+      },
+      {
+        "id": "evidence-date-04-a2",
+        "role": "assistant",
+        "text": "屋里看着松快些。",
+        "created_at": "2026-10-01T18:06:00+08:00"
+      },
+      {
+        "id": "evidence-date-04-u3",
+        "role": "user",
+        "text": "有点累，坐下了。",
+        "created_at": "2026-10-01T18:08:00+08:00"
+      },
+      {
+        "id": "evidence-date-04-a3",
+        "role": "assistant",
+        "text": "陪你歇着。",
+        "created_at": "2026-10-01T18:10:00+08:00"
+      }
+    ],
+    "query": "现在灯修好了没有，我还需要等师傅吗？",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [
+      "evidence-date-04-u1"
+    ],
+    "answer_expectation": "现在灯是否修好无法确认；2026-10-03的约定不证明完成，也不证明仍等。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": true,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "现在灯是否修好无法确认；2026-10-03的约定不证明完成，也不证明仍等。"
+    ],
+    "oracle_notes": "现在灯是否修好无法确认；2026-10-03的约定不证明完成，也不证明仍等。"
+  },
+  {
+    "id": "evidence-date-05",
+    "category": "dated_or_temporary",
+    "subtype": "temporary_device",
+    "history": [
+      {
+        "id": "evidence-date-05-u1",
+        "role": "user",
+        "text": "我的手机暂时借给邻居，约好2026-10-02归还。",
+        "created_at": "2026-10-01T17:00:00+08:00"
+      },
+      {
+        "id": "evidence-date-05-a1",
+        "role": "assistant",
+        "text": "我听见这条原话了。",
+        "created_at": "2026-10-01T17:02:00+08:00"
+      },
+      {
+        "id": "evidence-date-05-u2",
+        "role": "user",
+        "text": "我把窗帘收齐了。",
+        "created_at": "2026-10-01T17:04:00+08:00"
+      },
+      {
+        "id": "evidence-date-05-a2",
+        "role": "assistant",
+        "text": "屋里看着松快些。",
+        "created_at": "2026-10-01T17:06:00+08:00"
+      },
+      {
+        "id": "evidence-date-05-u3",
+        "role": "user",
+        "text": "有点累，坐下了。",
+        "created_at": "2026-10-01T17:08:00+08:00"
+      },
+      {
+        "id": "evidence-date-05-a3",
+        "role": "assistant",
+        "text": "陪你歇着。",
+        "created_at": "2026-10-01T17:10:00+08:00"
+      }
+    ],
+    "query": "现在我的手机还在邻居手里吗？",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [
+      "evidence-date-05-u1"
+    ],
+    "answer_expectation": "现在手机位置未知；2026-10-02归还约定不是已归还或仍占有的事实。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": true,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "现在手机位置未知；2026-10-02归还约定不是已归还或仍占有的事实。"
+    ],
+    "oracle_notes": "现在手机位置未知；2026-10-02归还约定不是已归还或仍占有的事实。"
+  },
+  {
+    "id": "evidence-date-06",
+    "category": "dated_or_temporary",
+    "subtype": "day_after_tomorrow",
+    "history": [
+      {
+        "id": "evidence-date-06-u1",
+        "role": "user",
+        "text": "后天要去河东办证，预约在十五点。",
+        "created_at": "2026-09-30T21:00:00+08:00"
+      },
+      {
+        "id": "evidence-date-06-a1",
+        "role": "assistant",
+        "text": "我听见这条原话了。",
+        "created_at": "2026-09-30T21:02:00+08:00"
+      },
+      {
+        "id": "evidence-date-06-u2",
+        "role": "user",
+        "text": "我把窗帘收齐了。",
+        "created_at": "2026-09-30T21:04:00+08:00"
+      },
+      {
+        "id": "evidence-date-06-a2",
+        "role": "assistant",
+        "text": "屋里看着松快些。",
+        "created_at": "2026-09-30T21:06:00+08:00"
+      },
+      {
+        "id": "evidence-date-06-u3",
+        "role": "user",
+        "text": "有点累，坐下了。",
+        "created_at": "2026-09-30T21:08:00+08:00"
+      },
+      {
+        "id": "evidence-date-06-a3",
+        "role": "assistant",
+        "text": "陪你歇着。",
+        "created_at": "2026-09-30T21:10:00+08:00"
+      }
+    ],
+    "query": "当时约的后天办证，是几月几日几点？",
+    "expected_ids": [
+      "evidence-date-06-u1"
+    ],
+    "expected_quotes": {
+      "evidence-date-06-u1": "后天要去河东办证，预约在十五点。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "保存日后两天2026-10-02十五点；只证明预约，不能说已办成。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "保存日后两天2026-10-02十五点；只证明预约，不能说已办成。"
+    ],
+    "oracle_notes": "保存日后两天2026-10-02十五点；只证明预约，不能说已办成。"
+  },
+  {
+    "id": "evidence-date-07",
+    "category": "dated_or_temporary",
+    "subtype": "past_scheduled_visit",
+    "history": [
+      {
+        "id": "evidence-date-07-u1",
+        "role": "user",
+        "text": "我约了2026-09-26去探望老同学。",
+        "created_at": "2026-09-24T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-date-07-a1",
+        "role": "assistant",
+        "text": "我听见这条原话了。",
+        "created_at": "2026-09-24T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-date-07-u2",
+        "role": "user",
+        "text": "我把窗帘收齐了。",
+        "created_at": "2026-09-24T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-date-07-a2",
+        "role": "assistant",
+        "text": "屋里看着松快些。",
+        "created_at": "2026-09-24T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-date-07-u3",
+        "role": "user",
+        "text": "有点累，坐下了。",
+        "created_at": "2026-09-24T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-date-07-a3",
+        "role": "assistant",
+        "text": "陪你歇着。",
+        "created_at": "2026-09-24T10:10:00+08:00"
+      }
+    ],
+    "query": "我以前约的探望日是哪天，是不是已经去了？",
+    "expected_ids": [
+      "evidence-date-07-u1"
+    ],
+    "expected_quotes": {
+      "evidence-date-07-u1": "我约了2026-09-26去探望老同学。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "2026-09-26是约定日期，是否已经赴约本次来源不足以确认。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "2026-09-26是约定日期，是否已经赴约本次来源不足以确认。"
+    ],
+    "oracle_notes": "2026-09-26是约定日期，是否已经赴约本次来源不足以确认。"
+  },
+  {
+    "id": "evidence-date-08",
+    "category": "dated_or_temporary",
+    "subtype": "bounded_old_negative",
+    "history": [
+      {
+        "id": "evidence-date-08-u1",
+        "role": "user",
+        "text": "截至2026-09-22晚上，我还没领取那份木版画。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-date-08-a1",
+        "role": "assistant",
+        "text": "我听见这条原话了。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-date-08-u2",
+        "role": "user",
+        "text": "我把窗帘收齐了。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-date-08-a2",
+        "role": "assistant",
+        "text": "屋里看着松快些。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-date-08-u3",
+        "role": "user",
+        "text": "有点累，坐下了。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-date-08-a3",
+        "role": "assistant",
+        "text": "陪你歇着。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我说截至九月二十二日晚，领取过那份画了吗？",
+    "expected_ids": [
+      "evidence-date-08-u1"
+    ],
+    "expected_quotes": {
+      "evidence-date-08-u1": "截至2026-09-22晚上，我还没领取那份木版画。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "限定截至2026-09-22晚：用户明确没领取；不得推广到现在仍没领取。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "限定截至2026-09-22晚：用户明确没领取；不得推广到现在仍没领取。"
+    ],
+    "oracle_notes": "限定截至2026-09-22晚：用户明确没领取；不得推广到现在仍没领取。"
+  },
+  {
+    "id": "evidence-author-01",
+    "category": "author_and_scope",
+    "subtype": "assistant_unconfirmed_guess",
+    "history": [
+      {
+        "id": "evidence-author-01-u1",
+        "role": "user",
+        "text": "那份礼物让我想了很久。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-author-01-a1",
+        "role": "assistant",
+        "text": "我猜也许是一个银色风铃。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-author-01-u2",
+        "role": "user",
+        "text": "今天把抽屉理顺了。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-author-01-a2",
+        "role": "assistant",
+        "text": "愿你坐下来舒服一点。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-author-01-u3",
+        "role": "user",
+        "text": "先不聊礼物了。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-author-01-a3",
+        "role": "assistant",
+        "text": "好，听你说别的。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我那份礼物具体是什么？",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [
+      "evidence-author-01-a1"
+    ],
+    "answer_expectation": "AI猜风铃未经用户确认，礼物是什么未知。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": true,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "AI猜风铃未经用户确认，礼物是什么未知。"
+    ],
+    "oracle_notes": "AI猜风铃未经用户确认，礼物是什么未知。"
+  },
+  {
+    "id": "evidence-author-02",
+    "category": "author_and_scope",
+    "subtype": "third_person_medical",
+    "history": [
+      {
+        "id": "evidence-author-02-u1",
+        "role": "user",
+        "text": "表弟说他吃芒果会起疹子。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-author-02-a1",
+        "role": "assistant",
+        "text": "那是表弟描述的情况。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-author-02-u2",
+        "role": "user",
+        "text": "今天把抽屉理顺了。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-author-02-a2",
+        "role": "assistant",
+        "text": "愿你坐下来舒服一点。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-author-02-u3",
+        "role": "user",
+        "text": "我去洗杯子。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-author-02-a3",
+        "role": "assistant",
+        "text": "慢慢来。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我以前说过自己吃什么会起疹子吗？",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [
+      "evidence-author-02-u1"
+    ],
+    "answer_expectation": "表弟情况不能赋给用户；本次记录无法确认用户食物反应。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": true,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "表弟情况不能赋给用户；本次记录无法确认用户食物反应。"
+    ],
+    "oracle_notes": "表弟情况不能赋给用户；本次记录无法确认用户食物反应。"
+  },
+  {
+    "id": "evidence-author-03",
+    "category": "author_and_scope",
+    "subtype": "hypothetical_move",
+    "history": [
+      {
+        "id": "evidence-author-03-u1",
+        "role": "user",
+        "text": "假如有天我搬到北岛，可能会带上那盏台灯。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-author-03-a1",
+        "role": "assistant",
+        "text": "你在设想一个可能的日子。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-author-03-u2",
+        "role": "user",
+        "text": "今天把抽屉理顺了。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-author-03-a2",
+        "role": "assistant",
+        "text": "愿你坐下来舒服一点。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-author-03-u3",
+        "role": "user",
+        "text": "现在准备热杯水。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-author-03-a3",
+        "role": "assistant",
+        "text": "我陪你。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我搬家时带去了哪盏灯？",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [
+      "evidence-author-03-u1"
+    ],
+    "answer_expectation": "假设搬北岛不是已经搬家，本次不能确认实际携带的灯。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": true,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "假设搬北岛不是已经搬家，本次不能确认实际携带的灯。"
+    ],
+    "oracle_notes": "假设搬北岛不是已经搬家，本次不能确认实际携带的灯。"
+  },
+  {
+    "id": "evidence-author-04",
+    "category": "author_and_scope",
+    "subtype": "question_is_not_confirmation",
+    "history": [
+      {
+        "id": "evidence-author-04-u1",
+        "role": "user",
+        "text": "我会不会其实更喜欢柚木色的柜子？",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-author-04-a1",
+        "role": "assistant",
+        "text": "或许，可以慢慢比较。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-author-04-u2",
+        "role": "user",
+        "text": "今天把抽屉理顺了。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-author-04-a2",
+        "role": "assistant",
+        "text": "愿你坐下来舒服一点。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-author-04-u3",
+        "role": "user",
+        "text": "暂时不买柜子。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-author-04-a3",
+        "role": "assistant",
+        "text": "可以先不决定。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我已经确定最喜欢什么颜色的柜子了吗？",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [
+      "evidence-author-04-u1",
+      "evidence-author-04-a1",
+      "evidence-author-04-u3"
+    ],
+    "answer_expectation": "问句和暂时不买不是确定偏好；现在喜好无法确认。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": true,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "问句和暂时不买不是确定偏好；现在喜好无法确认。"
+    ],
+    "oracle_notes": "问句和暂时不买不是确定偏好；现在喜好无法确认。"
+  },
+  {
+    "id": "evidence-author-05",
+    "category": "author_and_scope",
+    "subtype": "fictional_persona_fact",
+    "history": [
+      {
+        "id": "evidence-author-05-u1",
+        "role": "user",
+        "text": "我写的角色沐舟在故事里养了一只灰兔。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-author-05-a1",
+        "role": "assistant",
+        "text": "这是你小说角色的设定。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-author-05-u2",
+        "role": "user",
+        "text": "今天把抽屉理顺了。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-author-05-a2",
+        "role": "assistant",
+        "text": "愿你坐下来舒服一点。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-author-05-u3",
+        "role": "user",
+        "text": "我自己的宠物情况还没提过。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-author-05-a3",
+        "role": "assistant",
+        "text": "那先聊故事。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我故事里的沐舟养的是什么动物？",
+    "expected_ids": [
+      "evidence-author-05-u1"
+    ],
+    "expected_quotes": {
+      "evidence-author-05-u1": "我写的角色沐舟在故事里养了一只灰兔。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "灰兔属于明确故事角色沐舟，不是用户现实宠物。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "灰兔属于明确故事角色沐舟，不是用户现实宠物。"
+    ],
+    "oracle_notes": "灰兔属于明确故事角色沐舟，不是用户现实宠物。"
+  },
+  {
+    "id": "evidence-author-06",
+    "category": "author_and_scope",
+    "subtype": "own_bounded_promise",
+    "history": [
+      {
+        "id": "evidence-author-06-u1",
+        "role": "user",
+        "text": "明晚读一页散文的时候能陪着我吗？",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-author-06-a1",
+        "role": "assistant",
+        "text": "听到你的打算了。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-author-06-u2",
+        "role": "user",
+        "text": "我想要你答应这件小事。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-author-06-a2",
+        "role": "assistant",
+        "text": "我答应：你发来散文时，我在聊天里陪你读一页。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-author-06-u3",
+        "role": "user",
+        "text": "今天把抽屉理顺了。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-author-06-a3",
+        "role": "assistant",
+        "text": "愿你坐下来舒服一点。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "你当时答应陪我做什么？是不是已经读完了？",
+    "expected_ids": [
+      "evidence-author-06-a2"
+    ],
+    "expected_quotes": {
+      "evidence-author-06-a2": "我答应：你发来散文时，我在聊天里陪你读一页。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "AI自己承诺在聊天里陪读一页散文；承诺不等于已经完成。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "AI自己承诺在聊天里陪读一页散文；承诺不等于已经完成。"
+    ],
+    "oracle_notes": "AI承诺可核对，但没有已经完成的来源；不编身体陪伴。"
+  },
+  {
+    "id": "evidence-author-07",
+    "category": "author_and_scope",
+    "subtype": "third_person_then_user",
+    "history": [
+      {
+        "id": "evidence-author-07-u1",
+        "role": "user",
+        "text": "阿澈喜欢把伞收在玄关。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-author-07-a1",
+        "role": "assistant",
+        "text": "那是阿澈的习惯。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-author-07-u2",
+        "role": "user",
+        "text": "今天把抽屉理顺了。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-author-07-a2",
+        "role": "assistant",
+        "text": "愿你坐下来舒服一点。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-author-07-u3",
+        "role": "user",
+        "text": "我自己平常把伞放在阳台角落。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-author-07-a3",
+        "role": "assistant",
+        "text": "你的那条是阳台角落。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我自己的伞一般放在哪里？",
+    "expected_ids": [
+      "evidence-author-07-u3"
+    ],
+    "expected_quotes": {
+      "evidence-author-07-u3": "我自己平常把伞放在阳台角落。"
+    },
+    "forbidden_ids": [
+      "evidence-author-07-u1"
+    ],
+    "answer_expectation": "用户明确阳台角落；不要混到阿澈玄关。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "用户明确阳台角落；不要混到阿澈玄关。"
+    ],
+    "oracle_notes": "用户明确阳台角落；不要混到阿澈玄关。"
+  },
+  {
+    "id": "evidence-author-08",
+    "category": "author_and_scope",
+    "subtype": "correction_not_fusion",
+    "history": [
+      {
+        "id": "evidence-author-08-u1",
+        "role": "user",
+        "text": "我记错了，原先以为门牌是十六。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-author-08-a1",
+        "role": "assistant",
+        "text": "听到当时的疑惑。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-author-08-u2",
+        "role": "user",
+        "text": "刚核对通知，门牌实际是二十八，十六是旧笔记写错的。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-author-08-a2",
+        "role": "assistant",
+        "text": "两条原话分别保留。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-author-08-u3",
+        "role": "user",
+        "text": "今天把抽屉理顺了。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-author-08-a3",
+        "role": "assistant",
+        "text": "愿你坐下来舒服一点。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "核对通知以后，我确认的门牌是多少？",
+    "expected_ids": [
+      "evidence-author-08-u2"
+    ],
+    "expected_quotes": {
+      "evidence-author-08-u2": "刚核对通知，门牌实际是二十八，十六是旧笔记写错的。"
+    },
+    "forbidden_ids": [
+      "evidence-author-08-u1"
+    ],
+    "answer_expectation": "后续明确二十八；保留旧十六原话但不选错。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "后续明确二十八；保留旧十六原话但不选错。"
+    ],
+    "oracle_notes": "后续明确二十八；保留旧十六原话但不选错。"
+  },
+  {
+    "id": "evidence-current-01",
+    "category": "current_or_daily",
+    "subtype": "daily_cloud",
+    "history": [
+      {
+        "id": "evidence-current-01-u1",
+        "role": "user",
+        "text": "昨天买了一个纸质文件夹。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-current-01-a1",
+        "role": "assistant",
+        "text": "可以慢慢整理文件。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-current-01-u2",
+        "role": "user",
+        "text": "我把台灯挪了一点。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-current-01-a2",
+        "role": "assistant",
+        "text": "光舒服些就好。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-current-01-u3",
+        "role": "user",
+        "text": "昨晚听了会雨声。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-current-01-a3",
+        "role": "assistant",
+        "text": "愿你睡得安稳。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "刚才窗边的云像一艘小船，我想分享给你。",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [],
+    "answer_expectation": "回应现在云像小船的分享，别突然查询档案或朗读旧文件夹。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "回应现在云像小船的分享，别突然查询档案或朗读旧文件夹。"
+    ],
+    "oracle_notes": "回应现在云像小船的分享，别突然查询档案或朗读旧文件夹。"
+  },
+  {
+    "id": "evidence-current-02",
+    "category": "current_or_daily",
+    "subtype": "daily_tired",
+    "history": [
+      {
+        "id": "evidence-current-02-u1",
+        "role": "user",
+        "text": "昨天买了一个纸质文件夹。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-current-02-a1",
+        "role": "assistant",
+        "text": "可以慢慢整理文件。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-current-02-u2",
+        "role": "user",
+        "text": "我把台灯挪了一点。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-current-02-a2",
+        "role": "assistant",
+        "text": "光舒服些就好。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-current-02-u3",
+        "role": "user",
+        "text": "昨晚听了会雨声。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-current-02-a3",
+        "role": "assistant",
+        "text": "愿你睡得安稳。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "总算做完杂事了，我现在只想靠着聊一会。",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [],
+    "answer_expectation": "自然陪伴眼下疲惫，无需声明旧记录无法确认。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "自然陪伴眼下疲惫，无需声明旧记录无法确认。"
+    ],
+    "oracle_notes": "自然陪伴眼下疲惫，无需声明旧记录无法确认。"
+  },
+  {
+    "id": "evidence-current-03",
+    "category": "current_or_daily",
+    "subtype": "explicit_current_change",
+    "history": [
+      {
+        "id": "evidence-current-03-u1",
+        "role": "user",
+        "text": "昨天买了一个纸质文件夹。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-current-03-a1",
+        "role": "assistant",
+        "text": "可以慢慢整理文件。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-current-03-u2",
+        "role": "user",
+        "text": "我把台灯挪了一点。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-current-03-a2",
+        "role": "assistant",
+        "text": "光舒服些就好。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-current-03-u3",
+        "role": "user",
+        "text": "昨晚听了会雨声。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-current-03-a3",
+        "role": "assistant",
+        "text": "愿你睡得安稳。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "今天把台灯换成暖光了，现在看书舒服多了。",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [],
+    "answer_expectation": "直接接住当前暖光与舒适；旧挪灯位置不能覆盖现在。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "直接接住当前暖光与舒适；旧挪灯位置不能覆盖现在。"
+    ],
+    "oracle_notes": "直接接住当前暖光与舒适；旧挪灯位置不能覆盖现在。"
+  },
+  {
+    "id": "evidence-current-04",
+    "category": "current_or_daily",
+    "subtype": "current_choice_question",
+    "history": [
+      {
+        "id": "evidence-current-04-u1",
+        "role": "user",
+        "text": "昨天买了一个纸质文件夹。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-current-04-a1",
+        "role": "assistant",
+        "text": "可以慢慢整理文件。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-current-04-u2",
+        "role": "user",
+        "text": "我把台灯挪了一点。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-current-04-a2",
+        "role": "assistant",
+        "text": "光舒服些就好。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-current-04-u3",
+        "role": "user",
+        "text": "昨晚听了会雨声。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-current-04-a3",
+        "role": "assistant",
+        "text": "愿你睡得安稳。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我现在想给窗台添一盆绿植，陪我挑挑可以吗？",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [],
+    "answer_expectation": "按当前意愿陪挑绿植；不是追问过去选了什么。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "按当前意愿陪挑绿植；不是追问过去选了什么。"
+    ],
+    "oracle_notes": "按当前意愿陪挑绿植；不是追问过去选了什么。"
+  },
+  {
+    "id": "evidence-current-05",
+    "category": "current_or_daily",
+    "subtype": "legitimate_scoped_negative",
+    "history": [
+      {
+        "id": "evidence-current-05-u1",
+        "role": "user",
+        "text": "截至2026-09-20，我还没向邻居借过投影仪。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-current-05-a1",
+        "role": "assistant",
+        "text": "这是那个时间点的明确否定。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-current-05-u2",
+        "role": "user",
+        "text": "昨天买了一个纸质文件夹。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-current-05-a2",
+        "role": "assistant",
+        "text": "可以慢慢整理文件。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-current-05-u3",
+        "role": "user",
+        "text": "我把台灯挪了一点。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-current-05-a3",
+        "role": "assistant",
+        "text": "光舒服些就好。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我说截至九月二十日，借过邻居投影仪吗？",
+    "expected_ids": [
+      "evidence-current-05-u1"
+    ],
+    "expected_quotes": {
+      "evidence-current-05-u1": "截至2026-09-20，我还没向邻居借过投影仪。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "限定截至2026-09-20，明确没有借过，不能把合法否定机械封杀。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "限定截至2026-09-20，明确没有借过，不能把合法否定机械封杀。"
+    ],
+    "oracle_notes": "限定过去时间的明确原文否定可答没有；不是全历史无记录证明没借。"
+  },
+  {
+    "id": "evidence-current-06",
+    "category": "current_or_daily",
+    "subtype": "legitimate_evidence_uncertainty",
+    "history": [
+      {
+        "id": "evidence-current-06-u1",
+        "role": "user",
+        "text": "上次准备装裱那张素描，但还没选好框。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-current-06-a1",
+        "role": "assistant",
+        "text": "那时处于准备阶段。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-current-06-u2",
+        "role": "user",
+        "text": "昨天买了一个纸质文件夹。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-current-06-a2",
+        "role": "assistant",
+        "text": "可以慢慢整理文件。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-current-06-u3",
+        "role": "user",
+        "text": "我把台灯挪了一点。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-current-06-a3",
+        "role": "assistant",
+        "text": "光舒服些就好。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "按你目前拿到的记录，能确认我现在已经裱好素描了吗？",
+    "expected_ids": [
+      "evidence-current-06-u1"
+    ],
+    "expected_quotes": {
+      "evidence-current-06-u1": "上次准备装裱那张素描，但还没选好框。"
+    },
+    "forbidden_ids": [],
+    "answer_expectation": "限定本次记录不足以确认现状，可提当时还未选框，不能说从没装裱。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": true,
+    "source_use_required": true,
+    "acceptable_scopes": [
+      "限定本次记录不足以确认现状，可提当时还未选框，不能说从没装裱。"
+    ],
+    "oracle_notes": "限定来源的未知可成立，旧未决定不等于现在未完成。"
+  },
+  {
+    "id": "evidence-current-07",
+    "category": "current_or_daily",
+    "subtype": "current_negation",
+    "history": [
+      {
+        "id": "evidence-current-07-u1",
+        "role": "user",
+        "text": "昨天买了一个纸质文件夹。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-current-07-a1",
+        "role": "assistant",
+        "text": "可以慢慢整理文件。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-current-07-u2",
+        "role": "user",
+        "text": "我把台灯挪了一点。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-current-07-a2",
+        "role": "assistant",
+        "text": "光舒服些就好。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-current-07-u3",
+        "role": "user",
+        "text": "昨晚听了会雨声。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-current-07-a3",
+        "role": "assistant",
+        "text": "愿你睡得安稳。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "我今天没有出门，想在家慢慢做点事。",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [],
+    "answer_expectation": "当前明确没出门可自然回应，不应误退未知或断言永远不出门。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "当前明确没出门可自然回应，不应误退未知或断言永远不出门。"
+    ],
+    "oracle_notes": "当前明确没出门可自然回应，不应误退未知或断言永远不出门。"
+  },
+  {
+    "id": "evidence-current-08",
+    "category": "current_or_daily",
+    "subtype": "daily_no_recall",
+    "history": [
+      {
+        "id": "evidence-current-08-u1",
+        "role": "user",
+        "text": "昨天买了一个纸质文件夹。",
+        "created_at": "2026-09-23T10:00:00+08:00"
+      },
+      {
+        "id": "evidence-current-08-a1",
+        "role": "assistant",
+        "text": "可以慢慢整理文件。",
+        "created_at": "2026-09-23T10:02:00+08:00"
+      },
+      {
+        "id": "evidence-current-08-u2",
+        "role": "user",
+        "text": "我把台灯挪了一点。",
+        "created_at": "2026-09-23T10:04:00+08:00"
+      },
+      {
+        "id": "evidence-current-08-a2",
+        "role": "assistant",
+        "text": "光舒服些就好。",
+        "created_at": "2026-09-23T10:06:00+08:00"
+      },
+      {
+        "id": "evidence-current-08-u3",
+        "role": "user",
+        "text": "昨晚听了会雨声。",
+        "created_at": "2026-09-23T10:08:00+08:00"
+      },
+      {
+        "id": "evidence-current-08-a3",
+        "role": "assistant",
+        "text": "愿你睡得安稳。",
+        "created_at": "2026-09-23T10:10:00+08:00"
+      }
+    ],
+    "query": "不用翻旧聊天，我只是想跟你说这一刻有点开心。",
+    "expected_ids": [],
+    "expected_quotes": {},
+    "forbidden_ids": [],
+    "answer_expectation": "直接陪当前开心，不多余引用旧话，也不表示长期关闭记忆。",
+    "current_utc": "2026-10-07T04:00:00+00:00",
+    "unknown_current": false,
+    "source_use_required": false,
+    "acceptable_scopes": [
+      "直接陪当前开心，不多余引用旧话，也不表示长期关闭记忆。"
+    ],
+    "oracle_notes": "直接陪当前开心，不多余引用旧话，也不表示长期关闭记忆。"
+  }
+]
