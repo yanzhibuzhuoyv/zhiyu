@@ -1,0 +1,3 @@
+# Optional isolated research environment; never required by the production image.
+-r requirements-memory-route.txt
+-r ../backend/requirements-test.lock
