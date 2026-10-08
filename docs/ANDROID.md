@@ -15,7 +15,19 @@
 
 ## 连接与部署
 
-0.1.1调试APK内置`http://10.0.2.2:8791`，模拟器访问Docker测试服务。普通用户无需填地址；开发人员在debug“开发设置”改为直接后端8790或真机局域网IP。地址变更清除Key并回验证页，保留公司、模型及人格绑定；真机需后端监听局域网接口。
+0.1.2调试APK默认`http://127.0.0.1:8791`，通过ADB反向端口转发访问电脑Docker测试服务。手机无需与电脑同一Wi-Fi，也无需用户填后端地址。先启动Docker及`zhiyu-docker-test-backend-1`，解锁手机、开启USB调试并允许电脑授权，然后在项目根目录执行：
+
+```powershell
+.\scripts\Start-AndroidUsbDebug.ps1 -ApkPath .\artifacts\ZhiYu-0.1.2-usb-debug.apk -RestartApp
+```
+
+多台手机时加`-Serial 手机序列号`；只恢复连接时省略`-ApkPath`。覆盖安装使用`adb install -r`，保留数据。USB重新插拔、ADB重启或电脑重启后需重新运行脚本；这是本地调试方式，拔线后不能继续访问电脑后端。模拟器可使用`adb -s emulator-5554 reverse tcp:8791 tcp:8791`，或明确以`-PzhiyuBackendUrl=http://10.0.2.2:8791`构建模拟器专用包。
+
+仅USB debug配置自动将已保存的旧默认`http://10.0.2.2:8791`改成同端口USB入口；Key、会话及完整恋人绑定保留。自定义地址与release不迁移。debug“开发设置”仍可手动改为可达的局域网地址，手动改址清Key并回验证页、保留绑定；局域网方式需要另行配置后端监听和可信网络。
+
+真机上只运行`com.zhiyu.app.data.UsbBackendConnectivityTest`等不访问用户存储的测试；现有`BackendFlowTest`会清空测试安装的凭据与绑定，禁止在用户原安装上运行整套`connectedDebugAndroidTest`。
+
+2026-10-08在红米Turbo 3（Android 16/API 36）复现旧0.1.1入口超时，旧安装包SHA与模拟器版一致。恢复Docker临时socket目录及原数据卷后，覆盖安装0.1.2并建立USB连接；实际手机公司目录正常加载，使用用户授权的原DeepSeek Key验证成功并进入同一聊天页面。手机升级前未保存Key/绑定；既有连接迁移的保留规则另由单元测试验证。81项单元测试及debug/debugAndroidTest构建通过，release HTTP配置实际被拒绝、HTTPS构建配置的USB迁移开关为false。Windows PowerShell5.1/7脚本解析和退出码兼容性通过，独审C/H/M开放0。测试辅助APK首次安装被手机系统`INSTALL_FAILED_USER_RESTRICTED`拒绝，instrumentation未执行，不计通过；旧清凭据E2E未在手机运行。没有替用户发送连通性聊天消息。
 
 debug允许本地HTTP；release通过`-PzhiyuBackendUrl=https://你的域名`配置，只允许HTTPS。未配置的release仍可编译，但进入时提示服务尚未配置，不能用于正式用户。正式部署需有效证书与自己的签名；客户端不忽略证书错误、不跟随重定向、不记录Key或网络内容。
 

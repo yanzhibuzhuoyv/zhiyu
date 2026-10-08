@@ -6,6 +6,8 @@ Kotlin + Jetpack Compose 原生应用，FastAPI + SQLite 后端。选择 AI 公�
 
 新增“温柔相伴·试用版”`warm_v2`：稳定的温柔底色，也能表达不同意见和暂时妥协；当前互动不会自动改成永久性格。电脑直接打开 <http://127.0.0.1:8798/trial>，选择公司、输入自己的Key试用；安卓包为 `artifacts/ZhiYu-0.1.1-warm-v2-debug.apk`。[试用方式、真实对照与限制](docs/COMPANION_PRESET_TRIAL.md)。旧预设及已绑定初版均保留。
 
+USB真机修复包为`artifacts/ZhiYu-0.1.2-usb-debug.apk`；启动电脑后端并开启USB调试后，运行`.\scripts\Start-AndroidUsbDebug.ps1 -ApkPath .\artifacts\ZhiYu-0.1.2-usb-debug.apk -RestartApp`覆盖安装、建立连接。保留原Key与绑定，默认不再使用模拟器专用地址。[USB联调说明](docs/ANDROID.md)。
+
 ## 本机启动
 
 已安装 Python 3.11+（SQLite >=3.43并支持FTS5）与 [uv](https://docs.astral.sh/uv/) 后，在项目根目录执行：
@@ -26,8 +28,8 @@ Kotlin + Jetpack Compose 原生应用，FastAPI + SQLite 后端。选择 AI 公�
 
 ## 安卓联调
 
-- 普通进入页只要求公司与 API Key；后端地址由构建配置提供。调试默认是模拟器访问 Docker 测试服务的 `http://10.0.2.2:8791`。
-- 本地直接启动8790、真机局域网地址可由开发人员在 debug“开发设置”调整；真机还需后端监听局域网接口。
+- 普通进入页只要求公司与 API Key；后端地址由构建配置提供。0.1.2调试默认 `http://127.0.0.1:8791`，USB手机通过ADB端口转发访问电脑Docker测试服务。
+- 使用 `scripts/Start-AndroidUsbDebug.ps1` 建立连接；模拟器同样可用ADB reverse。局域网地址可在debug“开发设置”调整，需另行配置后端监听。
 - release 通过 `-PzhiyuBackendUrl=https://你的域名` 配置 HTTPS 后端，配置非 HTTPS 会拒绝构建；未配置的包提示服务尚未配置。部署需证书及正式签名。
 - 新版后台记忆调试 APK 位于 `artifacts/ZhiYu-0.1.1-background-memory-debug.apk`；旧包保留，界面和构建说明见 [ANDROID.md](docs/ANDROID.md)。
 

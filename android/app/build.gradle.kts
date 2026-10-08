@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 val configuredServerUrl = providers.gradleProperty("zhiyuBackendUrl").orNull.orEmpty().trim()
+val usbServerUrl = "http://127.0.0.1:8791"
 require(!configuredServerUrl.contains('"') && !configuredServerUrl.contains('\\') && configuredServerUrl.none { it.code < 32 }) {
     "zhiyuBackendUrl contains invalid characters"
 }
@@ -17,15 +18,19 @@ android {
         applicationId = "com.zhiyu.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.1.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }
     buildTypes {
-        debug { buildConfigField("String", "DEFAULT_SERVER_URL", "\"${configuredServerUrl.ifBlank { "http://10.0.2.2:8791" }}\"") }
+        debug {
+            buildConfigField("String", "DEFAULT_SERVER_URL", "\"${configuredServerUrl.ifBlank { usbServerUrl }}\"")
+            buildConfigField("boolean", "USE_USB_BACKEND", (configuredServerUrl.isBlank() || configuredServerUrl == usbServerUrl).toString())
+        }
         release {
             buildConfigField("String", "DEFAULT_SERVER_URL", "\"${configuredServerUrl.takeIf { it.startsWith("https://") }.orEmpty()}\"")
+            buildConfigField("boolean", "USE_USB_BACKEND", "false")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

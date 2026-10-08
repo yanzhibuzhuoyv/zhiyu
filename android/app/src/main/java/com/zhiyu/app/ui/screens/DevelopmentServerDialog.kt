@@ -18,7 +18,7 @@ import com.zhiyu.app.ui.ChatViewModel
         title = { Text("开发设置") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("仅供本地联调。模拟器使用 10.0.2.2；真机使用电脑局域网地址。更换服务器会清除本机 Key，已绑定的公司和模型仍会保留。取消不会改动连接或 Key。")
+                Text("仅供本地联调。USB 调试默认使用 127.0.0.1:8791，需电脑建立 ADB 端口转发；重新插线后需重新建立。也可使用可达的局域网地址。手动更换服务器会清除本机 Key，已绑定的公司、模型及恋人设定仍会保留。取消不会改动连接或 Key。")
                 OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("服务器地址") },
                     modifier = Modifier.fillMaxWidth().testTag("server_url"), singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
