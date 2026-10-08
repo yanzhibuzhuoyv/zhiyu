@@ -23,6 +23,9 @@ class AssetLibrary:
                 mime_type TEXT NOT NULL, extension TEXT NOT NULL, width INTEGER NOT NULL,
                 height INTEGER NOT NULL, metadata TEXT NOT NULL, created_at TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS idx_assets_owner_category ON assets(owner, category);""")
+            db.execute("BEGIN IMMEDIATE")
+            if "active" not in {row["name"] for row in db.execute("PRAGMA table_info(assets)")}:
+                db.execute("ALTER TABLE assets ADD COLUMN active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1))")
 
     def ingest(self, raw: bytes, metadata: AssetMetadata):
         image = normalize_image(raw)
@@ -43,7 +46,9 @@ class AssetLibrary:
                     raise MediaStorageError("素材文件完整性校验失败") from exc
             target.chmod(0o600)
             with connection(self.path, write=True) as db:
-                db.execute("INSERT INTO assets VALUES (?,?,?,?,?,?,?,?,?,?)", (
+                db.execute("""INSERT INTO assets
+                    (id,owner,category,sha256,mime_type,extension,width,height,metadata,created_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)""", (
                     identifier, metadata.owner, metadata.category, image.sha256, image.mime_type,
                     image.extension, image.width, image.height,
                     metadata.model_dump_json(), values["created_at"],
@@ -54,9 +59,20 @@ class AssetLibrary:
 
     def candidates(self, owner: str):
         with connection(self.path) as db:
-            rows = db.execute("SELECT * FROM assets WHERE owner IS NULL OR owner=? ORDER BY created_at DESC LIMIT 512",
+            rows = db.execute("SELECT * FROM assets WHERE active=1 AND (owner IS NULL OR owner=?) ORDER BY created_at DESC LIMIT 512",
                               (owner,)).fetchall()
         return [self._decode(row) for row in rows]
+
+    def set_source_active(self, source_label: str, active: bool):
+        """Operator-only catalog toggle; historical downloads remain available."""
+        if (type(active) is not bool or not isinstance(source_label, str)
+                or not source_label.strip() or len(source_label) > 160
+                or any(ord(char) < 32 for char in source_label)):
+            raise ValueError("素材来源标签或启用状态无效")
+        with connection(self.path, write=True) as db:
+            result = db.execute("""UPDATE assets SET active=? WHERE owner IS NULL
+                AND json_extract(metadata,'$.source_label')=?""", (int(active), source_label))
+            return result.rowcount
 
     def get(self, identifier: str, owner: str):
         if not re.fullmatch(r"[a-f0-9]{32}", identifier):

@@ -1,10 +1,10 @@
 """Integrates existing cached media only; selection never starts image generation."""
 
-from .media_selection import EMOTIONS, PHOTO_WORDS, select_media
+from .media_selection import PHOTO_WORDS, select_media
 
 
 def choose_attachments(state, owner, conversation_id, text, companion_profile, history=None):
-    if not any(word in text for word in PHOTO_WORDS) and not any(word in text for words in EMOTIONS.values() for word in words):
+    if not any(word in text for word in PHOTO_WORDS):
         return []
     visual = state.visual.get(owner, conversation_id)
     daily = state.daily_scenes.get(owner, conversation_id, visual["visual_version"])

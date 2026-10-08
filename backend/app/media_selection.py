@@ -7,9 +7,6 @@ CATEGORIES = {"cat": ("猫",), "landscape": ("风景", "夕阳", "晚霞", "海�
               "food": ("饭", "吃", "早餐", "午餐", "晚餐"),
               "selfie": ("自拍",), "portrait": ("样子", "长相", "形象", "你自己"),
               "pov": ("第一视角", "第一人称", "视角")}
-EMOTIONS = {"comfort": ("难过", "委屈", "不开心", "好累"),
-            "happy": ("开心", "哈哈", "快乐", "好棒"), "affection": ("想你", "抱抱", "爱你")}
-STICKER_INTERVALS = {"steady": 24, "gentle": 8, "warm_v1": 8, "warm_v2": 8, "playful": 3, "anxious": 3, "distant": 48}
 
 
 def identity_matches(asset, owner, visual):
@@ -48,23 +45,13 @@ def _choose(candidates, recent, owner, conversation_id, day_id, turn_number):
 
 def select_media(stores, owner, conversation_id, text, profile, visual, *, day_id, recent,
                  turn_number, time_slot="any", scene_tags=None):
-    profile = profile or {}
     image_request = any(word in text for word in PHOTO_WORDS)
-    sticker_request = "表情包" in text
-    emotion = next((name for name, words in EMOTIONS.items() if any(word in text for word in words)), None)
     selected = []
     if image_request:
         category = next((name for name, words in CATEGORIES.items() if any(word in text for word in words)), None)
         candidates = [item for item in stores.images.candidates(owner) if identity_matches(item, owner, visual)
                       and item["time_slot"] in {"any", time_slot}
                       and (item["category"] == category if category else bool(set(item["tags"]) & set(scene_tags or [])))]
-        chosen = _choose(candidates, recent, owner, conversation_id, day_id, turn_number)
-        if chosen:
-            selected.append(attachment(chosen, day_id, visual.get("visual_version", 0)))
-    interval = STICKER_INTERVALS.get(profile.get("style"), 8)
-    if emotion and (sticker_request or turn_number % interval == 0):
-        candidates = [item for item in stores.stickers.candidates(owner)
-                      if identity_matches(item, owner, visual) and emotion in item["tags"]]
         chosen = _choose(candidates, recent, owner, conversation_id, day_id, turn_number)
         if chosen:
             selected.append(attachment(chosen, day_id, visual.get("visual_version", 0)))

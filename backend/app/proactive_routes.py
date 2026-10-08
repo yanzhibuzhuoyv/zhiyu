@@ -16,6 +16,7 @@ from .media_service import choose_attachments
 from .proactive_policy import decision, local_day
 from .providers import ProviderError
 from .schemas import Input
+from .sticker_intent import prepare_sticker_intent, resolve_sticker_intent
 
 router = APIRouter(prefix="/api/conversations")
 
@@ -68,7 +69,7 @@ def unanswered_contacts(history):
     return count
 
 
-def contact_prompt(profile, history, daily):
+def contact_prompt(profile, history, daily, sticker_prompt=""):
     activity = daily["current_slot"]["activity"]
     system = ("你是知语，一位诚实的 AI 恋人。用户已允许偶尔主动联系。"
               "这次请主动发一条简短自然的关心或日常分享，不需要等待一条虚构的用户消息。"
@@ -77,21 +78,24 @@ def contact_prompt(profile, history, daily):
               f"当前北京时间日期：{daily['day_id']}。今天的虚拟生活安排：{activity}。"
               "这个安排属于 OC 的虚拟日常，不能声称现实真人刚刚拍照或实际在场。")
     trigger = "[应用后台调度事件，不是用户的聊天原话] 现在按上述固定性格，发起一次自然的主动联系。"
-    return [{"role": "system", "content": system + companion_system(profile)}, *selected_history(history),
+    return [{"role": "system", "content": system + companion_system(profile) + sticker_prompt}, *selected_history(history),
             {"role": "user", "content": trigger}]
 
 
 async def generate(state, session, identifier, conversation, history, request_id):
     visual = await run_in_threadpool(state.visual.get, session.owner, identifier)
     daily = await run_in_threadpool(state.daily_scenes.get, session.owner, identifier, visual["visual_version"])
+    sticker_plan = await run_in_threadpool(prepare_sticker_intent, state, session.owner, identifier,
+                                          conversation["companion_profile"], history)
     async with state.upstream_slots:
         answer = await state.provider.complete(session.provider_id, session.api_key, conversation["model"],
-                                               contact_prompt(conversation["companion_profile"], history, daily))
+                                               contact_prompt(conversation["companion_profile"], history, daily, sticker_plan.prompt))
+    answer, stickers = resolve_sticker_intent(answer, sticker_plan)
     attachments = await run_in_threadpool(choose_attachments, state, session.owner, identifier,
                                          answer, conversation["companion_profile"], history)
     return await run_in_threadpool(state.chat.save_assistant, session.owner, identifier, answer,
                                   message_id=message_id(session.owner, identifier, request_id),
-                                  media_attachments=attachments)
+                                  media_attachments=[*attachments, *stickers])
 
 
 @router.post("/{identifier}/proactive/check")

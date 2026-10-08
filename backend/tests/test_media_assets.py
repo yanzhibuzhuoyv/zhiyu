@@ -87,14 +87,14 @@ def test_no_media_on_plain_daily_share_and_no_repeated_hash(tmp_path):
                         day_id="2026-10-08", recent=first + second, turn_number=4) == []
 
 
-def test_mature_profile_sends_fewer_stickers_and_context_must_match(tmp_path):
+def test_photo_selector_never_guesses_sticker_from_keyword_or_turn_number(tmp_path):
     stores = MediaLibraries(tmp_path)
     stores.ingest("sticker", image_bytes(), metadata(category="object", tags=["happy"]))
     playful = select_media(stores, "a", "c", "哈哈真开心", {"style": "playful"}, {},
                            day_id="2026-10-08", recent=[], turn_number=3)
     mature = select_media(stores, "a", "c", "哈哈真开心", {"style": "steady"}, {},
                           day_id="2026-10-08", recent=[], turn_number=3)
-    assert len(playful) == 1
+    assert playful == []
     assert mature == []
     assert select_media(stores, "a", "c", "我现在很难过", {"style": "playful"}, {},
                         day_id="2026-10-08", recent=[], turn_number=3) == []

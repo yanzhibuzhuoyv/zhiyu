@@ -110,3 +110,5 @@ Visual 响应包含 `visual_id/conversation_id/mode/description/gender/hair/visu
 本机 `artifacts/media-seed` 包含 6 张 native imagegen 独立生成照片与 8 张 Microsoft Fluent Emoji 表情图，清单为 `operator-manifest.json`。照片为虚构样例，不是现实用户的照片；原生生成工具未提供模型版本，不能标称 image2/image2.5。这批运营素材不占应用用户的两次生成配额。
 
 表情图来自官方 `microsoft/fluentui-emoji` 固定提交 `1ffb34c752ecf5d402f04cfb4b392c77f57c54bc`，完整 MIT 声明在 `licenses/microsoft-fluentui-emoji-MIT.txt`。分发原图、素材包或外置素材目录时必须同时保留该许可；本轮演示素材目录也保存了许可副本。新增素材必须提供真实来源与使用许可。
+
+这批 Fluent 表情属于首轮历史样例。后续按用户要求改为 QQ 风格试用素材，旧表情退出新候选但保留历史下载；普通回复和主动联系均由同一次回答模型选择可选贴纸。当前行为、许可分组及运营停用命令见 [自然表情](STICKERS.md)。

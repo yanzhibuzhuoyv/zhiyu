@@ -13,6 +13,7 @@ from .database import HistoryCursorError
 from .dependencies import current_session
 from .media_service import choose_attachments, media_prompt
 from .schemas import EditConversation, NewConversation, NewMessage
+from .sticker_intent import prepare_sticker_intent, resolve_sticker_intent
 
 router = APIRouter(prefix="/api/conversations")
 
@@ -136,7 +137,8 @@ def evidence_status(history, memory_refs, memory_complete):
 
 
 def prompt(history: list, content: str, sources: list, memory_refs: list | None = None,
-           companion_profile: dict | None = None, memory_complete: bool = True, media_attachments=None):
+           companion_profile: dict | None = None, memory_complete: bool = True, media_attachments=None,
+           sticker_prompt=""):
     system = "你是知语，一位清楚、诚实的 AI 恋人。自然地陪伴和交流，无法确认的信息请明确说明，不编造共同经历。"
     system += companion_system(companion_profile)
     system += ("\n先回应当前分享与情绪；旧记忆是可选背景，只有有助当前回应时自然带出，不因为曾做过某事就劝阻。"
@@ -158,7 +160,7 @@ def prompt(history: list, content: str, sources: list, memory_refs: list | None 
                "用户先前未决定的原话只证明当时未决定，不证明后来仍然未决定或事件未发生。"
                "不要求用户在候选答案中强行二选一。已有明确用户原话则按原话回答，无需反复质疑。"
                "回复保持自然，无需把来源检查过程写给用户。")
-    system += media_prompt(media_attachments)
+    system += media_prompt(media_attachments) + sticker_prompt
     return [{"role": "system", "content": system}, *selected, {"role": "user", "content": content}]
 
 
@@ -177,8 +179,12 @@ async def send(identifier: str, body: NewMessage, request: Request, session: Ses
         references = state.memory_attention.decorate(session.owner, identifier, context.references)
         attachments = await run_in_threadpool(choose_attachments, state, session.owner, identifier,
                                              body.content, conversation["companion_profile"], recent)
+        sticker_plan = await run_in_threadpool(prepare_sticker_intent, state, session.owner, identifier,
+                                              conversation["companion_profile"], recent, "表情包" in body.content)
         async with state.upstream_slots:
-            answer = await state.provider.complete(session.provider_id, session.api_key, conversation["model"], prompt(recent, body.content, sources, references, conversation["companion_profile"], context.complete, attachments))
+            answer = await state.provider.complete(session.provider_id, session.api_key, conversation["model"], prompt(recent, body.content, sources, references, conversation["companion_profile"], context.complete, attachments, sticker_plan.prompt))
+        answer, stickers = resolve_sticker_intent(answer, sticker_plan)
+        attachments = [*attachments, *stickers]
         deferred = {"provider_id": session.provider_id, "model": conversation["model"]} if state.chat.auto_annotations and state.chat.annotation_mode == "semantic" else None
         saved = await run_in_threadpool(state.chat.save_turn, session.owner, identifier, body.content, answer, sources,
                                        deferred_recognition=deferred, media_attachments=attachments)

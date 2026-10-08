@@ -34,13 +34,19 @@ def import_manifest(directory: Path, manifest: Path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="知语独立素材库导入工具")
     parser.add_argument("--media-dir", type=Path, required=True)
-    parser.add_argument("manifest", type=Path)
+    parser.add_argument("--disable-sticker-source", action="append", default=[],
+                        help="按完整来源标签停用公共表情包，保留历史附件文件")
+    parser.add_argument("manifest", type=Path, nargs="?")
     values = parser.parse_args(argv)
+    if values.manifest is None and not values.disable_sticker_source:
+        parser.error("请提供素材清单或 --disable-sticker-source")
     try:
-        result = import_manifest(values.media_dir.resolve(), values.manifest)
+        result = import_manifest(values.media_dir.resolve(), values.manifest) if values.manifest else []
+        library = MediaLibraries(values.media_dir.resolve()).stickers
+        disabled = sum(library.set_source_active(label, False) for label in values.disable_sticker_source)
     except (ValueError, OSError) as exc:
         parser.exit(2, f"素材导入失败：{exc}\n")
-    print(json.dumps({"imported": result}, ensure_ascii=False))
+    print(json.dumps({"imported": result, "disabled_stickers": disabled}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
