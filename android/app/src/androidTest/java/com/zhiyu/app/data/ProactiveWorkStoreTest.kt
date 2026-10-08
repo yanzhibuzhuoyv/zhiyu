@@ -1,0 +1,40 @@
+package com.zhiyu.app.data
+
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.*
+import org.junit.Test
+import java.util.UUID
+
+/** Separate test preferences only; no API Key, cloud call, worker execution or permission mutation. */
+class ProactiveWorkStoreTest {
+    private fun store(test: (ProactiveWorkStore, () -> ProactiveWorkStore) -> Unit) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val name = "proactive_test_${UUID.randomUUID()}"
+        try { test(ProactiveWorkStore(context, name)) { ProactiveWorkStore(context, name) } }
+        finally { context.deleteSharedPreferences(name) }
+    }
+
+    @Test fun contactStartsDisabledAndItsOptInPersists() = store { state, recreate ->
+        assertFalse(state.enabled("chat"))
+        state.setEnabled("chat", true)
+        assertTrue(recreate().enabled("chat"))
+        state.setEnabled("chat", false)
+        assertFalse(recreate().enabled("chat"))
+    }
+
+    @Test fun requestIdSurvivesRecreationUntilTheExactRequestCompletes() = store { state, recreate ->
+        val id = state.requestId("chat")
+        UUID.fromString(id)
+        assertEquals(id, recreate().requestId("chat"))
+        recreate().complete("chat", UUID.randomUUID().toString())
+        assertEquals(id, recreate().requestId("chat"))
+        recreate().complete("chat", id)
+        assertNotEquals(id, recreate().requestId("chat"))
+    }
+
+    @Test fun theSameMessageCannotBeNotifiedAgainAfterRecreation() = store { state, recreate ->
+        assertTrue(state.claimMessage("message-1"))
+        assertFalse(recreate().claimMessage("message-1"))
+        assertTrue(recreate().claimMessage("message-2"))
+    }
+}

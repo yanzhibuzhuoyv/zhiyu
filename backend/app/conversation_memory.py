@@ -4,7 +4,9 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from .assistant_memory import standalone_references
 from .memory_ranking import RankedTurn, event_windows, rank_direct, select_memory
+from .memory_transaction import transaction
 from .vendor_rag.bm25 import _tokenize
 
 RECENT_TURNS = 20
@@ -84,9 +86,15 @@ class MemoryContext:
     next_cursor: int | None = None
 
 
-def conversation_context_result(chat, owner: str, identifier: str, query: str) -> MemoryContext:
+def conversation_context_result(chat, owner: str, identifier: str, query: str, *, recent_messages=None) -> MemoryContext:
     turns = chat.recent_turns(owner, identifier, RECENT_TURNS, RECENT_CHARS)
     history, before = recent_history(turns)
+    if recent_messages is not None:
+        history = [{"role": row["role"], "content": row["content"]} for row in recent_messages]
+        with transaction(chat) as db:
+            first = db.execute("""SELECT m.sequence FROM messages m JOIN conversations c ON c.id=m.conversation_id
+                WHERE c.owner=? AND c.id=? AND m.id=?""", (owner, identifier, recent_messages[0]["id"])).fetchone() if recent_messages else None
+        before = first[0] if first else chat.message_position(owner, identifier) + 1
     terms = memory_terms(query)
     if not before or not terms:
         return MemoryContext(history, [])
@@ -95,15 +103,19 @@ def conversation_context_result(chat, owner: str, identifier: str, query: str) -
     )
     candidates = result["turns"]
     if not candidates:
-        return MemoryContext(history, [], result["complete"], result.get("next_before"))
+        solo = standalone_references(chat, owner, identifier, before, terms)
+        return MemoryContext(history, solo["references"], result["complete"] and solo["complete"], result.get("next_before"))
     now, scope = datetime.now(UTC), (owner, identifier)
     windows = event_windows(rank_direct(candidates, terms, now=now, scope=scope))
     event_result = chat.memory_events(owner, identifier, before, windows) if windows else {"turns": [], "complete": True}
     chosen = select_memory(candidates, terms, nearby_events=event_result["turns"], now=now, scope=scope,
                            max_turns=MEMORY_TURNS, max_chars=MEMORY_CHARS)
     refs = [ref for item in chosen for ref in _references(item)]
+    solo = standalone_references(chat, owner, identifier, before, terms,
+                                 max_chars=MEMORY_CHARS - sum(len(ref["text"]) for ref in refs))
+    refs += solo["references"]
     assert sum(len(ref["text"]) for ref in refs) <= MEMORY_CHARS
-    return MemoryContext(history, refs, result["complete"] and event_result["complete"], result.get("next_before"))
+    return MemoryContext(history, refs, result["complete"] and event_result["complete"] and solo["complete"], result.get("next_before"))
 
 
 def conversation_context(chat, owner: str, identifier: str, query: str) -> tuple[list, list]:

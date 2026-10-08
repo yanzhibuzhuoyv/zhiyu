@@ -11,6 +11,7 @@ class Settings:
     embedding_model: str | None = None
     auto_memory_annotations: bool = False
     memory_annotation_mode: str = "semantic"
+    media_dir: Path | None = None
 
     def __post_init__(self):
         if type(self.auto_memory_annotations) is not bool:
@@ -29,4 +30,5 @@ class Settings:
             embedding_model=os.getenv("ZHIYU_EMBEDDING_MODEL") or None,
             auto_memory_annotations=os.getenv("ZHIYU_AUTO_MEMORY_ANNOTATIONS", "false").lower() == "true",
             memory_annotation_mode=os.getenv("ZHIYU_MEMORY_ANNOTATION_MODE", "semantic"),
+            media_dir=Path(os.environ["ZHIYU_MEDIA_DIR"]).resolve() if os.getenv("ZHIYU_MEDIA_DIR") else None,
         )

@@ -9,9 +9,40 @@ import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.util.UUID
+import java.io.ByteArrayOutputStream
+import com.zhiyu.app.domain.MediaRules
 
 /** No network logging, permissive TLS, redirects or third-party credential interceptors. */
 class HttpApi {
+    suspend fun download(url: String, path: String, token: String): ByteArray = withContext(Dispatchers.IO) {
+        require(Regex("/api/media/(assets/[a-f0-9]{32}|templates/[a-zA-Z0-9_-]{1,80}/reference)").matches(path)) { "素材地址无效" }
+        val connection = URL(url + path).openConnection() as HttpURLConnection
+        try {
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 15000
+            connection.readTimeout = 30000
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.setRequestProperty("Accept", "image/png,image/jpeg,image/webp,image/gif")
+            val status = connection.responseCode
+            if (status !in 200..299) throw ApiFailure(status, "图片暂时无法加载（$status）")
+            require(connection.contentType?.substringBefore(';') in setOf("image/png", "image/jpeg", "image/webp", "image/gif")) { "图片格式不受支持" }
+            require(connection.contentLengthLong <= MediaRules.MAX_BYTES) { "图片过大" }
+            connection.inputStream.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    require(output.size() + count <= MediaRules.MAX_BYTES) { "图片过大" }
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray().also { require(it.isNotEmpty()) { "图片内容为空" } }
+            }
+        } catch (error: java.io.IOException) {
+            throw ApiFailure(0, "图片加载失败，请稍后重试")
+        } finally { connection.disconnect() }
+    }
+
     suspend fun request(url: String, path: String, method: String = "GET", token: String? = null, json: JSONObject? = null): String =
         call(url, path, method, token, "application/json", json?.toString()?.toByteArray(Charsets.UTF_8))
 
@@ -42,7 +73,8 @@ class HttpApi {
                 val status = connection.responseCode
                 val stream = if (status in 200..299) connection.inputStream else connection.errorStream
                 val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-                if (status !in 200..299) throw ApiFailure(status, errorMessage(status, response))
+                if (status !in 200..299) throw ApiFailure(status, errorMessage(status, response),
+                    connection.getHeaderField("X-ZhiYu-Error-Code")?.takeIf { Regex("[a-z_]{1,60}").matches(it) })
                 response
             } catch (error: SocketTimeoutException) {
                 throw ApiFailure(0, "后端响应超时。消息可能已经保存，请刷新会话后再决定是否重发")

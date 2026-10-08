@@ -2,6 +2,8 @@
 
 原生 Kotlin + Jetpack Compose，应用 ID `com.zhiyu.app`，支持 Android 8.0（API 26）及以上。
 
+当前新增功能包为 `artifacts/ZhiYu-0.1.3-media-debug.apk`，versionCode 4；默认 debug 地址仍为 `http://127.0.0.1:8791`，通过 ADB reverse 连接本机后端。支持镂空描边聊天气泡、两个头像与背景、OC 参考图导入和样例选择、私有鉴权媒体、主动联系通知。用户界面已隐藏记忆管理入口。详细验证见 [MEDIA_VALIDATION.md](MEDIA_VALIDATION.md)；下方较早版本测试记录属于历史。
+
 ## 功能
 
 - 首次进入自动检测服务与加载公司，只需选择AI公司、输入API Key；后端地址由构建配置提供。模型设置可选展开，豆包需自己的模型或接入点ID。

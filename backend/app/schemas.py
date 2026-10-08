@@ -23,7 +23,7 @@ class Input(BaseModel):
 
 class CompanionProfile(Input):
     mode: Literal["preset", "custom"]
-    style: Literal["gentle", "playful", "steady", "warm_v1", "warm_v2"] = "gentle"
+    style: Literal["gentle", "playful", "steady", "warm_v1", "warm_v2", "anxious", "distant"] = "gentle"
     role: Literal["girlfriend", "boyfriend", "partner"] = "partner"
     name: CompanionName = ""
     user_name: CompanionName = ""

@@ -27,6 +27,7 @@ internal fun JSONObject.source() = Source(getString("document_id"), getString("n
 internal fun JSONObject.message() = Message(
     getString("id"), getString("role"), getString("content"),
     optJSONArray("sources")?.mapObjects { it.source() }.orEmpty(), getString("created_at"),
+    optJSONArray("media_attachments")?.mapObjects { it.mediaAttachment() }.orEmpty(), optString("origin", "reply"),
 )
 internal fun JSONObject.document() = Document(getString("id"), getString("name"), getLong("size"), getInt("chunks"), getString("created_at"))
 internal fun JSONObject.auth(): AuthSession {

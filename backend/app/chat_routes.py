@@ -11,6 +11,7 @@ from .companion import CompanionConflict, companion_system
 from .conversation_memory import conversation_context_result
 from .database import HistoryCursorError
 from .dependencies import current_session
+from .media_service import choose_attachments, media_prompt
 from .schemas import EditConversation, NewConversation, NewMessage
 
 router = APIRouter(prefix="/api/conversations")
@@ -111,12 +112,18 @@ def earlier_context(memory_refs):
 def selected_history(history):
     # 保留完整成对轮次，避免无限增长的对话超出模型上下文。
     selected, budget = [], 48000
-    for user, assistant in reversed(list(zip(history[::2], history[1::2], strict=False))):
-        length = len(user["content"]) + len(assistant["content"])
-        if length > budget or len(selected) >= 40:
+    end = len(history)
+    while end:
+        start = end - 1
+        if history[start]["role"] == "assistant" and start > 0 and history[start - 1]["role"] == "user":
+            start -= 1
+        group = history[start:end]
+        length = sum(len(message["content"]) for message in group)
+        if length > budget or len(selected) + len(group) > 40:
             break
-        selected = [{"role": m["role"], "content": m["content"]} for m in (user, assistant)] + selected
+        selected = [{"role": message["role"], "content": message["content"]} for message in group] + selected
         budget -= length
+        end = start
     return selected
 
 
@@ -129,7 +136,7 @@ def evidence_status(history, memory_refs, memory_complete):
 
 
 def prompt(history: list, content: str, sources: list, memory_refs: list | None = None,
-           companion_profile: dict | None = None, memory_complete: bool = True):
+           companion_profile: dict | None = None, memory_complete: bool = True, media_attachments=None):
     system = "你是知语，一位清楚、诚实的 AI 恋人。自然地陪伴和交流，无法确认的信息请明确说明，不编造共同经历。"
     system += companion_system(companion_profile)
     system += ("\n先回应当前分享与情绪；旧记忆是可选背景，只有有助当前回应时自然带出，不因为曾做过某事就劝阻。"
@@ -151,6 +158,7 @@ def prompt(history: list, content: str, sources: list, memory_refs: list | None 
                "用户先前未决定的原话只证明当时未决定，不证明后来仍然未决定或事件未发生。"
                "不要求用户在候选答案中强行二选一。已有明确用户原话则按原话回答，无需反复质疑。"
                "回复保持自然，无需把来源检查过程写给用户。")
+    system += media_prompt(media_attachments)
     return [{"role": "system", "content": system}, *selected, {"role": "user", "content": content}]
 
 
@@ -161,15 +169,19 @@ async def send(identifier: str, body: NewMessage, request: Request, session: Ses
     async with turn_lock(request, identifier), state.memory_worker.foreground():
         conversation = owned(request, session, identifier)
         sources = await run_in_threadpool(state.rag.search, session.owner, body.content, 5) if conversation["use_rag"] else []
+        recent = await run_in_threadpool(state.chat.recent_messages, session.owner, identifier, 40, 48000)
         context = await run_in_threadpool(
-            conversation_context_result, state.chat, session.owner, identifier, body.content
+            conversation_context_result, state.chat, session.owner, identifier, body.content,
+            recent_messages=recent,
         )
         references = state.memory_attention.decorate(session.owner, identifier, context.references)
+        attachments = await run_in_threadpool(choose_attachments, state, session.owner, identifier,
+                                             body.content, conversation["companion_profile"], recent)
         async with state.upstream_slots:
-            answer = await state.provider.complete(session.provider_id, session.api_key, conversation["model"], prompt(context.history, body.content, sources, references, conversation["companion_profile"], context.complete))
+            answer = await state.provider.complete(session.provider_id, session.api_key, conversation["model"], prompt(recent, body.content, sources, references, conversation["companion_profile"], context.complete, attachments))
         deferred = {"provider_id": session.provider_id, "model": conversation["model"]} if state.chat.auto_annotations and state.chat.annotation_mode == "semantic" else None
         saved = await run_in_threadpool(state.chat.save_turn, session.owner, identifier, body.content, answer, sources,
-                                       deferred_recognition=deferred)
+                                       deferred_recognition=deferred, media_attachments=attachments)
         state.memory_attention.remember(session.owner, identifier, references)
         # Effective request authentication has already activated the in-memory owner.
         # Re-activate after COMMIT so the durable task exists before any cloud call.

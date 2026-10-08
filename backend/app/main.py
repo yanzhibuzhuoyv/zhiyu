@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from weakref import WeakValueDictionary
 
 from fastapi import FastAPI, Request
@@ -13,18 +14,25 @@ from .chat_routes import router as chat_router
 from .config import Settings
 from .database import ChatDatabase
 from .knowledge_routes import router as knowledge_router
+from .life_scenes import DailyScenes
+from .media_assets import MediaLibraries
+from .media_routes import router as media_router
+from .media_storage import MediaStorageError
 from .memory_attention import MemoryAttention
 from .memory_routes import router as memory_router
 from .memory_worker import MemoryWorker
+from .proactive_routes import router as proactive_router
+from .proactive_store import ProactiveStore
 from .providers import ProviderClient, ProviderError
 from .rag import RagService, RagStorageError
 from .rag_semantic import RagSemanticError
 from .request_guard import RequestGuard
 from .source_codec import ChatStorageError
 from .trial_routes import router as trial_router
+from .visual_profiles import VisualProfiles
 
 
-def create_app(settings: Settings | None = None, provider_client=None) -> FastAPI:
+def create_app(settings: Settings | None = None, provider_client=None, *, visual_generator=None) -> FastAPI:
     settings = settings or Settings.from_env()
 
     @asynccontextmanager
@@ -55,6 +63,13 @@ def create_app(settings: Settings | None = None, provider_client=None) -> FastAP
     state.turn_locks = WeakValueDictionary()
     state.memory_worker = MemoryWorker(state.chat, state.sessions, state.provider)
     state.memory_attention = MemoryAttention()
+    media_dir = settings.media_dir or settings.data_dir / "media"
+    state.media = MediaLibraries(media_dir)
+    state.visual = VisualProfiles(media_dir)
+    state.daily_scenes = DailyScenes(media_dir)
+    state.visual_generator = visual_generator
+    state.proactive = ProactiveStore(settings.data_dir)
+    state.contact_clock = lambda: datetime.now(UTC)
 
     @application.exception_handler(ProviderError)
     async def provider_error(request: Request, error: ProviderError):
@@ -71,6 +86,10 @@ def create_app(settings: Settings | None = None, provider_client=None) -> FastAP
     @application.exception_handler(ChatStorageError)
     async def chat_storage_error(request: Request, error: ChatStorageError):
         return JSONResponse(status_code=503, content={"detail": "聊天资料暂时无法读写，请检查后端数据库后重试"})
+
+    @application.exception_handler(MediaStorageError)
+    async def media_storage_error(request: Request, error: MediaStorageError):
+        return JSONResponse(status_code=503, content={"detail": "素材库暂时无法读写，请检查后端媒体目录后重试"})
 
     @application.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
@@ -89,6 +108,8 @@ def create_app(settings: Settings | None = None, provider_client=None) -> FastAP
     application.include_router(memory_router)
     application.include_router(knowledge_router)
     application.include_router(trial_router)
+    application.include_router(media_router)
+    application.include_router(proactive_router)
     return application
 
 

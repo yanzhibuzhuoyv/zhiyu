@@ -75,9 +75,18 @@ class SessionCoordinator(
             throw ApiFailure(error.status, "会话已失效，API Key 重新验证失败：${error.message}")
         }
         checkIdentity(connection, updated)
-        retainBinding(connection)
-        store.write(connection.copy(session = updated))
-        updated.token
+        if (store.compareAndWrite(connection, connection.copy(session = updated))) {
+            retainBinding(connection)
+            return@withLock updated.token
+        }
+        val latest = store.read()
+        if (latest != null && latest.copy(session = connection.session) == connection &&
+            latest.session != null && latest.session.expiresAt > now() + 30) {
+            checkIdentity(latest, latest.session)
+            retainBinding(latest)
+            return@withLock latest.session.token
+        }
+        throw ApiFailure(401, "本机已不再连接，请重新连接")
     }
 
     suspend fun <T> authorized(block: suspend (String) -> T): T {

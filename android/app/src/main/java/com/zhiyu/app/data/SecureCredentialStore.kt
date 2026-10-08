@@ -21,6 +21,7 @@ class SecureCredentialStore(
     storageName: String = "zhiyu_credentials",
     private val alias: String = "zhiyu_credentials_aes_v1",
 ) : CredentialStore {
+    companion object { private val storageLock = Any() }
     private val prefs = context.getSharedPreferences(storageName, Context.MODE_PRIVATE)
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -48,20 +49,20 @@ class SecureCredentialStore(
         val ciphertext = cipher.doFinal(json.toString().toByteArray(Charsets.UTF_8))
         return Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(ciphertext, Base64.NO_WRAP)
     }
-    @Synchronized override fun read(): SavedConnection? {
-        val encoded = prefs.getString("encrypted", null) ?: return null
+    override fun read(): SavedConnection? = synchronized(storageLock) {
+        val encoded = prefs.getString("encrypted", null) ?: return@synchronized null
         try {
             val json = decode(encoded, alias)
             val session = json.optJSONObject("session")?.let {
                 AuthSession(it.getString("token"), it.getString("provider_id"), it.getString("model"), it.getLong("expires_at"))
             }
-            return SavedConnection(json.getString("server_url"), json.getString("provider_id"), json.getString("api_key"), json.getString("model"), session)
+            SavedConnection(json.getString("server_url"), json.getString("provider_id"), json.getString("api_key"), json.getString("model"), session)
         } catch (_: Exception) {
             clear()
             throw IllegalStateException("本机加密连接信息无法读取，已清除，请重新输入 API Key")
         }
     }
-    @Synchronized override fun write(connection: SavedConnection) {
+    override fun write(connection: SavedConnection) = synchronized(storageLock) {
         val json = JSONObject().put("server_url", connection.serverUrl).put("provider_id", connection.providerId)
             .put("api_key", connection.apiKey).put("model", connection.model)
         connection.session?.let {
@@ -70,9 +71,9 @@ class SecureCredentialStore(
         }
         check(prefs.edit().putString("encrypted", encode(json, alias)).commit()) { "无法保存本机加密连接信息" }
     }
-    @Synchronized override fun readBinding(): CompanionBinding? {
-        val encoded = prefs.getString("companion_binding", null) ?: return null
-        return try {
+    override fun readBinding(): CompanionBinding? = synchronized(storageLock) {
+        val encoded = prefs.getString("companion_binding", null) ?: return@synchronized null
+        try {
             val json = decode(encoded, "$alias:companion")
             CompanionBinding(json.getString("provider_id"), json.getString("model"), json.optJSONObject("profile")?.profile(), json.optBoolean("profile_configured", false)).also {
                 require(it.providerId.isNotBlank() && it.model.isNotBlank())
@@ -81,7 +82,7 @@ class SecureCredentialStore(
             throw IllegalStateException("本机 AI 绑定信息无法验证，不能重新选择 AI")
         }
     }
-    @Synchronized override fun writeBinding(binding: CompanionBinding) {
+    override fun writeBinding(binding: CompanionBinding) = synchronized(storageLock) {
         require(binding.providerId.isNotBlank() && binding.model.isNotBlank())
         val existing = readBinding()
         val sameAi = existing?.providerId == binding.providerId && existing.model == binding.model
@@ -93,7 +94,10 @@ class SecureCredentialStore(
             .put("profile", binding.profile?.json() ?: JSONObject.NULL).put("profile_configured", binding.profileConfigured)
         check(prefs.edit().putString("companion_binding", encode(json, "$alias:companion")).commit()) { "无法保存 AI 绑定信息" }
     }
-    @Synchronized override fun clear() {
+    override fun clear() = synchronized(storageLock) {
         check(prefs.edit().remove("encrypted").commit()) { "无法清除本机连接信息" }
+    }
+    override fun compareAndWrite(expected: SavedConnection?, updated: SavedConnection): Boolean = synchronized(storageLock) {
+        if (read() != expected) false else { write(updated); true }
     }
 }

@@ -9,7 +9,8 @@ data class Conversation(
     val createdAt: String, val updatedAt: String, val profile: CompanionProfile? = null,
 )
 data class Source(val documentId: String, val name: String, val text: String, val score: Double)
-data class Message(val id: String, val role: String, val content: String, val sources: List<Source>, val createdAt: String)
+data class Message(val id: String, val role: String, val content: String, val sources: List<Source>, val createdAt: String,
+    val mediaAttachments: List<MediaAttachment> = emptyList(), val origin: String = "reply")
 data class MessagePage(val messages: List<Message>, val hasMore: Boolean, val nextBefore: String?)
 data class Document(val id: String, val name: String, val size: Long, val chunks: Int, val createdAt: String)
 data class UploadedFile(val name: String, val bytes: ByteArray)
@@ -27,12 +28,15 @@ data class SavedConnection(
 ) {
     override fun toString() = "SavedConnection(serverUrl=$serverUrl, providerId=$providerId, model=$model)"
 }
-class ApiFailure(val status: Int, message: String) : Exception(message)
+class ApiFailure(val status: Int, message: String, val errorCode: String? = null) : Exception(message)
 
 interface CredentialStore {
     fun read(): SavedConnection?
     fun write(connection: SavedConnection)
     fun clear()
+    fun compareAndWrite(expected: SavedConnection?, updated: SavedConnection): Boolean = synchronized(this) {
+        if (read() != expected) false else { write(updated); true }
+    }
     fun readBinding(): CompanionBinding?
     fun writeBinding(binding: CompanionBinding)
 }

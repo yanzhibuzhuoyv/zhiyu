@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -8,6 +9,7 @@ from .body_codec import decode_body, encode_body
 from .body_migration import DEFAULT_BATCH_BYTES, DEFAULT_BATCH_ROWS, migrate_batch, validate_batch
 from .body_reads import decoded_turn
 from .companion import check_profile_change, decode_profile, encode_profile, normalize_profile
+from .media_codec import decode_attachments, encode_attachments, validate_attachments
 from .memory_annotations import AnnotationsStore
 from .memory_cold import ColdIndex
 from .memory_index import MemoryIndex
@@ -57,6 +59,8 @@ class ChatDatabase:
                     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
                     role TEXT NOT NULL CHECK(role IN ('user','assistant')),
                     content TEXT NOT NULL, sources TEXT NOT NULL DEFAULT '[]',
+                    media_attachments TEXT NOT NULL DEFAULT '[]',
+                    origin TEXT NOT NULL DEFAULT 'reply' CHECK(origin IN ('reply','proactive')),
                     created_at TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_messages_conversation
@@ -66,6 +70,11 @@ class ChatDatabase:
             columns = {row["name"] for row in db.execute("PRAGMA table_info(conversations)")}
             if "companion_profile" not in columns:
                 db.execute("ALTER TABLE conversations ADD COLUMN companion_profile TEXT")
+            message_columns = {row["name"] for row in db.execute("PRAGMA table_info(messages)")}
+            if "media_attachments" not in message_columns:
+                db.execute("ALTER TABLE messages ADD COLUMN media_attachments TEXT NOT NULL DEFAULT '[]'")
+            if "origin" not in message_columns:
+                db.execute("ALTER TABLE messages ADD COLUMN origin TEXT NOT NULL DEFAULT 'reply' CHECK(origin IN ('reply','proactive'))")
             self.memory.initialize(db)
             self.annotations.initialize(db)
             self.cold.initialize(db)
@@ -176,11 +185,53 @@ class ChatDatabase:
                 WHERE c.owner=? AND c.id=? ORDER BY m.sequence""", (owner, identifier)).fetchall()
         return [self._message(row) for row in rows]
 
+    def get_message(self, owner: str, identifier: str, message_id: str):
+        with self.connection() as db:
+            row = db.execute("""SELECT m.* FROM messages m JOIN conversations c ON c.id=m.conversation_id
+                WHERE c.owner=? AND c.id=? AND m.id=?""", (owner, identifier, message_id)).fetchone()
+        return self._message(row) if row is not None else None
+
     @staticmethod
     def _message(row):
         return {k: (decode_sources(row[k]) if k == "sources" else
-                    decode_body(row[k]) if k == "content" else row[k])
+                    decode_body(row[k]) if k == "content" else
+                    decode_attachments(row[k]) if k == "media_attachments" else row[k])
                 for k in row.keys() if k not in {"sequence", "conversation_id"}}
+
+    def recent_messages(self, owner: str, identifier: str, limit: int = 40, char_limit: int = 48000):
+        if type(limit) is not int or not 1 <= limit <= 100 or type(char_limit) is not int or not 1 <= char_limit <= 96000:
+            raise ValueError("近期消息读取上限无效")
+        with self.connection() as db:
+            rows = db.execute("""SELECT m.* FROM messages m JOIN conversations c ON c.id=m.conversation_id
+                WHERE c.owner=? AND c.id=? ORDER BY m.sequence DESC LIMIT ?""", (owner, identifier, limit)).fetchall()
+        selected, remaining, position = [], char_limit, 0
+        while position < len(rows):
+            row = rows[position]
+            group = [self._message(row)]
+            if row["role"] == "assistant" and row["origin"] == "reply" and position + 1 < len(rows) and rows[position + 1]["role"] == "user":
+                group.append(self._message(rows[position + 1]))
+            length = sum(len(message["content"]) for message in group)
+            if length > remaining:
+                break
+            selected.extend(group)
+            remaining -= length
+            position += len(group)
+        if selected and selected[-1]["role"] == "assistant" and selected[-1]["origin"] == "reply":
+            # A boundary can cut an earlier pair; do not exclude its user from old-RAG then omit it.
+            selected.pop()
+        return list(reversed(selected))
+
+    def message_position(self, owner: str, identifier: str):
+        with self.connection() as db:
+            row = db.execute("""SELECT m.sequence FROM messages m JOIN conversations c ON c.id=m.conversation_id
+                WHERE c.owner=? AND c.id=? ORDER BY m.sequence DESC LIMIT 1""", (owner, identifier)).fetchone()
+        return row[0] if row else 0
+
+    def assistant_message_count(self, owner: str, identifier: str):
+        with self.connection() as db:
+            row = db.execute("""SELECT count(*) FROM messages m JOIN conversations c ON c.id=m.conversation_id
+                WHERE c.owner=? AND c.id=? AND m.role='assistant'""", (owner, identifier)).fetchone()
+        return row[0]
 
     def history_page(self, owner: str, identifier: str, limit: int, before: str | None):
         with self.connection() as db:
@@ -263,19 +314,19 @@ class ChatDatabase:
                 GROUP BY a.kind,a.subject,a.topic_key ORDER BY max(a.message_sequence) DESC LIMIT 64""",
                                                    parameters)]
 
-    def save_turn(self, owner: str, identifier: str, content: str, answer: str, sources: list, *, recognition=None, deferred_recognition=None):
+    def save_turn(self, owner: str, identifier: str, content: str, answer: str, sources: list, *, recognition=None, deferred_recognition=None, media_attachments=None):
         if deferred_recognition and (recognition is not None or not self.auto_annotations or self.annotation_mode != "semantic"):
             raise ValueError("后台识别配置冲突")
-        user = {"id": uuid4().hex, "role": "user", "content": content, "sources": [], "created_at": timestamp()}
-        assistant = {"id": uuid4().hex, "role": "assistant", "content": answer, "sources": sources, "created_at": timestamp()}
+        user = {"id": uuid4().hex, "role": "user", "content": content, "sources": [], "media_attachments": [], "origin": "reply", "created_at": timestamp()}
+        assistant = {"id": uuid4().hex, "role": "assistant", "content": answer, "sources": sources, "media_attachments": validate_attachments(media_attachments), "origin": "reply", "created_at": timestamp()}
         with transaction(self, write=True) as db:
             row = db.execute("SELECT title FROM conversations WHERE id=? AND owner=?", (identifier, owner)).fetchone()
             if row is None:
                 raise ValueError("会话不存在")
             sequences = []
             for message in (user, assistant):
-                cursor = db.execute("INSERT INTO messages (id,conversation_id,role,content,sources,created_at) VALUES (?,?,?,?,?,?)",
-                                    (message["id"], identifier, message["role"], encode_body(message["content"]), encode_sources(message["sources"]), message["created_at"]))
+                cursor = db.execute("INSERT INTO messages (id,conversation_id,role,content,sources,media_attachments,origin,created_at) VALUES (?,?,?,?,?,?,?,?)",
+                                    (message["id"], identifier, message["role"], encode_body(message["content"]), encode_sources(message["sources"]), encode_attachments(message["media_attachments"]), message["origin"], message["created_at"]))
                 self.memory.index_message(db, cursor.lastrowid, identifier, message["content"])
                 sequences.append(cursor.lastrowid)
                 annotations = self._record_recognition(db, message, cursor.lastrowid, recognition, pending=deferred_recognition is not None)
@@ -287,6 +338,31 @@ class ChatDatabase:
             db.execute("UPDATE conversations SET title=?,updated_at=? WHERE id=? AND owner=?",
                        (title, assistant["created_at"], identifier, owner))
         return {"user_message": user, "assistant_message": assistant}
+
+    def save_assistant(self, owner: str, identifier: str, answer: str, *, origin="proactive", message_id=None, media_attachments=None):
+        if origin not in {"reply", "proactive"} or not isinstance(answer, str) or not 1 <= len(answer.strip()) <= 16000:
+            raise ValueError("主动消息内容或来源无效")
+        message_id = message_id or uuid4().hex
+        if not isinstance(message_id, str) or not re.fullmatch(r"[a-f0-9]{32}", message_id):
+            raise ValueError("主动消息编号无效")
+        message = {"id": message_id, "role": "assistant", "content": answer, "sources": [],
+                   "media_attachments": validate_attachments(media_attachments), "origin": origin, "created_at": timestamp()}
+        with transaction(self, write=True) as db:
+            if db.execute("SELECT 1 FROM conversations WHERE id=? AND owner=?", (identifier, owner)).fetchone() is None:
+                raise ValueError("会话不存在")
+            existing = db.execute("SELECT * FROM messages WHERE id=?", (message_id,)).fetchone()
+            if existing:
+                if existing["conversation_id"] != identifier or existing["role"] != "assistant" or existing["origin"] != origin:
+                    raise ValueError("主动消息编号已用于其他消息")
+                return self._message(existing)
+            cursor = db.execute("INSERT INTO messages (id,conversation_id,role,content,sources,media_attachments,origin,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                                (message_id, identifier, "assistant", encode_body(answer), encode_sources([]),
+                                 encode_attachments(message["media_attachments"]), origin, message["created_at"]))
+            self.memory.index_message(db, cursor.lastrowid, identifier, answer)
+            # A standalone assistant statement never becomes a user fact or synthetic user turn.
+            db.execute("INSERT INTO memory_recognition VALUES(?,?,?,?)", (cursor.lastrowid, self.annotation_mode, "disabled", "none"))
+            db.execute("UPDATE conversations SET updated_at=? WHERE id=? AND owner=?", (message["created_at"], identifier, owner))
+        return message
 
     def _record_recognition(self, db, message, sequence, recognition, *, pending=False):
         status, version = "disabled", "none"

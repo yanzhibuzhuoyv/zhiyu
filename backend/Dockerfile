@@ -1,10 +1,10 @@
 ARG PYTHON_IMAGE=python:3.13-slim
 FROM ${PYTHON_IMAGE} AS base
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ZHIYU_DATA_DIR=/data
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ZHIYU_DATA_DIR=/data ZHIYU_MEDIA_DIR=/media
 WORKDIR /srv
 COPY requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
-RUN useradd --uid 10001 --create-home zhiyu && mkdir /data && chown zhiyu:zhiyu /data
+RUN useradd --uid 10001 --create-home zhiyu && mkdir /data /media && chown zhiyu:zhiyu /data /media
 
 FROM base AS test
 COPY requirements-test.lock ./
@@ -13,7 +13,7 @@ WORKDIR /workspace/backend
 COPY app ./app
 COPY tests ./tests
 COPY pyproject.toml ./
-ENV ZHIYU_DATA_DIR=/tmp/zhiyu-test-data
+ENV ZHIYU_DATA_DIR=/tmp/zhiyu-test-data ZHIYU_MEDIA_DIR=/tmp/zhiyu-test-media
 USER zhiyu
 CMD ["python", "-m", "pytest", "-p", "no:cacheprovider", "--cov=app", "--cov-report=term-missing", "--cov-fail-under=80"]
 

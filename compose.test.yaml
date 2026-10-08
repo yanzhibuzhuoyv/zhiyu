@@ -10,12 +10,14 @@ services:
     ports:
       - "127.0.0.1:8791:8790"
     environment:
+      ZHIYU_MEDIA_DIR: /media
       ZHIYU_DEMO: "${ZHIYU_DOCKER_TEST_DEMO:-false}"
       ZHIYU_SESSION_HOURS: "24"
       ZHIYU_AUTO_MEMORY_ANNOTATIONS: "${ZHIYU_AUTO_MEMORY_ANNOTATIONS:-true}"
       ZHIYU_MEMORY_ANNOTATION_MODE: "${ZHIYU_MEMORY_ANNOTATION_MODE:-semantic}"
     volumes:
       - test-data:/data
+      - test-media:/media
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 128
@@ -43,3 +45,4 @@ services:
       COVERAGE_FILE: /tmp/.coverage
 volumes:
   test-data:
+  test-media:

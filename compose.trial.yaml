@@ -10,12 +10,14 @@ services:
     ports:
       - "127.0.0.1:8798:8790"
     environment:
+      ZHIYU_MEDIA_DIR: /media
       ZHIYU_DEMO: "false"
       ZHIYU_SESSION_HOURS: "24"
       ZHIYU_AUTO_MEMORY_ANNOTATIONS: "true"
       ZHIYU_MEMORY_ANNOTATION_MODE: "semantic"
     volumes:
       - trial-data:/data
+      - trial-media:/media
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 128
@@ -24,3 +26,4 @@ services:
       - /tmp:size=64m,mode=1777
 volumes:
   trial-data:
+  trial-media:
