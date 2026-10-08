@@ -2,6 +2,7 @@ name: zhiyu-docker-test
 services:
   backend:
     image: zhiyu-backend:docker-test
+    restart: unless-stopped
     build:
       context: ./backend
       target: runtime

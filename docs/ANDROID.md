@@ -17,13 +17,17 @@
 
 ## 连接与部署
 
-0.1.2调试APK默认`http://127.0.0.1:8791`，通过ADB反向端口转发访问电脑Docker测试服务。手机无需与电脑同一Wi-Fi，也无需用户填后端地址。先启动Docker及`zhiyu-docker-test-backend-1`，解锁手机、开启USB调试并允许电脑授权，然后在项目根目录执行：
+0.1.3调试APK默认`http://127.0.0.1:8791`，通过ADB反向端口转发访问电脑Docker测试服务。手机无需与电脑同一Wi-Fi，也无需用户填后端地址。先启动Docker及`zhiyu-docker-test-backend-1`，解锁手机、开启USB调试并允许电脑授权，然后在项目根目录执行：
 
 ```powershell
-.\scripts\Start-AndroidUsbDebug.ps1 -ApkPath .\artifacts\ZhiYu-0.1.2-usb-debug.apk -RestartApp
+.\scripts\Start-AndroidUsbDebug.ps1 -ApkPath .\artifacts\ZhiYu-0.1.3-media-debug.apk
 ```
 
 多台手机时加`-Serial 手机序列号`；只恢复连接时省略`-ApkPath`。覆盖安装使用`adb install -r`，保留数据。USB重新插拔、ADB重启或电脑重启后需重新运行脚本；这是本地调试方式，拔线后不能继续访问电脑后端。模拟器可使用`adb -s emulator-5554 reverse tcp:8791 tcp:8791`，或明确以`-PzhiyuBackendUrl=http://10.0.2.2:8791`构建模拟器专用包。
+
+公司列表加载前出现“无法连接后端”，先核验电脑 `http://127.0.0.1:8791/health` 和该手机的 `adb reverse --list`。这一阶段还没有验证 API Key，换 Key 不能修复服务不可达。普通 `Start-Backend.ps1` 默认端口为 8790；用于这份 APK 的本机调试时需显式 `-Port 8791`，或使用上述 Docker 服务。后端恢复后会用设备已保存的 Key 正常重验过期会话；原 `identity.secret` 与数据卷必须一起保留。
+
+2026-10-08 已在红米 Turbo 3 覆盖升级到 0.1.3，原连接与绑定密文逐字节保留。恢复原 Docker 数据卷并接回 USB 后，实际请求为原会话 401、真实 `/api/auth/login` 200、原会话及历史 200，手机进入 DeepSeek 聊天和 OC 页面；没有手工写 Key 或切换演示账户。原手机后端已接入 6 张首批照片和 18 张 QQ 风格本机试用表情，旧 Fluent 8 张退出新候选但保留历史附件。详情见 [登录验证](LOGIN_VALIDATION.md)。
 
 仅USB debug配置自动将已保存的旧默认`http://10.0.2.2:8791`改成同端口USB入口；Key、会话及完整恋人绑定保留。自定义地址与release不迁移。debug“开发设置”仍可手动改为可达的局域网地址，手动改址清Key并回验证页、保留绑定；局域网方式需要另行配置后端监听和可信网络。
 

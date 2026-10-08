@@ -2,6 +2,12 @@
 
 后端运行在 Linux 容器中，默认中文 BM25。Android App 是原生 APK，Docker 负责运行和验证后端。
 
+## 2026-10-08：0.1.3 真机登录与媒体后端
+
+当前原手机后端镜像为 `sha256:11589af0ea1c37614a06a326d3d41d108a8fb0e6134f6f8fc19cee11fef63e40`，原 `zhiyu-docker-test_test-data` 与身份文件保持，新独立 `test-media` 卷承载图库。实际健康、真实 Key 重新验证和手机原会话恢复通过，见 [登录验证](LOGIN_VALIDATION.md)。下方镜像/服务记录是历史。
+
+本轮首次构建在 `/media` 已存在时失败，Dockerfile 已改用 `mkdir -p /data /media`；真实 red/green 构建与 UID 10001 的目录使用验证已完成。测试后端使用 `restart: unless-stopped`，并对当前容器原位更新该策略，未打断正在使用的聊天。它在 Docker 正常运行时处理容器退出/引擎重启，不能启动已关闭或自身故障的 Docker Desktop，也不恢复拔线丢失的 ADB 映射；本轮没有为验证策略而重启用户正在使用的引擎。[Docker 官方说明](https://docs.docker.com/engine/containers/start-containers-automatically/)
+
 ## 2026-10-07 10:10：后台记忆第一版
 
 本机8791运行 `sha256:2ab853fb3244d3ceb7f604d9a7cdfbb09cd2df343215d79f7846454712c071ad`，容器 `zhiyu-docker-test-backend-1` healthy，`/health` 为 ok / 0.1.1 / bm25。当前自动标注 mode=semantic、演示开启；聊天先保存完整双方原文和待处理任务并返回 pending，后台随后处理。demo 没有语义模型，最终 metadata 为 unavailable，没有冒充识别成功。

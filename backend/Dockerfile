@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ZHIYU_DATA_DIR=/data ZHIYU_MEDI
 WORKDIR /srv
 COPY requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
-RUN useradd --uid 10001 --create-home zhiyu && mkdir /data /media && chown zhiyu:zhiyu /data /media
+RUN useradd --uid 10001 --create-home zhiyu && mkdir -p /data /media && chown zhiyu:zhiyu /data /media
 
 FROM base AS test
 COPY requirements-test.lock ./
