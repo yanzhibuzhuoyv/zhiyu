@@ -1,0 +1,192 @@
+diff --git a/include/stable-diffusion.h b/include/stable-diffusion.h
+index c21f765..5fb8032 100644
+--- a/include/stable-diffusion.h
++++ b/include/stable-diffusion.h
+@@ -26,6 +26,7 @@ extern "C" {
+ #include <stdbool.h>
+ #include <stddef.h>
+ #include <stdint.h>
++#include "qwen_edge_external_condition.h"
+ #include <string.h>
+ 
+ enum rng_type_t {
+@@ -251,6 +252,7 @@ typedef struct {
+     const char* tokenizer;           // tokenizer.json path or main=FILE,clip-l=FILE,clip-g=FILE assignments; required for PiD and Lens
+     bool sage_attn;
+     int conditioning_cache_size;  // Maximum cached conditioning entries per context; 0 disables caching (default: 4)
++    bool qwen_edge_external_condition;  // Zhiyu fork: text-only Qwen2.1 Turbo, no built-in text encoder.
+ } sd_ctx_params_t;
+ 
+ typedef struct {
+@@ -420,6 +422,7 @@ typedef struct {
+     bool circular_x;
+     bool circular_y;
+     sd_image_preprocess_params_t image_preprocess;
++    const qwen_edge_external_condition_t* external_condition;  // Borrowed for synchronous generate_image().
+ } sd_img_gen_params_t;
+ 
+ typedef struct {
+diff --git a/src/pipeline/diffusion_engine.cpp b/src/pipeline/diffusion_engine.cpp
+index 6400b24..d0fd9a8 100644
+--- a/src/pipeline/diffusion_engine.cpp
++++ b/src/pipeline/diffusion_engine.cpp
+@@ -723,6 +723,17 @@ bool StableDiffusionGGML::init_model_loader(ModelLoader& model_loader, ModelConf
+     const auto* sd_ctx_params = &configuration.params;
+     auto& use_tae             = configuration.use_tae;
+     auto& use_audio_vae       = configuration.use_audio_vae;
++    if (sd_ctx_params->qwen_edge_external_condition &&
++        (strlen(SAFE_STR(sd_ctx_params->model_path)) > 0 ||
++         strlen(SAFE_STR(sd_ctx_params->llm_path)) > 0 ||
++         strlen(SAFE_STR(sd_ctx_params->llm_vision_path)) > 0 ||
++         strlen(SAFE_STR(sd_ctx_params->clip_l_path)) > 0 ||
++         strlen(SAFE_STR(sd_ctx_params->clip_g_path)) > 0 ||
++         strlen(SAFE_STR(sd_ctx_params->t5xxl_path)) > 0 ||
++         strlen(SAFE_STR(sd_ctx_params->diffusion_model_path)) == 0)) {
++        LOG_ERROR("Qwen Edge requires a standalone diffusion model and external conditions, without text encoder paths");
++        return false;
++    }
+     if (strlen(SAFE_STR(sd_ctx_params->model_path)) > 0) {
+         LOG_INFO("loading model from '%s'", sd_ctx_params->model_path);
+         if (!model_loader.init_from_file(sd_ctx_params->model_path)) {
+@@ -1125,6 +1136,10 @@ bool StableDiffusionGGML::build_core_runners() {
+            register_runner_params(ModelComponent::AudioEncoder, audio_encoder, SDBackendModule::AUDIO_ENCODER);
+ }
+ 
++bool StableDiffusionGGML::uses_qwen_edge_external_condition() const {
++    return config_->params.qwen_edge_external_condition;
++}
++
+ bool StableDiffusionGGML::build_vae_runners() {
+     sd::model_builders::VAEOptions options;
+     options.use_tae                 = uses_tae();
+diff --git a/src/pipeline/diffusion_engine.h b/src/pipeline/diffusion_engine.h
+index d1a8866..5ab98cc 100644
+--- a/src/pipeline/diffusion_engine.h
++++ b/src/pipeline/diffusion_engine.h
+@@ -318,6 +318,7 @@ public:
+     bool set_sage_attention_enabled(bool enabled);
+ 
+     bool uses_tae() const;
++    bool uses_qwen_edge_external_condition() const;
+ 
+     bool tae_preview_only() const;
+ 
+diff --git a/src/pipeline/image.cpp b/src/pipeline/image.cpp
+index d3d25c8..67ff043 100644
+--- a/src/pipeline/image.cpp
++++ b/src/pipeline/image.cpp
+@@ -1,4 +1,5 @@
+ #include "generation.h"
++#include "conditioning/qwen_edge_condition.hpp"
+ 
+ #include <algorithm>
+ #include <cmath>
+@@ -425,6 +426,21 @@ namespace sd::pipeline {
+                                                                                 const RefImageParams& ref_image_params) {
+         ConditionerRunnerEndOnExit conditioner_runner_end{sd->cond_stage_model.get()};
+ 
++        if (sd->uses_qwen_edge_external_condition()) {
++            try {
++                auto condition = zhiyu::qwen_edge::copy_condition(
++                    *sd_img_gen_params->external_condition,
++                    [](void* context) { return static_cast<StableDiffusionGGML*>(context)->get_cancel_flag() != SD_CANCEL_RESET; }, sd);
++                ImageGenerationEmbeds embeds;
++                embeds.cond.c_crossattn = sd::Tensor<float>({4096, condition.tokens}, std::move(condition.values));
++                embeds.cond.c_token_types = sd::Tensor<int32_t>::zeros({condition.tokens});
++                return embeds;
++            } catch (const std::exception& error) {
++                LOG_ERROR("Qwen Edge condition rejected: %s", error.what());
++                return std::nullopt;
++            }
++        }
++
+         ConditionerParams condition_params;
+         condition_params.text      = request->prompt;
+         condition_params.clip_skip = request->clip_skip;
+@@ -802,6 +818,37 @@ namespace sd::pipeline {
+ 
+         sd->reset_cancel_flag();
+ 
++        const bool uses_external = sd->uses_qwen_edge_external_condition();
++        if (uses_external != (sd_img_gen_params->external_condition != nullptr)) {
++            LOG_ERROR("Qwen Edge context/request condition mode mismatch");
++            return false;
++        }
++        if (uses_external) {
++            try {
++                zhiyu::qwen_edge::validate_shape(*sd_img_gen_params->external_condition);
++                zhiyu::qwen_edge::validate_turbo_sigmas(sd_img_gen_params->sample_params.custom_sigmas,
++                    sd_img_gen_params->sample_params.custom_sigmas_count);
++                if (sd->version != VERSION_QWEN_IMAGE_2_1 ||
++                    sd_img_gen_params->sample_params.guidance.txt_cfg != 1.f ||
++                    sd_img_gen_params->sample_params.sample_method != EULER_SAMPLE_METHOD ||
++                    sd_img_gen_params->sample_params.sample_steps != 8 ||
++                    sd_img_gen_params->batch_count != 1 ||
++                    sd_img_gen_params->width < 32 || sd_img_gen_params->height < 32 ||
++                    sd_img_gen_params->width > 512 || sd_img_gen_params->height > 512 ||
++                    sd_img_gen_params->width % 32 != 0 || sd_img_gen_params->height % 32 != 0 ||
++                    sd_img_gen_params->init_image.data != nullptr || sd_img_gen_params->ref_images_count != 0 ||
++                    sd_img_gen_params->control_image.data != nullptr || sd_img_gen_params->ip_adapter_image.data != nullptr ||
++                    sd_img_gen_params->hires.enabled || sd_img_gen_params->lora_count != 0 ||
++                    sd_img_gen_params->pm_params.id_images_count != 0 ||
++                    (sd_img_gen_params->pulid_params.id_embedding_path != nullptr && sd_img_gen_params->pulid_params.id_embedding_path[0] != '\0')) {
++                    throw std::invalid_argument("Qwen Edge prototype supports only single 32..512px text-only Turbo Euler8/CFG1 images");
++                }
++            } catch (const std::exception& error) {
++                LOG_ERROR("Qwen Edge generation rejected: %s", error.what());
++                return false;
++            }
++        }
++
+         int64_t t0            = ggml_time_ms();
+         sd->vae_tiling_params = sd_img_gen_params->vae_tiling_params;
+         GenerationRequest request(sd, sd_img_gen_params);
+diff --git a/src/pipeline/model_builders.cpp b/src/pipeline/model_builders.cpp
+index 87cdf40..a88a163 100644
+--- a/src/pipeline/model_builders.cpp
++++ b/src/pipeline/model_builders.cpp
+@@ -52,6 +52,15 @@
+ 
+ namespace sd::model_builders {
+ 
++    struct QwenEdgeExternalConditioner final : Conditioner {
++        SDCondition get_learned_condition(int, const ConditionerParams&) override {
++            LOG_ERROR("Qwen Edge requires externally supplied student conditions");
++            return {};
++        }
++        void get_param_tensors(std::map<std::string, ggml_tensor*>&) override {}
++        void set_flash_attention_enabled(bool) override {}
++    };
++
+     static bool ensure_backend_pair(SDBackendManager& backends, SDBackendModule module) {
+         if (backends.runtime_backend(module) == nullptr) {
+             LOG_ERROR("failed to initialize %s backend", sd_backend_module_name(module));
+@@ -86,6 +95,10 @@ namespace sd::model_builders {
+         const auto version             = ctx.version;
+         const auto& weight_manager     = ctx.weight_manager;
+         CoreRunners result;
++        if (sd_ctx_params->qwen_edge_external_condition && version != VERSION_QWEN_IMAGE_2_1) {
++            LOG_ERROR("Qwen Edge external conditions require Qwen Image 2.1");
++            return false;
++        }
+         TokenizerConfig tokenizers(sd_ctx_params->tokenizer);
+         if (!ensure_backend_pair(ctx.backends, SDBackendModule::TE) ||
+             !ensure_backend_pair(ctx.backends, SDBackendModule::DIFFUSION)) {
+@@ -285,6 +298,9 @@ namespace sd::model_builders {
+                                                                                   sd_ctx_params->model_args);
+         } else if (sd_version_is_qwen_image(version)) {
+             bool enable_vision = version != VERSION_QWEN_IMAGE_LAYERED;
++            if (sd_ctx_params->qwen_edge_external_condition) {
++                result.conditioner = std::make_shared<QwenEdgeExternalConditioner>();
++            } else {
+             result.conditioner = std::make_shared<LLMEmbedder>(ctx.backends.runtime_backend(SDBackendModule::TE),
+                                                                tensor_storage_map,
+                                                                version,
+@@ -292,6 +308,7 @@ namespace sd::model_builders {
+                                                                enable_vision,
+                                                                weight_manager,
+                                                                tokenizers);
++            }
+             if (version == VERSION_QWEN_IMAGE_2_1) {
+                 result.diffusion = std::make_shared<Qwen::QwenImage21Runner>(ctx.backends.runtime_backend(SDBackendModule::DIFFUSION),
+                                                                              tensor_storage_map,
