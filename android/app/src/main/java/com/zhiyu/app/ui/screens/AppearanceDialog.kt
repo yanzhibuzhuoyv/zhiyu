@@ -2,6 +2,7 @@ package com.zhiyu.app.ui.screens
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,6 +24,7 @@ import androidx.compose.ui.window.Dialog
 import com.zhiyu.app.domain.AppearanceSelection
 import com.zhiyu.app.domain.AppearanceTarget
 import com.zhiyu.app.ui.AppearanceImages
+import com.zhiyu.app.ui.theme.WatercolorBouquet
 
 @Composable
 fun AppearanceDialog(
@@ -62,7 +64,7 @@ private fun AppearanceChoice(target: AppearanceTarget, image: Bitmap?, selected:
             if (target == AppearanceTarget.BACKGROUND) {
                 Surface(modifier = Modifier.size(width = 74.dp, height = 52.dp), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer) {
                     if (image != null) Image(image.asImageBitmap(), "聊天背景预览", contentScale = ContentScale.Crop)
-                    else Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Image, null) }
+                    else WatercolorBouquet(Modifier.padding(3.dp))
                 }
             } else AvatarImage(image, target.label, Modifier.size(52.dp))
             Column {
@@ -79,8 +81,12 @@ private fun AppearanceChoice(target: AppearanceTarget, image: Bitmap?, selected:
 
 @Composable
 fun AvatarImage(image: Bitmap?, description: String, modifier: Modifier = Modifier) {
-    Surface(modifier = modifier.clip(CircleShape), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+    Surface(modifier = modifier.clip(CircleShape), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))) {
         if (image != null) Image(image.asImageBitmap(), description, contentScale = ContentScale.Crop)
-        else Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.PersonOutline, description, Modifier.padding(7.dp)) }
+        else Box(contentAlignment = Alignment.Center) {
+            WatercolorBouquet(Modifier.matchParentSize(), alpha = 0.16f)
+            Icon(Icons.Outlined.PersonOutline, description, Modifier.padding(7.dp), tint = MaterialTheme.colorScheme.secondary)
+        }
     }
 }

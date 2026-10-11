@@ -9,6 +9,76 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SessionCoordinatorTest {
+    @Test fun providerAuthFailureDoesNotRefreshTheBackendSessionOrReplayTheRequest() = runTest {
+        val auth = FakeAuth()
+        val store = MemoryStore()
+        val manager = SessionCoordinator(store, auth) { 1000 }
+        manager.login("https://host", "deepseek", "key", "model")
+        val before = store.value
+        var calls = 0
+        try {
+            manager.authorized<Unit> { calls++; throw ApiFailure(401, "服务商 Key 无效", "provider_auth_failed") }
+            fail("Expected provider rejection")
+        } catch (error: ApiFailure) { assertEquals("provider_auth_failed", error.errorCode) }
+        assertEquals(1, calls)
+        assertEquals(1, auth.count)
+        assertEquals(before, store.value)
+    }
+
+    @Test fun explicitlyExpiredBackendSessionRefreshesOnceAndRetriesTheOriginalRequest() = runTest {
+        val auth = FakeAuth()
+        val manager = SessionCoordinator(MemoryStore(), auth) { 1000 }
+        manager.login("https://host", "deepseek", "key", "model")
+        var calls = 0
+        val result = manager.authorized { token ->
+            calls++
+            if (token == "token-1") throw ApiFailure(401, "会话失效", "session_expired")
+            "ok"
+        }
+        assertEquals("ok", result)
+        assertEquals(2, calls)
+        assertEquals(2, auth.count)
+    }
+
+    @Test fun anotherClassifiedUnauthorizedResponseDoesNotTriggerAnUnrelatedSessionRefresh() = runTest {
+        val auth = FakeAuth()
+        val manager = SessionCoordinator(MemoryStore(), auth) { 1000 }
+        manager.login("https://host", "deepseek", "key", "model")
+        var calls = 0
+        try {
+            manager.authorized<Unit> { calls++; throw ApiFailure(401, "其他鉴权失败", "unrelated_auth_failure") }
+            fail("Expected original failure")
+        } catch (error: ApiFailure) { assertEquals("unrelated_auth_failure", error.errorCode) }
+        assertEquals(1, calls)
+        assertEquals(1, auth.count)
+    }
+
+    @Test fun authenticationFailureKeepsItsProviderClassificationAndStoredKey() = runTest {
+        val store = MemoryStore().apply { value = SavedConnection("https://host", "deepseek", "key", "model") }
+        val manager = SessionCoordinator(store, object : AuthService {
+            override suspend fun authenticate(connection: SavedConnection): AuthSession =
+                throw ApiFailure(401, "服务商拒绝了 Key", "provider_auth_failed")
+        }) { 1000 }
+        try { manager.token(); fail("Expected authentication failure") } catch (error: ApiFailure) {
+            assertEquals("provider_auth_failed", error.errorCode)
+            assertFalse(error.message!!.contains("会话已失效"))
+        }
+        assertEquals("key", store.value?.apiKey)
+        assertNull(store.value?.session)
+    }
+
+    @Test fun anOfflineKeyRefreshIsReportedAsAConnectionFailureWithoutMislabelingTheKey() = runTest {
+        val store = MemoryStore().apply { value = SavedConnection("https://host", "deepseek", "key", "model") }
+        val manager = SessionCoordinator(store, object : AuthService {
+            override suspend fun authenticate(connection: SavedConnection): AuthSession = throw ApiFailure(0, "无法连接后端")
+        }) { 1000 }
+        try { manager.token(); fail("Expected connection failure") } catch (error: ApiFailure) {
+            assertEquals(0, error.status)
+            assertEquals("无法连接后端", error.message)
+        }
+        assertEquals("key", store.value?.apiKey)
+    }
+
     private class MemoryStore : CredentialStore {
         var value: SavedConnection? = null
         var binding: CompanionBinding? = null

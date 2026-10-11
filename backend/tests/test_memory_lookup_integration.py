@@ -128,8 +128,10 @@ def test_incomplete_scan_reaches_normal_chat_prompt_and_response(setup, monkeypa
         "turns": [], "complete": False, "next_before": 17})
     response = client.post(f"/api/conversations/{cid}/messages", headers=headers, json={"content": "星河"})
     assert response.status_code == 200
-    assert response.json()["memory_search"] == {"complete": False, "next_cursor": 17}
-    assert "不能断言记忆不存在" in provider.calls[-1][0]["content"]
+    assert response.json()["memory_search"] == {"status": "partial", "complete": False, "next_cursor": 17}
+    system = provider.calls[-1][0]["content"]
+    assert '"state": "partial"' in system
+    assert "不能把未找到说成用户没讲过" in system
 
 
 def test_management_read_sql_failure_is_safe_503(setup, monkeypatch):

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from .assistant_memory import standalone_references
+from .memory_contract import RetrievalState, completed_state
 from .memory_ranking import RankedTurn, event_windows, rank_direct, select_memory
 from .memory_transaction import transaction
 from .vendor_rag.bm25 import _tokenize
@@ -82,8 +83,17 @@ def _references(item: RankedTurn) -> list[dict]:
 class MemoryContext:
     history: list
     references: list
-    complete: bool = True
+    status: RetrievalState = RetrievalState.NOT_SEARCHED
     next_cursor: int | None = None
+
+    def __post_init__(self):
+        if not isinstance(self.status, RetrievalState):
+            raise ValueError("invalid retrieval execution state")
+
+    @property
+    def complete(self) -> bool:
+        """Deprecated legacy projection: skipped lookup must never be True."""
+        return self.status == RetrievalState.OK
 
 
 def conversation_context_result(chat, owner: str, identifier: str, query: str, *, recent_messages=None) -> MemoryContext:
@@ -97,14 +107,14 @@ def conversation_context_result(chat, owner: str, identifier: str, query: str, *
         before = first[0] if first else chat.message_position(owner, identifier) + 1
     terms = memory_terms(query)
     if not before or not terms:
-        return MemoryContext(history, [])
+        return MemoryContext(history, [], RetrievalState.NOT_SEARCHED)
     result = chat.memory_lookup(
         owner, identifier, before, terms, CANDIDATE_TURNS, EXCERPT_CHARS
     )
     candidates = result["turns"]
     if not candidates:
         solo = standalone_references(chat, owner, identifier, before, terms)
-        return MemoryContext(history, solo["references"], result["complete"] and solo["complete"], result.get("next_before"))
+        return MemoryContext(history, solo["references"], completed_state(result["complete"], solo["complete"]), result.get("next_before"))
     now, scope = datetime.now(UTC), (owner, identifier)
     windows = event_windows(rank_direct(candidates, terms, now=now, scope=scope))
     event_result = chat.memory_events(owner, identifier, before, windows) if windows else {"turns": [], "complete": True}
@@ -115,7 +125,7 @@ def conversation_context_result(chat, owner: str, identifier: str, query: str, *
                                  max_chars=MEMORY_CHARS - sum(len(ref["text"]) for ref in refs))
     refs += solo["references"]
     assert sum(len(ref["text"]) for ref in refs) <= MEMORY_CHARS
-    return MemoryContext(history, refs, result["complete"] and event_result["complete"] and solo["complete"], result.get("next_before"))
+    return MemoryContext(history, refs, completed_state(result["complete"], event_result["complete"], solo["complete"]), result.get("next_before"))
 
 
 def conversation_context(chat, owner: str, identifier: str, query: str) -> tuple[list, list]:

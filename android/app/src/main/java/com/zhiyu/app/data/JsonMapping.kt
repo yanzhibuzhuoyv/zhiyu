@@ -38,3 +38,12 @@ internal fun JSONObject.auth(): AuthSession {
     }
     return AuthSession(getString("token"), getString("provider_id"), getString("model"), timestamp)
 }
+internal fun JSONObject.portraitPreview() = PortraitRules.check(PortraitPreview(
+    getString("id"), getString("original_id"), getString("subject_id"),
+    getString("original_url"), getString("subject_url"), getString("original_sha256"), getString("subject_sha256"),
+    getInt("original_width"), getInt("original_height"), getJSONArray("bbox").let { values ->
+        (0 until values.length()).map { values.getInt(it) }
+    }, getInt("expected_visual_version"), getString("method"), getBoolean("needs_confirmation"),
+    optString("coordinate_space", "original_pixels"), optInt("source_width", getInt("original_width")),
+    optInt("source_height", getInt("original_height")),
+))

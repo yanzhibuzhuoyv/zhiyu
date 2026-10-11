@@ -38,6 +38,14 @@ class VisualRepository(store: CredentialStore, private val allowHttp: Boolean, p
     suspend fun import(id: String, bytes: ByteArray) = coordinator.authorized { token ->
         JSONObject(api.upload(url(), path(id) + "/reference", token, "oc-reference", bytes)).visualProfile()
     }
+    suspend fun previewSubject(id: String, bytes: ByteArray) = coordinator.authorized { token ->
+        JSONObject(api.upload(url(), path(id) + "/subject/preview", token, "oc-reference", bytes)).portraitPreview()
+    }
+    suspend fun confirmSubject(id: String, previewId: String, choice: String): VisualProfile {
+        MediaRules.path(previewId)
+        require(choice in setOf("subject", "original")) { "请选择主体或原图" }
+        return request(path(id) + "/subject/confirm", "POST", JSONObject().put("preview_id", previewId).put("choice", choice)).visualProfile()
+    }
     suspend fun download(id: String, expectedSha: String? = null, template: Boolean = false): ByteArray = coordinator.authorized { token ->
         api.download(url(), if (template) MediaRules.templatePath(id) else MediaRules.path(id), token).also { bytes ->
             if (expectedSha != null) require(MessageDigest.getInstance("SHA-256").digest(bytes)

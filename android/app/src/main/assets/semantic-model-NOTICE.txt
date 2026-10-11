@@ -1,0 +1,34 @@
+知语中文离线语义索引 / Local Chinese semantic indexing
+Recorded: 2026-10-09
+
+Original model: BAAI/bge-small-zh-v1.5
+Publisher: Beijing Academy of Artificial Intelligence (BAAI)
+Repository: https://huggingface.co/BAAI/bge-small-zh-v1.5
+Pinned revision: 7999e1d3359715c523056ef9478215996d62a620
+Original model card: https://huggingface.co/BAAI/bge-small-zh-v1.5/blob/7999e1d3359715c523056ef9478215996d62a620/README.md
+The publisher's pinned model card declares the model license as MIT.
+Upstream implementation license: https://github.com/FlagOpen/FlagEmbedding/blob/master/LICENSE
+Redistributed MIT license text: semantic-model-MIT.txt
+
+Original safetensors size: 95827648 bytes
+Original safetensors SHA256: 354763b9b1357bc9c44f62c6be2276321081ed2567773608c0d0785b61d5a026
+This application uses a local derivative export, not an official BAAI INT8 release:
+Artifact: semantic/bge-small-zh-v1.5-int8.onnx
+Size: 24006596 bytes
+SHA256: a20c8811f4c52f72f31783c615b6a6ea2eaac6b8b52eea5a107e004f4cc632f7
+Derivation: local ONNX opset 17 export, CLS + L2 output;
+ONNX Runtime dynamic QInt8 per-channel quantization of constant-B MatMul and Gather.
+The source model, vocabulary and configuration are verified before export.
+The derivative is not represented as lossless or as trained by BAAI.
+
+Vocabulary SHA256: 45bbac6b341c319adc98a532532882e91a9cefc0329aa57bac9ae761c27b291c
+Config SHA256: 3853a7979202c348751b753e36f579c41d8da7d36af617d3d907e1fc9b441f2a
+Tokenizer config SHA256: e6f3b96db926a37d4039995fbf5ad17de158dfb8f6343d607e4dbaad18d75f5a
+Tokenizer: BERT WordPiece; case and accents preserved; exact original UTF16 offsets.
+Maximum model sequence: 512 tokens including CLS and SEP. Dimensions: 512.
+Passages are encoded as independent source spans without rewriting or fusing messages.
+Long documents are indexed in bounded windows; long queries use at most 8 independent spans.
+No model download, paid embedding API, provider key or chat upload is performed by this encoder.
+
+Runtime: ONNX Runtime Android 1.30.0, Microsoft and contributors, MIT License.
+Runtime license text: portrait-runtime-MIT.txt (the same runtime is shared by the app).

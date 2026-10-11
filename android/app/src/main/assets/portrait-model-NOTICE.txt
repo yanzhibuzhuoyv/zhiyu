@@ -1,0 +1,32 @@
+知语离线人物前景预览 / Offline foreground preview
+Recorded: 2026-10-09
+
+Bundled artifact: u2netp.onnx
+Size: 4574861 bytes
+SHA256: 309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8
+Download source: https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx
+Model authors / original project: Xuebin Qin and U-2-Net contributors
+Original project: https://github.com/xuebinqin/U-2-Net
+Paper: https://arxiv.org/abs/2005.09007
+Original project license: Apache License, Version 2.0
+Exact license source: https://github.com/xuebinqin/U-2-Net/blob/master/LICENSE
+Redistributed license copy: portrait-model-APACHE-2.0.txt
+
+This is the U2NetP model exported to ONNX and distributed by rembg.
+The original project links pretrained author weights and publishes the project
+under Apache-2.0. The rembg release does not provide a separate, artifact-specific
+license file for this ONNX download. We record that scope explicitly; rembg's MIT
+software license is not substituted for a distinct model license.
+No weight modification is performed by this application.
+
+ONNX Runtime Android 1.30.0: Microsoft and contributors, MIT License.
+Source: https://github.com/microsoft/onnxruntime
+License source: https://github.com/microsoft/onnxruntime/blob/main/LICENSE
+Redistributed license copy: portrait-runtime-MIT.txt
+
+The bundled model predicts salient foreground. It does not guarantee a person,
+identity match, wing count or correct preservation of OC accessories.
+User preview, keep/remove brushes and confirmation determine the adopted image.
+The user's original imported bytes remain in private phone storage.
+This model does not generate layered Live2D artwork, Cubism .moc3, a rig or audio.
+No Live2D Cubism Core binary is bundled here.

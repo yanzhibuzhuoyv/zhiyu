@@ -1,0 +1,47 @@
+ZhiYu offline voice component notices
+Verified 2026-10-10. These notices do not change the upstream licenses.
+
+Sherpa-ONNX 1.13.8 (official static ONNX Runtime Android AAR)
+Copyright (c) Xiaomi Corporation and the Sherpa-ONNX contributors.
+Source: https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.8
+License: Apache License, Version 2.0
+License source: https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/LICENSE
+Artifact: sherpa-onnx-static-link-onnxruntime-1.13.8.aar
+SHA256: b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471
+
+Mandarin streaming recognition model, distributed by csukuangfj
+Model: sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23
+Source: https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23
+Source revision: 204ad334e2e683fd295359930cc16fc0432a23ac
+Model card license: Apache License, Version 2.0
+The bundled INT8 encoder/joiner and FP32 decoder follow the official Kotlin
+getModelConfig(9) configuration and match the source repository LFS SHA256 values.
+encoder-epoch-99-avg-1.int8.onnx:
+1c556ea57cec304e55ec4b72e52c1cc098bb01476ed7d90f3de939fe126487b1
+decoder-epoch-99-avg-1.onnx:
+5ee0f03a2768ff1d5c83ef3a493243c7935d316cd41280037b14783a3467cc78
+joiner-epoch-99-avg-1.int8.onnx:
+a7cf9d82757bdcf786059454495a9ca95e4bd7347f72473fc08d794475c36169
+
+Mandarin multi-speaker synthesis model, distributed by csukuangfj
+Model: icefall-tts-aishell3-vits-low-2024-04-06
+Source: https://huggingface.co/csukuangfj/icefall-tts-aishell3-vits-low-2024-04-06
+Source revision: 57345c004e13ed640e408c4c29ab56187b18f065
+Model card license: Apache License, Version 2.0
+The bundled model.onnx is an unchanged copy of exp/vits-epoch-960.onnx.
+SHA256: 5511d651b7840c0a93a6bbfd4afd070a2c7f39ca1ec3ff2ecd73191519bbb852
+AISHELL-3 corpus source: https://www.openslr.org/93/
+Corpus provider: Beijing Shell Shell Technology Co., Ltd.
+OpenSLR lists the corpus license as Apache License, Version 2.0.
+The application distributes model weights and support files, not that corpus.
+
+ONNX Runtime
+Copyright (c) Microsoft Corporation
+License: MIT
+Source: https://github.com/microsoft/onnxruntime
+Sherpa 1.13.8 Android static build configuration selects ONNX Runtime 1.28.2.
+License copy: voice-ONNXRUNTIME-MIT.txt
+
+The complete Apache License, Version 2.0 is included in voice-APACHE-2.0.txt.
+The application adds Android audio IO, cancellation, voice selection, and UI.
+The bundled model weights are not modified or used for voice cloning.

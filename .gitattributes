@@ -11,3 +11,4 @@ Dockerfile text eol=lf
 gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+shared/companion-contract.json text eol=lf

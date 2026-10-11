@@ -6,6 +6,7 @@ import com.zhiyu.app.domain.*
 data class AppState(
     val restoring: Boolean = true,
     val connected: Boolean = false,
+    val canRestoreConnection: Boolean = false,
     val binding: CompanionBinding? = null,
     val profile: CompanionProfile? = null,
     val serverUrl: String = BuildConfig.DEFAULT_SERVER_URL,
@@ -22,9 +23,11 @@ data class AppState(
     val memory: MemoryPanelState = MemoryPanelState(),
     val documents: List<Document> = emptyList(),
     val draft: String = "",
+    val draftImage: ChatImageDraft? = null,
     val defaultRag: Boolean = true,
     val busy: String? = null,
     val pendingMessage: String? = null,
+    val pendingImage: MediaAttachment? = null,
     val error: String? = null,
     val notice: String? = null,
 ) {

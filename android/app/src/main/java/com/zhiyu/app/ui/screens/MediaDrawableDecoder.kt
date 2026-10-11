@@ -6,6 +6,7 @@ import android.graphics.ImageDecoder
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
+import androidx.annotation.RequiresApi
 import com.zhiyu.app.domain.MediaRules
 import java.nio.ByteBuffer
 
@@ -17,6 +18,7 @@ object MediaDrawableDecoder {
         return if (Build.VERSION.SDK_INT >= 28) decodeModern(bytes, maximum) else decodeLegacy(resources, bytes, maximum)
     }
 
+    @RequiresApi(28)
     private fun decodeModern(bytes: ByteArray, maximum: Int): Drawable =
         ImageDecoder.decodeDrawable(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
             checkDimensions(info.size.width, info.size.height)

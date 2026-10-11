@@ -14,6 +14,7 @@ data class Message(val id: String, val role: String, val content: String, val so
 data class MessagePage(val messages: List<Message>, val hasMore: Boolean, val nextBefore: String?)
 data class Document(val id: String, val name: String, val size: Long, val chunks: Int, val createdAt: String)
 data class UploadedFile(val name: String, val bytes: ByteArray)
+data class ChatImageDraft(val attachment: MediaAttachment)
 data class CompanionProfile(
     val mode: String = "preset", val style: String = "gentle", val role: String = "partner",
     val name: String = "", val userName: String = "", val instructions: String = "",
@@ -28,7 +29,10 @@ data class SavedConnection(
 ) {
     override fun toString() = "SavedConnection(serverUrl=$serverUrl, providerId=$providerId, model=$model)"
 }
-class ApiFailure(val status: Int, message: String, val errorCode: String? = null) : Exception(message)
+class ApiFailure(val status: Int, message: String, val errorCode: String? = null) : Exception(message) {
+    // Unclassified 401 responses retain compatibility with older backend sessions.
+    val isSessionExpired: Boolean get() = status == 401 && (errorCode == null || errorCode == "session_expired")
+}
 
 interface CredentialStore {
     fun read(): SavedConnection?
@@ -42,6 +46,7 @@ interface CredentialStore {
 }
 interface AuthService { suspend fun authenticate(connection: SavedConnection): AuthSession }
 interface ChatRepository {
+    suspend fun connectionNotice(): String? = null
     suspend fun savedBinding(): CompanionBinding?
     suspend fun savedConnection(): SavedConnection?
     suspend fun providers(serverUrl: String): List<Provider>
@@ -59,6 +64,10 @@ interface ChatRepository {
     suspend fun messageMemory(id: String, messageId: String): MemoryEntry
     suspend fun changeMemory(id: String, messageId: String, change: MemoryChange): MemoryEntry
     suspend fun sendMessage(id: String, content: String): Pair<Message, Message>
+    suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment): Pair<Message, Message> =
+        throw IllegalStateException("当前连接不支持发送图片")
+    suspend fun savedPhotoDraft(): ChatImageDraft? = null
+    suspend fun discardPhotoDraft(id: String) = Unit
     suspend fun documents(): List<Document>
     suspend fun upload(file: UploadedFile): Document
     suspend fun deleteDocument(id: String)

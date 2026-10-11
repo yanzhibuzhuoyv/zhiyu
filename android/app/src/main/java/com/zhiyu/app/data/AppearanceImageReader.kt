@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
+import androidx.annotation.RequiresApi
 import com.zhiyu.app.domain.AppearanceRules
 import com.zhiyu.app.domain.AppearanceTarget
 import java.io.ByteArrayOutputStream
@@ -39,6 +40,7 @@ class AppearanceImageReader(context: Context) {
         }
     }
 
+    @RequiresApi(28)
     private fun decodeModern(bytes: ByteArray, target: AppearanceTarget): Bitmap =
         ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
             val size = AppearanceRules.decodedSize(info.size.width, info.size.height, target)

@@ -5,9 +5,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class UsbDebugConnectionTest {
-    @Test fun standardDebugBuildUsesTheUsbBridgeInsteadOfAnEmulatorOnlyAddress() {
-        assertEquals("http://127.0.0.1:8791", BuildConfig.DEFAULT_SERVER_URL)
-        assertTrue(BuildConfig.USE_USB_BACKEND)
+    @Test fun debugTransportFlagsMatchTheConfiguredEndpoint() {
+        if (BuildConfig.USE_USB_BACKEND) {
+            assertEquals("http://127.0.0.1:8791", BuildConfig.DEFAULT_SERVER_URL)
+            assertFalse(BuildConfig.USE_LAN_PREVIEW)
+        }
+        if (BuildConfig.USE_LAN_PREVIEW) {
+            assertTrue(BuildConfig.DEBUG)
+            assertTrue(BuildConfig.DEFAULT_SERVER_URL.startsWith("https://"))
+            assertFalse(BuildConfig.USE_USB_BACKEND)
+        }
     }
 
     @Test fun upgradingTheOldLocalConnectionKeepsKeySessionAndFixedPersonality() {

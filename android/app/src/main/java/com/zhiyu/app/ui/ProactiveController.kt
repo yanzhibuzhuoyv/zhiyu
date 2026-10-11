@@ -8,11 +8,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.zhiyu.app.BuildConfig
-import com.zhiyu.app.data.ProactiveRepository
+import com.zhiyu.app.data.LocalProactiveService
 import com.zhiyu.app.data.ProactiveWorkStore
-import com.zhiyu.app.data.SecureCredentialStore
+import com.zhiyu.app.data.appCredentialStore
 import com.zhiyu.app.domain.ProactivePreferences
-import com.zhiyu.app.domain.UsbDebugCredentialStore
 import com.zhiyu.app.notifications.ProactiveNotifications
 import com.zhiyu.app.notifications.ProactiveScheduler
 import kotlinx.coroutines.*
@@ -23,7 +22,7 @@ import kotlinx.coroutines.sync.withLock
 class ProactiveController(context: Context, private val conversationId: String?, private val scope: CoroutineScope) {
     private val appContext = context.applicationContext
     private val store = ProactiveWorkStore(appContext)
-    private val service = ProactiveRepository(UsbDebugCredentialStore(SecureCredentialStore(appContext), BuildConfig.DEBUG && BuildConfig.USE_USB_BACKEND), BuildConfig.DEBUG)
+    private val service = LocalProactiveService(appContext, appCredentialStore(appContext))
     private val mutex = Mutex()
     var preferences by mutableStateOf(ProactivePreferences())
         private set
@@ -58,7 +57,7 @@ class ProactiveController(context: Context, private val conversationId: String?,
         if (accepted.enabled) ProactiveScheduler.schedule(appContext, id) else ProactiveScheduler.cancel(appContext)
     }
 
-    fun permissionDenied() { error = "通知没有开启，聊天仍可正常使用。允许知语通知后，可以再开启主动联系。" }
+    fun permissionDenied() { error = "通知没有开启，聊天仍可正常使用。你可以在系统设置中允许知语通知。" }
     fun dismissError() { error = null }
 
     private fun operation(block: suspend () -> Unit) = scope.launch {

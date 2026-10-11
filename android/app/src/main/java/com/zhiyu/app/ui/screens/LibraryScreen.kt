@@ -36,7 +36,7 @@ import com.zhiyu.app.ui.ChatViewModel
                 Icon(Icons.Outlined.FolderOpen, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(16.dp))
                 Text("知识库等待你的第一份资料", style = MaterialTheme.typography.titleMedium)
-                Text("文档与会话保存在后端，按 API Key 身份隔离。", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("资料和聊天保存在这部手机里。更新 Key 后，这段关系和原来的聊天仍会保留。", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(state.documents, key = { it.id }) { document ->

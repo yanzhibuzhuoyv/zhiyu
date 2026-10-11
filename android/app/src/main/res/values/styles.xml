@@ -4,6 +4,7 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:colorAccent">#6653C7</item>
+        <item name="android:colorAccent">@color/zhiyu_accent</item>
+        <item name="android:windowBackground">@color/zhiyu_paper</item>
     </style>
 </resources>

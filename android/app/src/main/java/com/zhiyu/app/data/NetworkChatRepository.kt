@@ -14,13 +14,7 @@ class NetworkChatRepository(store: CredentialStore, private val allowHttp: Boole
     })
     override suspend fun savedConnection() = withContext(Dispatchers.IO) { coordinator.saved() }
     override suspend fun savedBinding() = withContext(Dispatchers.IO) {
-        val saved = coordinator.saved()
-        val binding = coordinator.binding()
-        if (saved != null && binding != null && !binding.profileConfigured) {
-            val existing = conversations().filter { it.model == binding.model }
-                .minWithOrNull(compareBy<Conversation> { it.createdAt }.thenBy { it.id })
-            coordinator.adoptLegacyProfile(existing?.profile)
-        }
+        coordinator.saved()
         coordinator.binding()
     }
     override suspend fun providers(serverUrl: String): List<Provider> {
@@ -78,7 +72,16 @@ class NetworkChatRepository(store: CredentialStore, private val allowHttp: Boole
             api.request(url, path, method, token, json)
         }
     }
-    override suspend fun conversations() = JSONArray(request("/api/conversations")).mapObjects { it.conversation() }
+    override suspend fun conversations(): List<Conversation> {
+        val conversations = JSONArray(request("/api/conversations")).mapObjects { it.conversation() }
+        val binding = coordinator.binding()
+        if (binding != null && !binding.profileConfigured) {
+            val existing = conversations.filter { it.model == binding.model }
+                .minWithOrNull(compareBy<Conversation> { it.createdAt }.thenBy { it.id })
+            coordinator.adoptLegacyProfile(existing?.profile)
+        }
+        return conversations
+    }
     override suspend fun createConversation(model: String, useRag: Boolean, profile: CompanionProfile?) = JSONObject(request("/api/conversations", "POST",
         JSONObject().put("title", "与你的日常").put("model", model).put("use_rag", useRag)
             .put("companion_profile", CompanionRules.normalize(profile)?.json() ?: JSONObject.NULL))).conversation()

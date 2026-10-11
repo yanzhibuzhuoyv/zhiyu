@@ -1,0 +1,78 @@
+package com.zhiyu.app.domain
+
+import org.junit.Assert.*
+import org.junit.Test
+import java.time.Instant
+import java.util.TimeZone
+
+class LocalDailyRulesTest {
+    private val chat = "a".repeat(32)
+    @Test fun beijingMidnightSelectsANewDayAndRestSlotWithoutAComputer() {
+        val before = LocalDailyRules.scene(chat, 3, Instant.parse("2026-10-08T15:59:59Z"))
+        val after = LocalDailyRules.scene(chat, 3, Instant.parse("2026-10-08T16:00:00Z"))
+        assertEquals("2026-10-08", before.dayId)
+        assertEquals("2026-10-09", after.dayId)
+        assertNotEquals(before.sceneId, after.sceneId)
+        assertEquals("00:00", after.current.time)
+        assertTrue(after.fictional)
+        assertEquals("Asia/Shanghai", after.timezone)
+    }
+    @Test fun restartingReconstructsTheSamePlanAndPreservesItsAppearanceVersion() {
+        val now = Instant.parse("2026-10-09T04:00:00Z")
+        val first = LocalDailyRules.scene(chat, 9, now)
+        assertEquals(first, LocalDailyRules.scene(chat, 9, now))
+        val changedAppearance = LocalDailyRules.scene(chat, 10, now)
+        assertEquals(first.slots, changedAppearance.slots)
+        assertEquals(first.sceneId, changedAppearance.sceneId)
+        assertEquals(10, changedAppearance.visualVersion)
+        assertTrue(first.slots.zipWithNext().all { (a, b) -> a.time < b.time })
+        assertTrue(first.slots.all { it.tags.isNotEmpty() })
+    }
+    @Test fun manyDaysHaveSeveralPlansButNeverInventUserLocationsOrAppointments() {
+        val start = Instant.parse("2026-10-01T08:00:00Z")
+        val scenes = (0 until 90).map { LocalDailyRules.scene(chat, 0, start.plusSeconds(it * 86400L)) }
+        assertTrue(scenes.map { it.slots }.distinct().size >= 40)
+        assertEquals(90, scenes.map { it.sceneId }.distinct().size)
+        assertTrue(scenes.all { it.fictional && it.visualVersion == 0 })
+        assertThrows(IllegalArgumentException::class.java) { LocalDailyRules.scene("../other", 0, start) }
+        assertThrows(IllegalArgumentException::class.java) { LocalDailyRules.scene(chat, -1, start) }
+    }
+    @Test fun nextMidnightIsTheDeclaredBeijingBoundaryAndAlwaysInTheFuture() {
+        val before = Instant.parse("2026-10-09T15:59:59Z")
+        val boundary = Instant.parse("2026-10-09T16:00:00Z")
+        assertEquals(boundary, LocalDailyRules.nextMidnight(before))
+        assertEquals(Instant.parse("2026-10-10T16:00:00Z"), LocalDailyRules.nextMidnight(boundary))
+        assertTrue(LocalDailyRules.nextMidnight(before).isAfter(before))
+    }
+    @Test fun deviceTimezoneChangeDoesNotRelabelTheDeclaredPlanDay() {
+        val original = TimeZone.getDefault()
+        val now = Instant.parse("2026-10-09T17:00:00Z")
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("Pacific/Honolulu"))
+            val west = LocalDailyRules.scene(chat, 1, now)
+            TimeZone.setDefault(TimeZone.getTimeZone("Asia/Tokyo"))
+            assertEquals(west, LocalDailyRules.scene(chat, 1, now))
+            assertEquals("2026-10-10", west.dayId)
+        } finally { TimeZone.setDefault(original) }
+    }
+    @Test fun manuallyGoingBackToAnOldDayDoesNotMutateThatDaysDeterministicIdentity() {
+        val old = Instant.parse("2026-10-09T04:00:00Z")
+        val first = LocalDailyRules.scene(chat, 1, old)
+        assertNotEquals(first.dayId, LocalDailyRules.scene(chat, 1, old.plusSeconds(86400)).dayId)
+        assertEquals(first, LocalDailyRules.scene(chat, 1, old))
+    }
+    @Test fun malformedUserPlanSlotsCannotBecomeTheCurrentActivity() {
+        val now = Instant.parse("2026-10-09T04:00:00Z")
+        val zero = LocalDailySlot("00:00", "休息", listOf("night"))
+        listOf(listOf(zero.copy(time = "24:00")), listOf(zero, zero.copy(time = "02:99")),
+            listOf(zero.copy(activity = "")), listOf(zero.copy(tags = listOf("system instruction")))).forEach {
+            assertThrows(IllegalArgumentException::class.java) { LocalDailyRules.current(it, now) }
+        }
+    }
+    @Test fun imageMatchingUsesCurrentPlanTagsAndNeverAddsAStickerRequirement() {
+        val slot = LocalDailySlot("18:00", "看看晚霞", listOf("landscape", "evening"))
+        assertEquals(2, LocalDailyRules.mediaAffinity("image", setOf("landscape", "evening", "cloud"), slot))
+        assertEquals(0, LocalDailyRules.mediaAffinity("image", setOf("morning", "food"), slot))
+        assertEquals(0, LocalDailyRules.mediaAffinity("sticker", setOf("landscape", "evening"), slot))
+    }
+}

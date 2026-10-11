@@ -35,7 +35,10 @@ class MediaDemoUiSmokeTest {
         compose.onNodeWithText("记忆").assertDoesNotExist()
         compose.onNodeWithText("头像与背景").assertExists()
         compose.onNodeWithText("恋人外观").assertExists()
-        compose.onNodeWithText("主动联系").assertExists()
+        compose.onNodeWithText("主动联系").assertDoesNotExist()
+        compose.onNodeWithText("天气与日历").assertDoesNotExist()
+        compose.onNodeWithText("聊天字号").assertExists()
+        compose.onNodeWithText("日历").assertExists()
         compose.activityRule.scenario.onActivity { activity ->
             val output = File(activity.getExternalFilesDir(null), "media-demo-ui.png")
             val screenshot = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
@@ -47,7 +50,7 @@ class MediaDemoUiSmokeTest {
     private fun send(text: String) {
         compose.onNodeWithTag("message_draft").performTextInput(text)
         compose.onNodeWithContentDescription("发送消息").performClick()
-        compose.waitUntil(15_000) { compose.onAllNodesWithText("正在想怎么回应你…").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("companion_typing").fetchSemanticsNodes().isEmpty() }
     }
 
     private fun waitForMedia(count: Int) {

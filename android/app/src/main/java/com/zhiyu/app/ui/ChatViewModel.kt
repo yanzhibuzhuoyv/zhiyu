@@ -22,24 +22,38 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
     init {
         viewModelScope.launch {
             try {
-                val binding = repository.savedBinding()
-                mutableState.update { it.copy(binding = binding, profile = binding?.profile, providerId = binding?.providerId.orEmpty(), model = binding?.model.orEmpty()) }
-                val saved = repository.savedConnection()
-                if (saved != null) {
-                    val restoredBinding = repository.savedBinding()
-                    check(restoredBinding == null || (restoredBinding.providerId == saved.providerId && restoredBinding.model == saved.model)) { "保存的连接与已绑定 AI 不一致" }
-                    mutableState.update { it.copy(binding = restoredBinding, serverUrl = saved.serverUrl, providerId = saved.providerId, model = saved.model, apiKey = saved.apiKey, busy = "恢复连接") }
-                    loadProviderCatalog()
-                    mutableState.update { it.copy(connected = true) }
-                    loadConversations()
-                    mutableState.update { it.copy(documents = repository.documents()) }
-                } else {
-                    loadProviderCatalog()
-                }
+                restoreConnection()
+                restorePhotoDraft()
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 mutableState.update { it.copy(connected = false, error = friendly(error)) }
             } finally { mutableState.update { it.copy(restoring = false, busy = null) } }
+        }
+    }
+
+    private suspend fun restorePhotoDraft() {
+        try {
+            val image = repository.savedPhotoDraft()
+            if (image != null && mutableState.value.messages.any { message ->
+                message.role == "user" && message.mediaAttachments.any { it.id == image.attachment.id }
+            }) {
+                mutableState.update { it.copy(draftImage = null) }
+                cleanupSentPhotoDraft(image.attachment.id)
+                return
+            }
+            mutableState.update { it.copy(draftImage = image) }
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            mutableState.update { it.copy(error = friendly(error)) }
+        }
+    }
+
+    private suspend fun cleanupSentPhotoDraft(id: String) {
+        try { repository.discardPhotoDraft(id) }
+        catch (error: Exception) {
+            if (error is CancellationException) throw error
+            mutableState.update { it.copy(notice = listOfNotNull(it.notice,
+                "图片已发送，草稿暂时没能清理；这条消息不用再发。").distinct().joinToString("\n")) }
         }
     }
 
@@ -51,6 +65,7 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
             repository.forgetLocalConnection()
         }
         mutableState.update { it.copy(serverUrl = value, connected = false, providers = emptyList(),
+            canRestoreConnection = false,
             providerId = it.binding?.providerId.orEmpty(), model = it.binding?.model.orEmpty(), apiKey = "",
             conversations = emptyList(), selectedId = null, messages = emptyList(), hasOlder = false,
             nextBefore = null, viewingOlder = false, memory = MemoryPanelState(), documents = emptyList(), draft = "", error = null) }
@@ -59,13 +74,38 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
     fun apiKey(value: String) { mutableState.update { it.copy(apiKey = value, error = null) } }
     fun model(value: String) { if (mutableState.value.binding == null) mutableState.update { it.copy(model = value, error = null) } }
     fun draft(value: String) { mutableState.update { it.copy(draft = value) } }
+    fun draftImage(value: ChatImageDraft?) { if (!mutableState.value.isBusy) mutableState.update { it.copy(draftImage = value) } }
     fun dismissError() { mutableState.update { it.copy(error = null, notice = null) } }
     fun provider(id: String) {
         if (mutableState.value.binding != null) return
         val provider = mutableState.value.providers.find { it.id == id } ?: return
         mutableState.update { it.copy(providerId = id, model = provider.defaultModel, apiKey = "", error = null) }
     }
-    fun loadProviders() = action("加载服务商") { loadProviderCatalog() }
+    fun loadProviders() = action("重新尝试连接") { restoreConnection() }
+    private suspend fun restoreConnection() {
+        val saved = repository.savedConnection()
+        val binding = repository.savedBinding()
+        check(saved == null || binding == null || (binding.providerId == saved.providerId && binding.model == saved.model)) {
+            "保存的连接与已绑定 AI 不一致"
+        }
+        mutableState.update { it.copy(
+            canRestoreConnection = saved != null, binding = binding,
+            profile = if (profileEdited) it.profile else binding?.profile,
+            serverUrl = saved?.serverUrl ?: it.serverUrl,
+            providerId = saved?.providerId ?: binding?.providerId ?: it.providerId,
+            model = saved?.model ?: binding?.model ?: it.model,
+            apiKey = saved?.apiKey ?: it.apiKey,
+        ) }
+        loadProviderCatalog()
+        if (saved != null) {
+            val editedProfile = mutableState.value.profile.takeIf { profileEdited }
+            loadConversations()
+            applyEditedProfile(editedProfile)
+            val documents = repository.documents()
+            val notice = repository.connectionNotice()
+            mutableState.update { it.copy(connected = true, documents = documents, notice = notice) }
+        }
+    }
     private suspend fun loadProviderCatalog() {
         val current = mutableState.value
         check(current.serverUrl.isNotBlank()) { "此安装包的服务配置尚未完成，请使用已配置的版本" }
@@ -85,16 +125,28 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         repository.login(current.serverUrl, current.providerId, current.apiKey, current.model, current.profile)
         val saved = repository.savedConnection() ?: throw IllegalStateException("连接信息保存失败")
         val binding = repository.savedBinding()
-        mutableState.update { it.copy(connected = true, binding = binding, serverUrl = saved.serverUrl, model = saved.model,
+        mutableState.update { it.copy(binding = binding, serverUrl = saved.serverUrl, model = saved.model,
+            canRestoreConnection = true,
             memory = MemoryPanelState(), error = null, notice = null) }
         loadConversations()
-        if (profileEdited && editedProfile?.mode == "custom" && editedProfile != mutableState.value.profile) {
-            val updated = repository.changeProfile(mutableState.value.selectedId!!, editedProfile)
-            val updatedBinding = repository.savedBinding()
-            mutableState.update { it.copy(conversations = listOf(updated), profile = updated.profile, binding = updatedBinding) }
+        applyEditedProfile(editedProfile)
+        val documents = repository.documents()
+        val notice = repository.connectionNotice()
+        mutableState.update { it.copy(connected = true, documents = documents, notice = notice) }
+    }
+    private suspend fun applyEditedProfile(editedProfile: CompanionProfile?) {
+        if (profileEdited && editedProfile?.mode == "custom" && editedProfile != mutableState.value.selected?.profile) {
+            try {
+                val updated = repository.changeProfile(mutableState.value.selectedId!!, editedProfile)
+                val updatedBinding = repository.savedBinding()
+                mutableState.update { it.copy(conversations = listOf(updated), profile = updated.profile, binding = updatedBinding) }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                mutableState.update { it.copy(profile = editedProfile) }
+                throw error
+            }
         }
         profileEdited = false
-        mutableState.update { it.copy(documents = repository.documents()) }
     }
     fun refresh() = action("刷新") {
         loadConversations()
@@ -112,7 +164,10 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         val selected = conversations.find { it.id == current.selectedId && it.model == current.model }
             ?: conversations.filter { it.model == current.model }.minWithOrNull(compareBy<Conversation> { it.createdAt }.thenBy { it.id })
             ?: repository.createConversation(current.model, current.defaultRag, current.profile)
-        mutableState.update { it.copy(conversations = listOf(selected), selectedId = selected.id, profile = selected.profile,
+        val binding = repository.savedBinding()
+        mutableState.update { it.copy(conversations = listOf(selected), selectedId = selected.id,
+            profile = if (profileEdited) it.profile else selected.profile,
+            binding = binding,
             memory = if (it.selectedId == selected.id) it.memory else MemoryPanelState()) }
         loadHistory(selected.id)
     }
@@ -213,22 +268,29 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
             mutableState.update { it.copy(conversations = it.conversations.map { c -> if (c.id == updated.id) updated else c }) }
         }
     }
-    fun send() = action("AI 正在思考") {
-        val content = ConnectionRules.message(mutableState.value.draft)
+    fun send() = sendCurrent(null)
+    fun sendVoiceText(value: String) = sendCurrent(ConnectionRules.message(value))
+    private fun sendCurrent(voiceText: String?) = action("AI 正在输入") {
+        val image = if(voiceText!=null) null else mutableState.value.draftImage
+        val content = voiceText ?: if (image == null) ConnectionRules.message(mutableState.value.draft) else mutableState.value.draft
         val conversation = mutableState.value.selected ?: throw IllegalStateException("对话还未准备好，请刷新后重试")
-        mutableState.update { it.copy(pendingMessage = content) }
+        mutableState.update { it.copy(pendingMessage = content, pendingImage = image?.attachment) }
         try {
-            val result = repository.sendMessage(conversation.id, content)
+            val result = if (image == null) repository.sendMessage(conversation.id, content) else
+                repository.sendPhotoMessage(conversation.id, content, image.attachment)
             val wasViewingOlder = mutableState.value.viewingOlder
             mutableState.update {
                 val combined = (if (wasViewingOlder) emptyList() else it.messages) + result.first + result.second
                 val messages = combined.takeLast(100)
                 val hasOlder = wasViewingOlder || it.hasOlder || combined.size > messages.size
                 it.copy(messages = messages, hasOlder = hasOlder, nextBefore = if (hasOlder) messages.first().id else null,
-                    draft = "", pendingMessage = null, viewingOlder = false)
+                    draft = if(voiceText!=null) it.draft else "", draftImage = if(voiceText!=null) it.draftImage else null,
+                    pendingMessage = null, pendingImage = null, viewingOlder = false,
+                    notice = (repository as? com.zhiyu.app.data.LocalChatRepository)?.lastCalendarNotice)
             }
+            image?.let { cleanupSentPhotoDraft(it.attachment.id) }
             if (wasViewingOlder) loadHistory(conversation.id)
-        } finally { mutableState.update { it.copy(pendingMessage = null) } }
+        } finally { mutableState.update { it.copy(pendingMessage = null, pendingImage = null) } }
     }
     fun importDocument(uri: Uri) = action("导入知识库") {
         val document = repository.upload(reader.read(uri))
@@ -246,7 +308,7 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
             var error: String? = null
             try { repository.logout() } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
-                error = "本机 Key 已清除；后端会话注销未确认，过期后会自动失效"
+                error = "退出未完成，请重试；恋人绑定和聊天会保留"
             }
             mutableState.value = AppState(restoring = false, binding = old.binding, profile = old.profile, serverUrl = old.serverUrl, providers = old.providers, providerId = old.providerId, model = old.model, error = error)
         }
@@ -258,7 +320,7 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
             try { connectionCleanup?.await(); block() } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 mutableState.update {
-                    val expired = error is ApiFailure && error.status == 401
+                    val expired = error is ApiFailure && error.isSessionExpired
                     it.copy(error = friendly(error), connected = if (expired) false else it.connected,
                         memory = if (expired) MemoryPanelState() else it.memory)
                 }
@@ -269,7 +331,7 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         val key = mutableState.value.apiKey
         val text = when (error) {
             is ApiFailure, is IllegalArgumentException, is IllegalStateException -> error.message ?: "操作失败，请稍后重试"
-            else -> "响应内容无法处理，请检查后端版本或稍后重试"
+            else -> "暂时无法处理回复，请稍后重试"
         }
         return if (key.length >= 4) text.replace(key, "[已隐藏]") else text
     }

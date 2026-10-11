@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
 @Composable fun ChatMediaAttachments(values: List<MediaAttachment>) {
     values.forEach { attachment ->
         MediaImage(attachment.id, attachment.sha256, attachment.kind == "sticker",
-            if (attachment.kind == "sticker") "恋人发来的表情包" else "恋人分享的 OC 素材")
+            if (attachment.kind == "sticker") "恋人发来的表情包" else if (attachment.sourceLabel == "你发送的图片") "你发送的图片" else "恋人分享的图片")
     }
 }
 
@@ -50,7 +50,7 @@ import kotlinx.coroutines.withContext
     Box(size.padding(vertical = 4.dp).testTag("media_$id")) {
         when {
             failure != null -> TextButton(onClick = { retry++ }) { Text("图片加载失败，点击重试") }
-            drawable == null -> CircularProgressIndicator(Modifier.size(24.dp))
+            drawable == null -> Text("图片准备中…", style = MaterialTheme.typography.bodySmall)
             else -> AndroidView(factory = { context -> ImageView(context).apply {
                 scaleType = ImageView.ScaleType.FIT_CENTER; adjustViewBounds = true
             } }, update = { view -> view.setImageDrawable(drawable); view.contentDescription = description }, modifier = Modifier.fillMaxWidth())

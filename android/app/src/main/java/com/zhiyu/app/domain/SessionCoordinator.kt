@@ -72,7 +72,8 @@ class SessionCoordinator(
             return@withLock session.token
         }
         val updated = try { auth.authenticate(connection) } catch (error: ApiFailure) {
-            throw ApiFailure(error.status, "会话已失效，API Key 重新验证失败：${error.message}")
+            if (error.status != 401 && error.status != 403) throw error
+            throw ApiFailure(error.status, "API Key 重新验证失败：${error.message}", error.errorCode ?: "provider_auth_failed")
         }
         checkIdentity(connection, updated)
         if (store.compareAndWrite(connection, connection.copy(session = updated))) {
@@ -92,7 +93,7 @@ class SessionCoordinator(
     suspend fun <T> authorized(block: suspend (String) -> T): T {
         val current = token()
         return try { block(current) } catch (error: ApiFailure) {
-            if (error.status != 401) throw error
+            if (!error.isSessionExpired) throw error
             block(token(force = true, failedToken = current))
         }
     }

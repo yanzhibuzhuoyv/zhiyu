@@ -1,10 +1,13 @@
 package com.zhiyu.app.ui
 
 import android.app.Application
+import androidx.lifecycle.viewModelScope
 import com.zhiyu.app.data.DocumentReader
 import com.zhiyu.app.domain.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -39,9 +42,220 @@ class LoginStartupTest {
             assertEquals("deepseek", model.state.value.providerId)
         } finally { Dispatchers.resetMain() }
     }
+
+    @Test fun catalogRetryWithoutASavedKeyKeepsTheUsersUnconfirmedInputAndDoesNotLogIn() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val repository = CatalogRepository()
+            val model = ChatViewModel(repository, DocumentReader(Application()))
+            advanceUntilIdle()
+            model.apiKey("unconfirmed-key")
+            model.setProfile(CompanionProfile(name = "新设定"))
+            advanceUntilIdle()
+            model.loadProviders()
+            advanceUntilIdle()
+            assertFalse(model.state.value.connected)
+            assertFalse(model.state.value.canRestoreConnection)
+            assertEquals("unconfirmed-key", model.state.value.apiKey)
+            assertEquals("新设定", model.state.value.profile?.name)
+        } finally { Dispatchers.resetMain() }
+    }
+
+    @Test fun retryAfterOfflineStartupRestoresTheSameChatWithoutNewLoginOrClearingTheKey() = runRecovery { model, repository ->
+        assertFalse(model.state.value.connected)
+        assertTrue(model.state.value.canRestoreConnection)
+        assertEquals(repository.binding, model.state.value.binding)
+        assertEquals("saved-key", model.state.value.apiKey)
+        repository.offline = false
+        model.loadProviders()
+        advanceUntilIdle()
+        assertTrue(model.state.value.connected)
+        assertEquals("original", model.state.value.selectedId)
+        assertEquals(repository.originalMessages, model.state.value.messages)
+        assertEquals("saved-key", model.state.value.apiKey)
+        assertEquals(repository.binding, model.state.value.binding)
+        assertEquals(0, repository.logins)
+        assertEquals(0, repository.cleared)
+        assertEquals(0, repository.created)
+        assertNull(model.state.value.error)
+    }
+
+    @Test fun retryAlsoRecoversWhenTheCatalogLoadedButHistoryWasUnavailable() = runRecovery(historyOffline = true) { model, repository ->
+        assertFalse(model.state.value.connected)
+        assertEquals("original", model.state.value.selectedId)
+        repository.historyOffline = false
+        model.loadProviders()
+        advanceUntilIdle()
+        assertTrue(model.state.value.connected)
+        assertEquals(repository.originalMessages, model.state.value.messages)
+        assertEquals(0, repository.logins)
+        assertEquals(0, repository.created)
+    }
+
+    @Test fun legacyProfileIsUpdatedOnlyAfterTheExistingChatIsSuccessfullyRecovered() = runRecovery { model, repository ->
+        repository.binding = repository.binding.copy(profile = null, profileConfigured = false)
+        model.loadProviders()
+        advanceUntilIdle()
+        assertFalse(model.state.value.binding!!.profileConfigured)
+        repository.offline = false
+        model.loadProviders()
+        advanceUntilIdle()
+        assertTrue(model.state.value.connected)
+        assertTrue(model.state.value.binding!!.profileConfigured)
+        assertEquals("原来的恋人", model.state.value.binding!!.profile?.name)
+        assertEquals("original", model.state.value.selectedId)
+        assertEquals(0, repository.created)
+    }
+
+    @Test fun customTrainingSavedWhileOfflineIsAppliedWhenTheOriginalChatRecovers() = runRecovery { model, repository ->
+        repository.useCustomProfile()
+        model.loadProviders()
+        advanceUntilIdle()
+        val edited = repository.binding.profile!!.copy(instructions = "叫我小舟")
+        model.setProfile(edited)
+        advanceUntilIdle()
+        repository.offline = false
+        model.loadProviders()
+        advanceUntilIdle()
+        assertTrue(model.state.value.connected)
+        assertEquals("original", model.state.value.selectedId)
+        assertEquals(edited, model.state.value.profile)
+        assertEquals(edited, model.state.value.binding!!.profile)
+        assertEquals(1, repository.profileChanges)
+        assertEquals(0, repository.logins)
+    }
+
+    @Test fun customTrainingSurvivesAHistoryFailureBeforeRecoveryCanSaveIt() = runRecovery { model, repository ->
+        repository.useCustomProfile()
+        model.loadProviders()
+        advanceUntilIdle()
+        val edited = repository.binding.profile!!.copy(instructions = "叫我小舟")
+        model.setProfile(edited)
+        advanceUntilIdle()
+        repository.offline = false
+        repository.historyOffline = true
+        model.loadProviders()
+        advanceUntilIdle()
+        assertFalse(model.state.value.connected)
+        assertEquals(edited, model.state.value.profile)
+        assertEquals(0, repository.profileChanges)
+        repository.historyOffline = false
+        model.loadProviders()
+        advanceUntilIdle()
+        assertTrue(model.state.value.connected)
+        assertEquals(edited, model.state.value.profile)
+        assertEquals(edited, model.state.value.binding!!.profile)
+        assertEquals(1, repository.profileChanges)
+    }
+
+    @Test fun retryLeavesAnUnavailableConnectionUnconnectedAndKeepsItsFixedChoice() = runRecovery { model, repository ->
+        model.loadProviders()
+        advanceUntilIdle()
+        assertFalse(model.state.value.connected)
+        assertEquals(repository.binding, model.state.value.binding)
+        assertEquals("saved-key", model.state.value.apiKey)
+        assertTrue(model.state.value.error!!.contains("无法连接后端"))
+        assertEquals(0, repository.cleared)
+        assertEquals(0, repository.logins)
+    }
+
+    @Test fun providerRejectionDuringAChatDoesNotDiscardTheChatAsAnExpiredSession() = runRecovery { model, repository ->
+        repository.offline = false
+        model.loadProviders()
+        advanceUntilIdle()
+        repository.sendFailure = ApiFailure(401, "服务商拒绝了 API Key", "provider_auth_failed")
+        model.draft("晚上好")
+        model.send()
+        advanceUntilIdle()
+        assertTrue(model.state.value.connected)
+        assertEquals("original", model.state.value.selectedId)
+        assertEquals("晚上好", model.state.value.draft)
+        assertEquals("服务商拒绝了 API Key", model.state.value.error)
+        assertEquals(repository.binding, model.state.value.binding)
+        assertEquals(0, repository.logins)
+    }
+
+    @Test fun unexpectedLocalFailureDoesNotTellPhoneUsersToCheckAComputerBackend() = runRecovery { model, repository ->
+        repository.offline = false
+        model.loadProviders()
+        advanceUntilIdle()
+        repository.sendFailure = RuntimeException("internal diagnostic")
+        model.draft("晚上好")
+        model.send()
+        advanceUntilIdle()
+        assertEquals("暂时无法处理回复，请稍后重试", model.state.value.error)
+        assertTrue(model.state.value.connected)
+        assertEquals("晚上好", model.state.value.draft)
+    }
+
+    @Test fun failedLogoutDoesNotClaimThatTheKeyWasAlreadyCleared() = runRecovery { model, repository ->
+        repository.offline = false
+        model.loadProviders()
+        advanceUntilIdle()
+        repository.logoutFailure = IllegalStateException("local storage failure")
+        model.disconnect()
+        advanceUntilIdle()
+        assertEquals("退出未完成，请重试；恋人绑定和聊天会保留", model.state.value.error)
+        assertEquals(repository.binding, model.state.value.binding)
+        assertEquals(0, repository.cleared)
+    }
+
+    @Test fun repeatedRetryWhileBusyDoesNotStartAnotherRecovery() = runRecovery { model, repository ->
+        repository.offline = false
+        repository.catalogGate = CompletableDeferred()
+        model.loadProviders()
+        runCurrent()
+        val calls = repository.catalogCalls
+        model.loadProviders()
+        runCurrent()
+        assertEquals(calls, repository.catalogCalls)
+        repository.catalogGate!!.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(model.state.value.connected)
+    }
+
+    @Test fun localMigrationNoticeIsDisplayedWithoutReplacingTheChatOrItsBinding() = runRecovery { model, repository ->
+        repository.offline = false
+        repository.migrationNotice = "旧聊天尚未导入，原数据仍保留在原设备。"
+        model.loadProviders()
+        advanceUntilIdle()
+        assertTrue(model.state.value.connected)
+        assertEquals(repository.migrationNotice, model.state.value.notice)
+        assertEquals(repository.originalMessages, model.state.value.messages)
+        assertEquals(repository.binding, model.state.value.binding)
+        model.dismissError()
+        assertNull(model.state.value.notice)
+        assertEquals(repository.originalMessages, model.state.value.messages)
+    }
+
+    @Test fun cancellingRecoveryDoesNotBecomeALoginErrorOrDeleteCredentials() = runRecovery { model, repository ->
+        repository.offline = false
+        repository.catalogGate = CompletableDeferred()
+        model.loadProviders()
+        runCurrent()
+        model.viewModelScope.cancel()
+        advanceUntilIdle()
+        assertNull(model.state.value.error)
+        assertEquals("saved-key", model.state.value.apiKey)
+        assertEquals(repository.binding, model.state.value.binding)
+        assertEquals(0, repository.cleared)
+    }
+
+    private fun runRecovery(historyOffline: Boolean = false, block: suspend TestScope.(ChatViewModel, RecoveryRepository) -> Unit) = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val repository = RecoveryRepository().apply {
+                offline = !historyOffline
+                this.historyOffline = historyOffline
+            }
+            val model = ChatViewModel(repository, DocumentReader(Application()))
+            advanceUntilIdle()
+            block(model, repository)
+        } finally { Dispatchers.resetMain() }
+    }
 }
 
-private class CatalogRepository : ChatRepository {
+private open class CatalogRepository : ChatRepository {
     override suspend fun savedBinding(): CompanionBinding? = null
     val urls = mutableListOf<String>()
     var cleared = 0
@@ -67,4 +281,56 @@ private class CatalogRepository : ChatRepository {
     override suspend fun changeMemory(id: String, messageId: String, change: MemoryChange): MemoryEntry = error("Unused")
     override suspend fun upload(file: UploadedFile): Document = error("Unused")
     override suspend fun deleteDocument(id: String): Unit = error("Unused")
+}
+
+private class RecoveryRepository : CatalogRepository() {
+    var migrationNotice: String? = null
+    override suspend fun connectionNotice() = migrationNotice
+    var binding = CompanionBinding("deepseek", "fixed-model", CompanionProfile(name = "原来的恋人"))
+    private val connection = SavedConnection("https://saved-host", binding.providerId, "saved-key", binding.model)
+    private var chat = Conversation("original", "与你", binding.model, true, "2026-10-01", "2026-10-01", binding.profile)
+    val originalMessages = listOf(Message("original-message", "assistant", "回来了", emptyList(), "2026-10-01"))
+    var offline = true
+    var historyOffline = false
+    var catalogGate: CompletableDeferred<Unit>? = null
+    var catalogCalls = 0
+    var logins = 0
+    var created = 0
+    var sendFailure: Exception? = null
+    var logoutFailure: Exception? = null
+    var profileChanges = 0
+    fun useCustomProfile() {
+        val custom = CompanionProfile(mode = "custom", name = "原来的恋人", instructions = "说话自然一些")
+        binding = binding.copy(profile = custom)
+        chat = chat.copy(profile = custom)
+    }
+    override suspend fun savedConnection() = connection
+    override suspend fun logout() { logoutFailure?.let { throw it }; cleared++ }
+    override suspend fun savedBinding() = binding
+    override suspend fun providers(serverUrl: String): List<Provider> {
+        catalogCalls++
+        catalogGate?.await()
+        if (offline) throw ApiFailure(0, "无法连接后端")
+        return listOf(Provider(binding.providerId, "DeepSeek", "default-model", emptyList(), "", ""))
+    }
+    override suspend fun login(serverUrl: String, providerId: String, apiKey: String, model: String, profile: CompanionProfile?) { logins++ }
+    override suspend fun conversations(): List<Conversation> {
+        if (!binding.profileConfigured) binding = binding.copy(profile = chat.profile, profileConfigured = true)
+        return listOf(chat)
+    }
+    override suspend fun history(id: String, before: String?): MessagePage {
+        if (historyOffline) throw ApiFailure(0, "无法连接后端")
+        check(id == chat.id)
+        return MessagePage(originalMessages, false, null)
+    }
+    override suspend fun createConversation(model: String, useRag: Boolean, profile: CompanionProfile?): Conversation { created++; return chat }
+    override suspend fun changeProfile(id: String, profile: CompanionProfile?): Conversation {
+        check(id == chat.id)
+        profileChanges++
+        chat = chat.copy(profile = profile)
+        binding = binding.copy(profile = profile)
+        return chat
+    }
+    override suspend fun documents() = emptyList<Document>()
+    override suspend fun sendMessage(id: String, content: String): Pair<Message, Message> = throw sendFailure ?: error("Unused")
 }

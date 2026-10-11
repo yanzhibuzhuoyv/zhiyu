@@ -14,10 +14,14 @@ import com.zhiyu.app.R
 import com.zhiyu.app.domain.Message
 import com.zhiyu.app.domain.ProactiveRules
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 object ProactiveForeground {
     private val visible = AtomicBoolean(false)
-    fun setVisible(value: Boolean) { visible.set(value) }
+    private val visibility = MutableStateFlow(false)
+    val changes = visibility.asStateFlow()
+    fun setVisible(value: Boolean) { visible.set(value); visibility.value = value }
     fun isVisible() = visible.get()
 }
 
@@ -27,7 +31,7 @@ object ProactiveNotifications {
 
     fun createChannel(context: Context) {
         val channel = NotificationChannel(CHANNEL, "恋人的主动联系", NotificationManager.IMPORTANCE_DEFAULT).apply {
-            description = "你开启主动联系后，恋人偶尔发来的消息"
+            description = "允许通知后，恋人按自己的性格发来的消息"
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
