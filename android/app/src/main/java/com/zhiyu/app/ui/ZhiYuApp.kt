@@ -176,7 +176,7 @@ import com.zhiyu.app.ui.screens.*
             infiniteRepeatable(tween(5000,easing=LinearEasing)),label="character_motion")
         TurnCallDialog(voice,companionName,state.messages.lastOrNull { it.role=="assistant" },state.isBusy,state.error,
             viewModel::sendVoiceText,onDismiss={callOpen=false},character={ speaking,mouth ->
-                val character = ocCreator.identity?.takeIf { identity ->
+                val character = ocCreator.callIdentity?.takeIf { identity ->
                     identity.reference?.id == media.profile?.referenceId &&
                         identity.reference?.visualVersion == media.profile?.visualVersion
                 }

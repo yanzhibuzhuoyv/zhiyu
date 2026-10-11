@@ -75,6 +75,21 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
             false
         }
     }
+    /** Exact attachment identity, scoped to this conversation; SHA equality alone is not a send. */
+    fun submittedPhoto(owner: String, id: String, attachmentId: String): Message? {
+        conversation(owner, id); MediaRules.path(attachmentId)
+        return readableDatabase.rawQuery("SELECT id,role,raw_bytes,sha256,created_at,origin,sources,attachments FROM messages " +
+            "WHERE owner=? AND conversation_id=? AND role='user' AND instr(attachments,?)>0 ORDER BY seq DESC",
+            arrayOf(owner, id, attachmentId)).use { cursor ->
+            while (cursor.moveToNext()) {
+                require(cursor.text("attachments").length <= 16 * 1024) { "聊天图片标注损坏" }
+                val row = cursor.metadata()
+                require(row.message.mediaAttachments.size <= 4)
+                if (row.message.mediaAttachments.any { it.id == attachmentId }) return@use original(owner, id, row)
+            }
+            null
+        }
+    }
     fun ensureConversation(owner: String, model: String, profile: CompanionProfile?): Conversation = transaction { db ->
         findConversation(owner)?.let { existing ->
             check(existing.model == model) { "本机聊天绑定与模型不一致" }

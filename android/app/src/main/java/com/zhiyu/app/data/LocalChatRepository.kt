@@ -168,7 +168,10 @@ class LocalChatRepository(
     override suspend fun discardPhotoDraft(id: String) = withContext(Dispatchers.IO) { photos.clearDraftIf(id) }
     override suspend fun sendMessage(id: String, content: String): Pair<Message, Message> = send(id, content, null)
     override suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment): Pair<Message, Message> = send(id, content, attachment)
-    private suspend fun send(id: String, content: String, photo: MediaAttachment?): Pair<Message, Message> = serial.withLock {
+    override suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment,
+        onSubmitted: (Message) -> Unit): Pair<Message, Message> = send(id, content, attachment, onSubmitted)
+    private suspend fun send(id: String, content: String, photo: MediaAttachment?,
+        onSubmitted: (Message) -> Unit = {}): Pair<Message, Message> = serial.withLock {
         lastCalendarNotice = null
         if (photo == null) ConnectionRules.message(content) else LocalMemoryCodec.bytes(content)
         require(content.length <= 16000) { "单条原文不能超过16000个字符" }
@@ -176,11 +179,12 @@ class LocalChatRepository(
         val saved = withContext(Dispatchers.IO) { connection() }
         val binding = withContext(Dispatchers.IO) { binding() }
         val payload = photo?.let { withContext(Dispatchers.IO) { photos.payload(it) } }
+        val owner = owner(binding)
+        val user = withContext(Dispatchers.IO) { submitUser(owner, id, text, photo) }
+        onSubmitted(user)
+        scheduleSemantic()
         val analysis = payload?.let { photoAnalyzer.prepare(it, saved.providerId, saved.model) }
         if (photo != null && analysis != null) withContext(Dispatchers.IO) { photos.saveObservations(photo, analysis.observations) }
-        val owner = owner(binding)
-        val user = withContext(Dispatchers.IO) { database.append(owner, id, "user", text, attachments = listOfNotNull(photo)) }
-        scheduleSemantic()
         val recent = withContext(Dispatchers.IO) { database.mediaHistory(owner, id) }
         val promptContext = withContext(Dispatchers.IO) { database.promptContext(owner, id) }
         val boundedRecent = promptContext.messages
@@ -209,6 +213,15 @@ class LocalChatRepository(
         commitCalendar(assistant, calendarReply)
         scheduleSemantic()
         user to assistant
+    }
+    private fun submitUser(owner: String, id: String, text: String, photo: MediaAttachment?): Message {
+        val existing = photo?.let { database.submittedPhoto(owner, id, it.id) }
+        if (existing != null) {
+            require(existing.content == text && existing.mediaAttachments == listOf(photo)) { "图片已发送，新的文字请另发一条" }
+            require(database.mediaHistory(owner, id).lastOrNull()?.id == existing.id) { "这张图片已经发送，请发新消息继续聊" }
+            return existing
+        }
+        return database.append(owner, id, "user", text, attachments = listOfNotNull(photo))
     }
     suspend fun proactiveResult(id: String, requestId: String): Message? = withContext(Dispatchers.IO) {
         require(requestPattern.matches(requestId)) { "主动消息请求标识无效" }

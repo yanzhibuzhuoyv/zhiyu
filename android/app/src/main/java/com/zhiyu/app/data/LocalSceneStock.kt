@@ -21,6 +21,7 @@ class LocalSceneStock(context: Context) {
         val profile = visual.profile(chat)
         val day = LocalDailyRepository(app).use { it.scene(chat, profile.visualVersion) }
         val snapshot = characters.read(chat)?.takeIf { it.identity.reference?.id == profile.referenceId && it.identity.reference?.visualVersion == profile.visualVersion }
+        val pictureIdentity = snapshot?.let { OcCallCharacterRules.resolve(it.identity, it.identity.reference) }
         val existing = media.list("image", limit = 1000, dayId=day.dayId).map { media.details(it.id) }.filter {
             it.attachment.dayId == day.dayId && it.attachment.visualVersion == profile.visualVersion && "daily_stock" in it.tags
         }.flatMap { it.tags }.toSet()
@@ -34,20 +35,17 @@ class LocalSceneStock(context: Context) {
                 val view = LocalDayStockRules.view(index)
                 val portrait = view == "portrait" && profile.referenceId != null
                 val bytes = if (portrait && snapshot != null) {
-                    val scene = OcScene(name = slot.activity, cameraYaw = if (index % 2 == 0) 12f else -12f,
+                    val scene = OcScene(name = slot.activity,
                         background = Color.TRANSPARENT, motion = OcMotion(headTurn = .05f, breath = .03f))
                     val image = renderer.render(chat, snapshot.packageSha, scene, background = background)
                     require(characters.read(chat)?.packageSha == image.packageSha) { "角色已更新" }
-                    // The 3D renderer returns transparent pixels; composite without replacing geometry.
-                    if (snapshot.identity.route == "avatar_3d") {
-                        bitmap = LocalPortraitProcessor.decode(image.png); composite(background, bitmap!!)
-                    } else image.png
+                    image.png
                 } else if (portrait) {
                     val ref = media.details(profile.referenceId!!).attachment
                     bitmap = LocalPortraitProcessor.decode(media.download(ref.id, ref.sha256))
                     composite(background, bitmap!!)
                 } else {
-                    if (view == "pov") drawPov(background, profile, snapshot?.identity)
+                    if (view == "pov") drawPov(background, profile, pictureIdentity)
                     png(background)
                 }
                 visual.withCurrentProfile(chat) { current ->

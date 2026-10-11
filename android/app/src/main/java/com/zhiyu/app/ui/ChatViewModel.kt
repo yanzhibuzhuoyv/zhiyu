@@ -274,13 +274,17 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         val image = if(voiceText!=null) null else mutableState.value.draftImage
         val content = voiceText ?: if (image == null) ConnectionRules.message(mutableState.value.draft) else mutableState.value.draft
         val conversation = mutableState.value.selected ?: throw IllegalStateException("对话还未准备好，请刷新后重试")
+        val wasViewingOlder = mutableState.value.viewingOlder
+        var photoSubmitted = false
         mutableState.update { it.copy(pendingMessage = content, pendingImage = image?.attachment) }
         try {
             val result = if (image == null) repository.sendMessage(conversation.id, content) else
-                repository.sendPhotoMessage(conversation.id, content, image.attachment)
-            val wasViewingOlder = mutableState.value.viewingOlder
+                repository.sendPhotoMessage(conversation.id, content, image.attachment) { submitted ->
+                    showSubmittedPhoto(conversation.id, content, image, submitted)
+                    photoSubmitted = true
+                }
             mutableState.update {
-                val combined = (if (wasViewingOlder) emptyList() else it.messages) + result.first + result.second
+                val combined = ((if (wasViewingOlder && image == null) emptyList() else it.messages) + result.first + result.second).distinctBy { row -> row.id }
                 val messages = combined.takeLast(100)
                 val hasOlder = wasViewingOlder || it.hasOlder || combined.size > messages.size
                 it.copy(messages = messages, hasOlder = hasOlder, nextBefore = if (hasOlder) messages.first().id else null,
@@ -288,9 +292,27 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
                     pendingMessage = null, pendingImage = null, viewingOlder = false,
                     notice = (repository as? com.zhiyu.app.data.LocalChatRepository)?.lastCalendarNotice)
             }
-            image?.let { cleanupSentPhotoDraft(it.attachment.id) }
             if (wasViewingOlder) loadHistory(conversation.id)
-        } finally { mutableState.update { it.copy(pendingMessage = null, pendingImage = null) } }
+        } finally {
+            mutableState.update { it.copy(pendingMessage = null, pendingImage = null) }
+            if (photoSubmitted && image != null) cleanupSentPhotoDraft(image.attachment.id)
+        }
+    }
+    private fun showSubmittedPhoto(id: String, text: String, image: ChatImageDraft, submitted: Message) {
+        require(submitted.role == "user" && submitted.content == text && submitted.mediaAttachments == listOf(image.attachment)) {
+            "图片提交结果不一致，请重新打开聊天核对"
+        }
+        mutableState.update { state ->
+            if (state.selectedId != id) state else {
+                val combined = ((if (state.viewingOlder) emptyList() else state.messages) + submitted).distinctBy { it.id }
+                val recent = combined.takeLast(100)
+                val older = state.viewingOlder || state.hasOlder || combined.size > recent.size
+                state.copy(messages = recent, hasOlder = older, nextBefore = if (older) recent.first().id else null,
+                    draft = if (state.draft == text) "" else state.draft,
+                    draftImage = if (state.draftImage?.attachment?.id == image.attachment.id) null else state.draftImage,
+                    pendingMessage = null, pendingImage = null, viewingOlder = false)
+            }
+        }
     }
     fun importDocument(uri: Uri) = action("导入知识库") {
         val document = repository.upload(reader.read(uri))

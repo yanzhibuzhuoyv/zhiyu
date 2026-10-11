@@ -5,6 +5,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.zhiyu.app.data.LocalMediaStore
 import com.zhiyu.app.data.LocalVisualRepository
+import com.zhiyu.app.data.LocalImageJobStore
+import com.zhiyu.app.data.NativeV4Context
 import com.zhiyu.app.domain.*
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -15,7 +17,8 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class LocalVisualInstrumentedTest {
-    private lateinit var context: IsolatedVisualContext
+    private lateinit var context: NativeV4Context
+    private lateinit var jobs: LocalImageJobStore
     private lateinit var repository: LocalVisualRepository
     private val chat = "a".repeat(32)
     private val otherChat = "b".repeat(32)
@@ -24,10 +27,17 @@ class LocalVisualInstrumentedTest {
         if (x in 50..73 && y in 30..53 || x in 112..122 && y in 65..85) Color.GREEN else Color.TRANSPARENT
     }
     @Before fun setup() {
-        context = IsolatedVisualContext(InstrumentationRegistry.getInstrumentation().targetContext)
-        repository = LocalVisualRepository(context)
+        context = NativeV4Context(InstrumentationRegistry.getInstrumentation().targetContext)
+        jobs = LocalImageJobStore(context)
+        repository = LocalVisualRepository(context, imageKey = { null }, jobs = jobs)
     }
-    @After fun cleanup() { context.clean() }
+    @After fun cleanup() {
+        jobs.close(); context.close()
+        val base = InstrumentationRegistry.getInstrumentation().targetContext.filesDir.canonicalFile
+        val root = context.filesDir.canonicalFile
+        check(root.parentFile == base && root.name.startsWith("v4_"))
+        check(root.deleteRecursively())
+    }
     @Test fun previewDoesNotAlterProfileOrGenerationQuotaAndOriginalIsByteExact() = runBlocking {
         val raw = original()
         val before = repository.profile(chat)
@@ -106,7 +116,7 @@ class LocalVisualInstrumentedTest {
                 listOf(PortraitStroke("keep", listOf(PortraitPoint(Float.NaN, .5f)), .02f)))
             fail("invalid coordinates")
         } catch (_: IllegalArgumentException) { }
-        expectFailure(503) { repository.generate(chat, "test-request", "描述") }
+        expectFailure(503) { repository.generate(chat, "d".repeat(32), "描述") }
         assertEquals(GenerationQuota(false, 0, 0, 2), repository.profile(chat).generation)
         assertArrayEquals(raw, repository.download(preview.originalId, preview.originalSha256))
     }
@@ -114,14 +124,16 @@ class LocalVisualInstrumentedTest {
         val store = LocalMediaStore(context)
         val raw = original()
         val first = store.ingest("image", raw, description = "六对翼参考", tags = listOf("角色"))
-        val duplicate = store.ingest("image", raw)
+        val duplicate = store.ingest("image", raw, tags = listOf("角色"))
         assertEquals(first.id, duplicate.id)
+        val differentTags = store.ingest("image", raw, tags = listOf("风景"))
+        assertNotEquals(first.id, differentTags.id)
         val newVersion = store.ingest("image", raw, visualVersion = 1)
         assertNotEquals(first.id, newVersion.id)
         val sticker = store.ingest("sticker", raw)
         assertNotEquals(first.id, sticker.id)
         store.ingest("image", raw, visualVersion = 2, purpose = "portrait")
-        assertEquals(2, store.list("image").size)
+        assertEquals(3, store.list("image").size)
         assertEquals(1, store.list("sticker").size)
         assertEquals(listOf("角色"), store.details(first.id).tags)
         assertArrayEquals(raw, store.download(first.id, first.sha256))

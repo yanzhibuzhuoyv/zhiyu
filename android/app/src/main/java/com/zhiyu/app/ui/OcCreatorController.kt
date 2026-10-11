@@ -17,9 +17,10 @@ import java.util.UUID
     private val onCommitted: suspend (chatId: String, snapshot: OcIdentitySnapshot) -> Unit = { _, _ -> }) {
     private val store = OcCreatorStore(context)
     private var chatId: String? = null
-    private var currentReference: OcAssetRef? = null
+    private var currentReference by mutableStateOf<OcAssetRef?>(null)
     private var currentVisualVersion = 0
     var identity by mutableStateOf<OcIdentity?>(null); private set
+    val callIdentity: OcIdentity? get() = OcCallCharacterRules.resolve(identity, currentReference)
     var busy by mutableStateOf(false); private set
     var error by mutableStateOf<String?>(null); private set
     suspend fun connect(id: String?, reference: OcAssetRef?, visualVersion: Int = reference?.visualVersion ?: 0) {
@@ -42,11 +43,12 @@ import java.util.UUID
         }
     }
     fun draft(route: String): OcIdentity {
+        require(route == "photo_subject") { "请通过导入或生成图片设置恋人外观" }
         val existing = identity ?: throw IllegalArgumentException("请等待角色资料读取")
-        val source = if (route == "photo_subject") {
-            if (currentReference == existing.reference) existing.photoSource ?: currentReference else currentReference
-        } else null
-        return OcIdentityRules.check(existing.copy(route = route, photoSource = source))
+        val compatible = existing.route == "photo_subject"
+        val source = if (compatible && currentReference == existing.reference) existing.photoSource ?: currentReference else currentReference
+        return OcIdentityRules.check(existing.copy(route = route, photoSource = source,
+            body = OcBody(), parts = emptyList(), rig = if (compatible) existing.rig else OcRigRules.defaultRig()))
     }
     suspend fun source(draft: OcIdentity): Bitmap? {
         if (draft.route != "photo_subject") return null
@@ -66,6 +68,7 @@ import java.util.UUID
             val attempt = UUID.randomUUID().toString()
             var committed = false
             try {
+                require(draft.route == "photo_subject") { "请通过导入或生成图片设置恋人外观" }
                 val freshReference = if (refreshReference != null) refreshReference.invoke() else currentReference
                 check(chatId == id) { "聊天已切换，请重新打开角色编辑器" }
                 val expectedVisualVersion = freshReference?.visualVersion ?: currentVisualVersion
@@ -76,13 +79,7 @@ import java.util.UUID
                 }
                 val proposed = OcIdentityRules.next(before, draft)
                 photo = source(proposed)
-                val rendered = withContext(Dispatchers.IO) {
-                    when (proposed.route) {
-                        "avatar_3d" -> AvatarStillRenderer.png(proposed)
-                        "parts_2d", "photo_subject" -> OcFlatRenderer.png(proposed, source = photo)
-                        else -> throw IllegalArgumentException("请选择角色制作方式")
-                    }
-                }
+                val rendered = withContext(Dispatchers.IO) { OcFlatRenderer.png(proposed, source = photo) }
                 check(chatId == id && identity?.revision == before.revision) { "角色已更新，请重新打开" }
                 val pngSha = MessageDigest.getInstance("SHA-256").digest(rendered).joinToString("") { "%02x".format(it) }
                 withContext(Dispatchers.IO) { store.beginPublication(id, before.revision, expectedVisualVersion, proposed, pngSha, attempt) }

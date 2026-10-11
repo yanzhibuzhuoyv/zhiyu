@@ -66,6 +66,9 @@ interface ChatRepository {
     suspend fun sendMessage(id: String, content: String): Pair<Message, Message>
     suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment): Pair<Message, Message> =
         throw IllegalStateException("当前连接不支持发送图片")
+    suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment,
+        onSubmitted: (Message) -> Unit): Pair<Message, Message> =
+        sendPhotoMessage(id, content, attachment).also { onSubmitted(it.first) }
     suspend fun savedPhotoDraft(): ChatImageDraft? = null
     suspend fun discardPhotoDraft(id: String) = Unit
     suspend fun documents(): List<Document>

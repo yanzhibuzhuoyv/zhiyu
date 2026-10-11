@@ -21,7 +21,8 @@ class CharacterSceneRenderer(context: Context, private val loadImage: suspend (O
         width: Int = 768, height: Int = 1024, background: Bitmap? = null): OcSceneImage {
         val snapshot = withContext(Dispatchers.IO) { store.read(chatId) } ?: throw IllegalArgumentException("请先保存角色外观")
         require(snapshot.packageSha == expectedPackageSha && snapshot.identity.confirmed) { "角色已更新，请重新生成场景" }
-        val identity = snapshot.identity
+        // Keep the archive SHA for CAS; legacy models display their already published PNG.
+        val identity = checkNotNull(OcCallCharacterRules.resolve(snapshot.identity, snapshot.identity.reference))
         var source: Bitmap? = null
         try {
             if (identity.route == "photo_subject") {
@@ -31,17 +32,8 @@ class CharacterSceneRenderer(context: Context, private val loadImage: suspend (O
                 require(sha == ref.sha256) { "角色原图校验失败" }
                 source = ownedOcBitmap { LocalPortraitProcessor.decode(bytes) }
             }
-            val png = withContext(Dispatchers.IO) {
-                when (identity.route) {
-                    "avatar_3d" -> {
-                        // Transparent fixed geometry may be composited by the caller over a background.
-                        AvatarStillRenderer.png(identity, scene, width, height)
-                    }
-                    "parts_2d", "photo_subject" -> OcFlatRenderer.png(identity, scene, width, height, source, background)
-                    else -> throw IllegalArgumentException("请先选择角色制作方式")
-                }
-            }
-            return OcSceneImage(identity.ocId, identity.revision, snapshot.packageSha,
+            val png = withContext(Dispatchers.IO) { OcFlatRenderer.png(identity, scene, width, height, source, background) }
+            return OcSceneImage(snapshot.identity.ocId, snapshot.identity.revision, snapshot.packageSha,
                 checkNotNull(identity.reference).visualVersion, identity.photoSource?.sha256, png)
         } finally { source?.recycle() }
     }

@@ -40,7 +40,9 @@ class LocalVisualRepository(context: Context,
         writeProfile(id,before.copy(mode="generate",visualVersion=before.visualVersion+1,referenceId=asset.id,referenceUrl=asset.url))
     }
     suspend fun publishCharacter(id: String, identity: OcIdentity, png: ByteArray, expectedVersion: Int): OcAssetRef = io {
-        OcIdentityRules.check(identity); require(identity.confirmed)
+        OcIdentityRules.check(identity); require(identity.confirmed && identity.route == "photo_subject") {
+            "请通过导入或生成图片设置恋人外观"
+        }
         val before = readProfile(id)
         require(before.visualVersion == expectedVersion) { "外观已经更新，请重新打开角色编辑器" }
         val asset = assets.ingest("image", png, "你制作的 OC", before.visualVersion + 1, purpose = "portrait")
@@ -58,7 +60,9 @@ class LocalVisualRepository(context: Context,
         validateDescription(description)
         val before = readProfile(id)
         val changed = before.mode != mode || before.gender != gender || before.hair != hair
-        val keep = !changed && mode != "none"
+        // Descriptive fields do not revoke a confirmed picture. Version still advances to
+        // invalidate previews/jobs created before the change; only explicit removal clears it.
+        val keep = mode != "none"
         writeProfile(id, before.copy(mode = mode, description = description.trim(), gender = gender, hair = hair,
             visualVersion = before.visualVersion + if (changed) 1 else 0,
             referenceId = if (keep) before.referenceId else null, referenceUrl = if (keep) before.referenceUrl else null))
