@@ -70,6 +70,7 @@ object LocalDailyScheduler {
         val scene = withContext(Dispatchers.IO) { LocalDailyRepository(appContext).use { it.scene(chat.id, version, now) } }
         LocalSceneStockScheduler.enqueue(appContext, chat.id, version, scene.dayId)
         schedule(appContext, chat.id, now)
+        com.zhiyu.app.notifications.LocalDailyShareScheduler.schedule(appContext, chat.id, now)
         return scene
     }
 

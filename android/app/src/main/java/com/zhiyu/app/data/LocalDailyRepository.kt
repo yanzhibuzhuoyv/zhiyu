@@ -21,6 +21,10 @@ class LocalDailyRepository(context: Context, name: String = "local_daily.sqlite3
         throw IllegalStateException("不支持此日轨迹版本，原数据已保留")
     fun scene(chat: String, visualVersion: Int, now: Instant = Instant.now()): LocalDailyScene = horizon(chat, visualVersion, now).first()
 
+    /** Keep the saved trajectory read and short media/message commit within the existing day-plan lock. */
+    internal fun <T> withCurrentScene(chat: String, visualVersion: Int, now: Instant,
+        block: (LocalDailyScene) -> T): T = synchronized(lock) { block(scene(chat, visualVersion, now)) }
+
     fun horizon(chat: String, visualVersion: Int, now: Instant = Instant.now()): List<LocalDailyScene> = synchronized(lock) {
         MediaRules.path(chat)
         require(visualVersion >= 0)

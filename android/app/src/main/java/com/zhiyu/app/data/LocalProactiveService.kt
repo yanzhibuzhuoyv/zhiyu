@@ -79,7 +79,7 @@ class LocalProactiveService(context: Context, private val store: CredentialStore
         val contacts = sorted.filter { it.origin == "proactive" }
         return LocalContactStats(contacts.count { Instant.parse(it.createdAt).atZone(zone).toLocalDate() == today },
             contacts.count { lastUser == null || Instant.parse(it.createdAt).isAfter(lastUser) },
-            sorted.lastOrNull { it.origin != "proactive" }?.createdAt?.let(Instant::parse),
+            sorted.lastOrNull { it.origin !in setOf("proactive", "daily_share") }?.createdAt?.let(Instant::parse),
             contacts.lastOrNull()?.createdAt?.let(Instant::parse))
     }
     private fun completed(id: String, message: Message, instant: Instant, preferences: ProactivePreferences,

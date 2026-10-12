@@ -4,6 +4,7 @@ import com.zhiyu.app.domain.*
 
 /** Caption a single fictional OC moment. Neither history nor image text can create user facts or actions. */
 internal object LocalDailyShareCaption {
+    private val consultedRecords = Regex("(?:我(?:刚刚?|刚才|先)?|^|[，。；？！\\n])查(?:看|询|找)?(?:了|过)?(?:一?下)?[^，。；？！\\r\\n]{0,12}记录")
     fun system(profile: CompanionProfile?, event: LocalDailyShareEvent, vision: Boolean, historySize: Int): String {
         val activity = AgnesImageJson.quote(event.slot.activity)
         return LocalCompanionPrompt.build(profile, emptyList(), emptyList(), historyMessages = historySize) + "\n" + """
@@ -20,7 +21,8 @@ internal object LocalDailyShareCaption {
 
     fun clean(raw: String): String {
         val text = raw.replace(Regex("\\[\\[ZHIYU_(?:MEDIA|CALENDAR)_[^\\r\\n]*?(?:\\]\\]|$)"), "").trim()
-        if (text.isBlank() || Regex("(?i)(?:\\bRAG\\b|数据库|向量库|检索系统|API\\s*Key|trajectory_|daily_stock|decoded_final|visual_version|composite_reviewed|qwen_generated|ZHIYU_)").containsMatchIn(text)) {
+        if (text.isBlank() || consultedRecords.containsMatchIn(text) ||
+            Regex("(?i)(?:\\bRAG\\b|数据库|向量库|检索系统|API\\s*Key|trajectory_|daily_stock|decoded_final|visual_version|composite_reviewed|qwen_generated|ZHIYU_)").containsMatchIn(text)) {
             throw ApiFailure(502, "这次分享没有形成合适的文字，图片仍会保留", "daily_share_response_invalid")
         }
         ConnectionRules.message(text)

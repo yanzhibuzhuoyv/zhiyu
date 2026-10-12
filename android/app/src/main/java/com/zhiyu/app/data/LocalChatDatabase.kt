@@ -133,7 +133,18 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
             role == "user" && attachments.size == 1 && attachments.first().kind == "image")) { "聊天原文无效" }
         require(attachments.size <= 4); attachments.forEach { MediaRules.check(it) }
         conversation(owner, id)
-        requestId?.let { proactiveResult(owner, id, it)?.let { existing -> return@transaction existing } }
+        requestId?.let { proactiveResult(owner, id, it)?.let { existing ->
+            require(origin != "daily_share" || existing.origin == "daily_share") { "请求已用于其他消息" }
+            return@transaction existing
+        } }
+        if (origin == "daily_share") {
+            require(role == "assistant" && requestId != null && attachments.size == 1 && attachments.single().kind == "image") {
+                "日常分享必须附上对应图片"
+            }
+            val picture = attachments.single()
+            val day = requireNotNull(picture.dayId) { "日常分享图片日期缺失" }
+            require(picture.sha256 !in dailyShareImageHashes(owner, id, day)) { "这张日常图片已经分享过" }
+        }
         val encoded = LocalMemoryCodec.encode(content)
         val message = Message(identifier(), role, content, sources, Instant.now().toString(), attachments, origin)
         db.insertOrThrow("messages", null, values("id" to message.id, "owner" to owner, "conversation_id" to id, "role" to role,
@@ -212,6 +223,16 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
     fun proactiveResult(owner: String, id: String, requestId: String): Message? = readableDatabase.rawQuery(
         "SELECT m.* FROM proactive_requests p JOIN messages m ON m.id=p.message_id WHERE p.owner=? AND p.conversation_id=? AND p.request_id=?",
         arrayOf(owner, id, requestId)).use { if (it.moveToFirst()) it.message() else null }
+    fun dailyShareImageHashes(owner: String, id: String, day: String): Set<String> {
+        conversation(owner, id)
+        require(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}").matches(day) && java.time.LocalDate.parse(day).toString() == day)
+        return readableDatabase.rawQuery("SELECT attachments FROM messages WHERE owner=? AND conversation_id=? " +
+            "AND role='assistant' AND origin='daily_share' AND attachments LIKE ?", arrayOf(owner, id, "%\"day_id\":\"$day\"%"))
+            .use { cursor -> buildSet {
+                while (cursor.moveToNext()) JSONArray(cursor.getString(0)).mapObjects { it.mediaAttachment() }
+                    .filter { it.kind == "image" && it.dayId == day }.forEach { add(it.sha256) }
+            } }
+    }
     fun proactivePolicyHistory(owner: String, id: String): List<Message> {
         conversation(owner, id)
         val since = Instant.now().minusSeconds(3 * 86400).toString()

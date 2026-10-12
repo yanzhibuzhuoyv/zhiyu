@@ -151,7 +151,7 @@ class LocalDailyShareStoreNativeTest {
         Fixture().use { f ->
             val now = Instant.parse("2026-10-13T02:00:00Z")
             val ordinary = ProactiveRunRecord(now, "sent", now.plusSeconds(3600))
-            val share = ProactiveRunRecord(now, "await_image", now.plusSeconds(900))
+            val share = ProactiveRunRecord(now, "not_due", now.plusSeconds(900))
             f.contact().recordRun(f.chat, ordinary)
             f.work().recordRun(f.chat, share)
             assertEquals(share, f.work().lastRun(f.chat))

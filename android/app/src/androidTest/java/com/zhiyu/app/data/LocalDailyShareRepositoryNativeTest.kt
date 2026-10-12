@@ -1,6 +1,7 @@
 package com.zhiyu.app.data
 
 import com.zhiyu.app.domain.*
+import com.zhiyu.app.notifications.ProactiveForeground
 import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -137,6 +138,7 @@ class LocalDailyShareRepositoryNativeTest {
     }
 
     private suspend fun withRepository(test: suspend (DailyShareNativeFixture, LocalChatRepository, Transport, Store) -> Unit) {
+        ProactiveForeground.setVisible(false)
         val client = Transport()
         val saved = SavedConnection(LocalChatRepository.LOCAL_URL, "deepseek", "synthetic-key-only", "deepseek-flash")
         val binding = CompanionBinding("deepseek", "deepseek-flash", profile)
@@ -151,7 +153,7 @@ class LocalDailyShareRepositoryNativeTest {
                     try { test(f, repo, client, state) } finally { archive.close() }
                 }
             } finally { db.close() }
-        } finally { initial.close() }
+        } finally { initial.close(); ProactiveForeground.setVisible(false) }
     }
 
     private fun repository(f: DailyShareNativeFixture, client: Transport, saved: SavedConnection,

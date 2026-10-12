@@ -35,6 +35,8 @@ class LocalChatRepository(
     }
     private val appContext = context.applicationContext
     private val media = LocalReplyMedia(appContext)
+    private val dailyShares = LocalDailyShareMedia(appContext, dailyNow)
+    private val dailyVisual = LocalVisualRepository(appContext)
     private val calendar = CompanionCalendarStore(appContext)
     private val photos = ChatPhotoStore(appContext)
     private val photoHistory = LocalPhotoPromptHistory(photos)
@@ -229,9 +231,67 @@ class LocalChatRepository(
     }
     suspend fun proactivePolicyHistory(id: String): List<Message> = withContext(Dispatchers.IO) { database.proactivePolicyHistory(currentOwner(), id) }
     suspend fun sendDailyShare(id: String, requestId: String, event: LocalDailyShareEvent,
+        attachment: MediaAttachment): Message = withTimeout(180_000) { coroutineScope {
+        val scope = this
+        val foregroundWatcher = launch {
+            ProactiveForeground.changes.first { it }
+            scope.cancel(CancellationException("用户回到前台，取消后台日常分享"))
+        }
+        try { serial.withLock { generateDailyShare(id, requestId, event, attachment) } }
+        finally { foregroundWatcher.cancel() }
+    } }
+
+    private suspend fun generateDailyShare(id: String, requestId: String, event: LocalDailyShareEvent,
         attachment: MediaAttachment): Message {
-        throw UnsupportedOperationException("TDD pending: daily share required-image delivery")
+        require(requestId.length == 36 && requestPattern.matches(requestId) && event.requestId == requestId) { "日常分享请求标识无效" }
+        val saved = withContext(Dispatchers.IO) { connection() }
+        val selectedBinding = withContext(Dispatchers.IO) { binding() }
+        val owner = owner(selectedBinding)
+        withContext(Dispatchers.IO) { database.proactiveResult(owner, id, requestId) }?.let {
+            require(it.origin == "daily_share" && it.mediaAttachments.singleOrNull()?.kind == "image") { "请求已用于其他消息" }
+            return it
+        }
+        val conversation = withContext(Dispatchers.IO) { database.conversation(owner, id) }
+        val profile = withContext(Dispatchers.IO) { dailyVisual.withCurrentProfile(id) { current ->
+            dailyShares.validateAndCommit(id, event, attachment) {
+                require(attachment.sha256 !in database.dailyShareImageHashes(owner, id, event.dayId)) { "这张日常图片已经分享过" }
+                current
+            }
+        } }
+        val history = withContext(Dispatchers.IO) { database.promptHistory(owner, id).filter { it.content.isNotBlank() } }
+        val vision = ChatPhotoRules.nativeVision(saved.providerId, saved.model)
+        val picture = if (vision) withContext(Dispatchers.IO) {
+            ChatPhotoImageProcessor().normalize(LocalMediaStore(appContext).download(attachment.id, attachment.sha256))
+        } else null
+        val system = LocalDailyShareCaption.system(conversation.profile, event, vision, history.size)
+        val context = listOf(DirectChatMessage("system", system)) + history.map { DirectChatMessage(it.role, it.content) } +
+            DirectChatMessage("user", "[应用的日常分享请求，不是真实用户消息] 围绕这次日常分享一点感受。", listOfNotNull(picture))
+        withContext(Dispatchers.IO) {
+            checkStillConnected(saved)
+            check(store.readBinding() == selectedBinding && conversation.profile == selectedBinding.profile) { "恋人设定已更新" }
+        }
+        val raw = provider.complete(saved.providerId, saved.apiKey, saved.model, context, outputBudget())
+        currentCoroutineContext().ensureActive()
+        val assistant = commitDailyShare(owner, id, requestId, event, attachment, LocalDailyShareCaption.clean(raw),
+            saved, selectedBinding, conversation.profile, profile)
+        scheduleSemantic()
+        return assistant
     }
+
+    private suspend fun commitDailyShare(owner: String, id: String, requestId: String, event: LocalDailyShareEvent,
+        attachment: MediaAttachment, content: String, saved: SavedConnection, selectedBinding: CompanionBinding,
+        expectedPersonality: CompanionProfile?, expectedVisual: VisualProfile): Message = withContext(Dispatchers.IO) {
+            val active = currentCoroutineContext()
+            dailyVisual.withCurrentProfile(id) { current ->
+                require(current == expectedVisual) { "恋人形象已更新" }
+                dailyShares.validateAndCommit(id, event, attachment) { image ->
+                    checkStillConnected(saved)
+                    check(store.readBinding() == selectedBinding && database.conversation(owner, id).profile == expectedPersonality) { "恋人设定已更新" }
+                    active.ensureActive()
+                    database.append(owner, id, "assistant", content, "daily_share", attachments = listOf(image), requestId = requestId)
+                }
+            }
+        }
     suspend fun sendProactive(id: String, requestId: String, nightEvent: LocalNightEvent? = null): Message = withTimeout(180000) { coroutineScope {
         val scope = this
         val foregroundWatcher = launch {

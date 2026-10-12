@@ -33,6 +33,7 @@ object ProactiveScheduler {
             .build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(UNIQUE_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
         next(context, conversationId)
+        LocalDailyShareScheduler.schedule(context, conversationId)
     }
 
     fun next(context: Context, conversationId: String, now: Instant = Instant.now(), continueChain: Boolean = false) {
@@ -80,5 +81,6 @@ object ProactiveScheduler {
         val manager = WorkManager.getInstance(context)
         manager.cancelUniqueWork(UNIQUE_NAME)
         manager.cancelAllWorkByTag(WORK_TAG)
+        LocalDailyShareScheduler.cancel(context)
     }
 }

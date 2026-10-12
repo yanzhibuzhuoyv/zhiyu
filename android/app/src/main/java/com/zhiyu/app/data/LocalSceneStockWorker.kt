@@ -26,6 +26,7 @@ class LocalSceneStockWorker(context: Context, params: WorkerParameters): Corouti
                 com.zhiyu.app.data.local.qwen.QwenImageJobStore(applicationContext).sweepBefore(LocalDailyRules.dayId(now))
             }
             val result = LocalSceneStock(applicationContext).prepare(chat,day,version)
+            if (result.prepared > 0) com.zhiyu.app.notifications.LocalDailyShareScheduler.pictureAvailable(applicationContext, chat)
             if (result.reason == "yield") Result.retry() else Result.success()
         }
         catch(error:CancellationException) { throw error }
