@@ -73,7 +73,7 @@ import com.zhiyu.app.ui.screens.*
     LaunchedEffect(state.connected, state.restoring) {
         if (!state.connected) { menuOpen = false; libraryOpen = false; revalidate = false; styleOpen = false; appearanceOpen = false; visualOpen = false; careOpen = false; typographyOpen = false; mediaLibraryOpen = false }
         if (!state.connected) { callOpen=false; voiceSettingsOpen=false; imageServiceOpen=false; voice.stop() }
-        if (!state.restoring && !state.connected) ProactiveScheduler.cancel(appContext)
+        if (!state.restoring && !state.connected && !state.canRestoreConnection) ProactiveScheduler.cancel(appContext)
     }
     LaunchedEffect(media.suggestSetup) { if (media.suggestSetup && state.connected) visualOpen = true }
     Scaffold(
@@ -93,7 +93,7 @@ import com.zhiyu.app.ui.screens.*
                                 onClick = { menuOpen = false; appearanceOpen = true }, modifier = Modifier.testTag("appearance_menu"))
                             DropdownMenuItem(text = { Text("恋人外观") }, leadingIcon = { Icon(Icons.Outlined.Face, null) },
                                 onClick = { menuOpen = false; visualOpen = true }, modifier = Modifier.testTag("visual_menu"))
-                            DropdownMenuItem(text = { Text("图像服务") }, leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
+                            DropdownMenuItem(text = { Text("本机照片") }, leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
                                 onClick = { menuOpen = false; imageServiceOpen = true })
                             DropdownMenuItem(text = { Text("恋人的声音") }, leadingIcon = { Icon(Icons.Outlined.RecordVoiceOver,null) },
                                 onClick = { menuOpen=false; voiceSettingsOpen=true })
@@ -169,7 +169,7 @@ import com.zhiyu.app.ui.screens.*
         onConfirm = { value -> typography.save(value) { typographyOpen = false } }, onDismiss = { typographyOpen = false },
     )
     if (careOpen && state.connected) CareSettingsDialog(care) { careOpen = false }
-    if (imageServiceOpen && state.connected) ImageServiceDialog(onSaved = media::reload, onDismiss = { imageServiceOpen = false })
+    if (imageServiceOpen && state.connected) QwenModelDialog(onSaved = media::reload, onDismiss = { imageServiceOpen = false })
     if (voiceSettingsOpen && state.connected) VoiceSettingsDialog(voice) { voiceSettingsOpen=false }
     if (callOpen && state.connected) {
         val cycle by rememberInfiniteTransition(label="character_idle").animateFloat(0f,1f,

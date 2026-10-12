@@ -29,13 +29,17 @@ class LocalSceneStockNativeTest {
     }
     @Test fun localStockNeedsNoUploadsOrImageKeyAndReusesOneDatedSet()=runBlocking {
         isolated { context ->
-            val chat=LocalMediaStore.identifier(); val stock=LocalSceneStock(context)
+            val instant=Instant.now()
+            val chat=LocalMediaStore.identifier(); val stock=LocalSceneStock(context,now={instant})
             stock.prepare(chat)
             val store=LocalMediaStore(context); val pictures=store.list("image")
-            val scene=LocalDailyRepository(context).use { it.scene(chat,0) }
-            assertEquals(scene.slots.size,pictures.size)
+            val plans=LocalDailyRepository(context).use { it.horizon(chat,0,instant) }
+            assertEquals(LocalScenePrefetchRules.targets(plans,instant).size,pictures.size)
             assertEquals(pictures.size,pictures.map { it.sha256 }.distinct().size)
-            assertTrue(pictures.all { it.dayId==LocalDailyRules.dayId(Instant.now()) && it.visualVersion==0 })
+            assertTrue(pictures.all { it.dayId in LocalScenePrefetchRules.days(instant) && it.visualVersion==0 })
+            assertEquals(plans[1].slots.size,pictures.count { it.dayId==plans[1].dayId })
+            assertTrue(pictures.all { "local_placeholder" in store.details(it.id).tags })
+            assertTrue(pictures.none { "qwen_generated" in store.details(it.id).tags })
             stock.prepare(chat)
             assertEquals(pictures.map { it.id },store.list("image").map { it.id })
         }

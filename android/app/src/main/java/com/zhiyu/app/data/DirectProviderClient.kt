@@ -66,7 +66,9 @@ open class DirectProviderClient(private val transport: DirectProviderTransport =
                 val content: Any = if (message.photos.isEmpty()) message.content else JSONArray().also { parts ->
                     if (message.content.isNotBlank()) parts.put(JSONObject().put("type", "text").put("text", message.content))
                     message.photos.forEach { parts.put(JSONObject().put("type", "image_url")
-                        .put("image_url", JSONObject().put("url", it.dataUri()))) }
+                        .put("image_url", JSONObject().put("url", it.dataUri()).apply {
+                            if (providerId == "deepseek") put("detail", "high")
+                        })) }
                 }
                 array.put(JSONObject().put("role", message.role).put("content", content))
             }
@@ -87,7 +89,7 @@ open class DirectProviderClient(private val transport: DirectProviderTransport =
         }
     }
     private fun applyModelOptions(json: JSONObject, provider: String, model: String) {
-        val disable = (provider == "deepseek" && model in setOf("deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro")) ||
+        val disable = (provider == "deepseek" && model in setOf("deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro")) ||
             (provider == "kimi" && model == "kimi-k2.6") || (provider == "zhipu" && model in setOf("glm-4.5-flash", "glm-5.2")) ||
             (provider == "doubao" && (model.startsWith("doubao-seed-") || model.startsWith("ep-"))) || (provider == "tokenhub" && model == "hy3")
         if (disable) json.put("thinking", JSONObject().put("type", "disabled"))

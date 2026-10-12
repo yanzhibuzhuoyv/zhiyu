@@ -21,9 +21,8 @@ object PortraitRules {
         require(digest.matches(value.originalSha256) && digest.matches(value.subjectSha256)) { "人物预览校验信息无效" }
         require(value.originalWidth in 1..8192 && value.originalHeight in 1..8192 &&
             value.originalWidth.toLong() * value.originalHeight <= 20_000_000) { "人物预览尺寸无效" }
-        require(value.sourceWidth in 1..8192 && value.sourceHeight in 1..8192 &&
-            value.sourceWidth.toLong() * value.sourceHeight <= 20_000_000 &&
-            value.coordinateSpace in setOf("original_pixels", "working_pixels")) { "原始参考图尺寸无效" }
+        PhotoInputRules.checkSource(value.sourceWidth, value.sourceHeight)
+        require(value.coordinateSpace in setOf("original_pixels", "working_pixels")) { "原始参考图坐标无效" }
         if (value.coordinateSpace == "working_pixels") require(value.originalWidth <= 1536 && value.originalHeight <= 1536 &&
             value.originalWidth.toLong() * value.originalHeight <= 4_000_000) { "工作图片尺寸过大" }
         require(value.bounds.size == 4) { "人物选取范围无效" }

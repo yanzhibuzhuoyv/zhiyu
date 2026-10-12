@@ -25,8 +25,8 @@ class ChatPhotoController(context: Context, private val scope: CoroutineScope,
 
     fun choose(uri: Uri) = operation {
         val draft = withContext(Dispatchers.IO) { store.import(uri).also(store::saveDraft) }
-        onDraft(draft)
         show(draft)
+        onDraft(draft)
     }
 
     fun remove(draft: ChatImageDraft?) = operation {
@@ -51,7 +51,10 @@ class ChatPhotoController(context: Context, private val scope: CoroutineScope,
         val image = draft?.let {
             withContext(Dispatchers.IO) {
                 val bytes = store.payload(it.attachment).bytes
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                val sample = com.zhiyu.app.domain.PhotoInputRules.sampleSize(bounds.outWidth, bounds.outHeight, 256, 256L * 256)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
                     ?: throw IllegalArgumentException("图片预览失败")
             }
         }
@@ -60,11 +63,12 @@ class ChatPhotoController(context: Context, private val scope: CoroutineScope,
     }
 
     private fun operation(block: suspend () -> Unit) {
-        if (busy) return
-        scope.launch {
+        if (busy || !scope.isActive) return
+        busy = true
+        error = null
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
             mutex.withLock {
-                busy = true
-                error = null
                 try { block() }
                 catch (failure: Exception) {
                     if (failure is CancellationException) throw failure
@@ -73,8 +77,9 @@ class ChatPhotoController(context: Context, private val scope: CoroutineScope,
                         is IllegalArgumentException -> failure.message ?: "这张图片无法发送，请重新选择"
                         else -> "图片没有准备好，可以重试；原有草稿已保留"
                     }
-                } finally { busy = false }
+                }
             }
+            } finally { busy = false }
         }
     }
 }

@@ -52,6 +52,10 @@ class ChatPhotoRulesTest {
     }
 
     @Test fun unknownModelsDoNotBecomeVisionModelsAndProviderMustMatch() {
+        assertTrue(ChatPhotoRules.nativeVision("deepseek", "deepseek-flash"))
+        assertTrue(ChatPhotoRules.nativeVision("deepseek", "deepseek-v4-flash"))
+        assertTrue(ChatPhotoRules.nativeVision("deepseek", "deepseek-v4-flash-vision-exp"))
+        assertFalse(ChatPhotoRules.nativeVision("deepseek", "deepseek-v4-pro"))
         assertTrue(ChatPhotoRules.nativeVision("kimi", "kimi-k2.6"))
         assertTrue(ChatPhotoRules.nativeVision("qwen", "qwen-vl-max"))
         assertTrue(ChatPhotoRules.nativeVision("qwen", "qwen3-vl-plus"))
@@ -59,6 +63,18 @@ class ChatPhotoRulesTest {
         assertFalse(ChatPhotoRules.nativeVision("doubao", "ep-arbitrary"))
         assertFalse(ChatPhotoRules.nativeVision("qwen", "qwen-plus"))
         assertFalse(ChatPhotoRules.nativeVision("kimi", "kimi-k3")) // Existing chat excludes retained thinking protocol.
+    }
+
+    @Test fun aLargeOriginalCanBeReadWithoutRaisingTheNetworkUploadLimit() {
+        val input = ByteArray(6 * 1024 * 1024) { 37 }
+        assertArrayEquals(input, ChatPhotoRules.boundedBytes(ByteArrayInputStream(input)))
+        assertEquals(5 * 1024 * 1024, ChatPhotoRules.MAX_UPLOAD_BYTES)
+    }
+
+    @Test fun ocrOnlyMustNotBePresentedAsAnObservationOfTheScene() {
+        val result = ChatPhotoAnalysis(false, listOf(ChatPhotoObservation(hash, "ocr", "咖啡")), setOf("vision"))
+        assertTrue(result.context().contains("只有文字识别"))
+        assertTrue(result.context().contains("不能确认画面"))
     }
 
     @Test fun observationsCannotClaimOtherPhotoOrBecomeUserConfirmedFacts() {

@@ -6,59 +6,113 @@ import com.zhiyu.app.domain.*
 import kotlinx.coroutines.*
 import java.io.ByteArrayOutputStream
 import java.time.Instant
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Prepares cached phone-side pictures; reply generation never waits for this renderer. */
-class LocalSceneStock(context: Context) {
+data class LocalSceneStockResult(val prepared: Int = 0, val deferred: Boolean = false, val reason: String? = null)
+
+class LocalSceneStock(context: Context,
+    private val backgrounds: LocalSceneBackgroundSource = QwenSceneBackgroundSource(context),
+    private val now: () -> Instant = Instant::now,
+    private val resources: suspend () -> LocalScenePrefetchResources = LocalSceneResourceReader(context)::read,
+) {
     private val app = context.applicationContext
     private val visual = LocalVisualRepository(app)
     private val media = LocalMediaStore(app)
     private val characters = OcCreatorStore(app)
     private val generatedBackgrounds=LocalGeneratedBackgrounds(app)
     private val renderer = CharacterSceneRenderer(app) { media.download(it.id, it.sha256) }
-    suspend fun prepare(chat: String, expectedDay: String = LocalDailyRules.dayId(Instant.now())) = withContext(Dispatchers.IO) {
+    suspend fun prepare(chat: String, expectedDay: String = LocalDailyRules.dayId(now()), expectedVersion: Int? = null) = withContext(Dispatchers.IO) {
+        serial.withLock { prepareLocked(chat, expectedDay, expectedVersion) }
+    }
+    private suspend fun prepareLocked(chat: String, expectedDay: String, expectedVersion: Int?): LocalSceneStockResult {
         MediaRules.path(chat)
-        if (expectedDay != LocalDailyRules.dayId(Instant.now())) return@withContext
+        val instant = now()
+        if (expectedDay !in LocalScenePrefetchRules.days(instant)) return LocalSceneStockResult()
         val profile = visual.profile(chat)
-        val day = LocalDailyRepository(app).use { it.scene(chat, profile.visualVersion) }
+        if (expectedVersion != null && expectedVersion != profile.visualVersion) return LocalSceneStockResult()
+        val plans = LocalDailyRepository(app).use { it.horizon(chat, profile.visualVersion, instant) }
         val snapshot = characters.read(chat)?.takeIf { it.identity.reference?.id == profile.referenceId && it.identity.reference?.visualVersion == profile.visualVersion }
         val pictureIdentity = snapshot?.let { OcCallCharacterRules.resolve(it.identity, it.identity.reference) }
-        val existing = media.list("image", limit = 1000, dayId=day.dayId).map { media.details(it.id) }.filter {
-            it.attachment.dayId == day.dayId && it.attachment.visualVersion == profile.visualVersion && "daily_stock" in it.tags
-        }.flatMap { it.tags }.toSet()
-        for ((index, slot) in day.slots.withIndex()) {
-            ensureActive()
-            val marker = "slot_${slot.time.replace(":", "")}"; if (marker in existing) continue
-            val background = generatedBackgrounds.get(chat,day.dayId,profile.visualVersion,slot)
-                ?: LocalSceneBackgrounds.draw("${day.sceneId}:$index".hashCode(), slot)
-            var bitmap: Bitmap? = null
+        val native = backgrounds.hasInstalledPack()
+        val pending = LocalScenePrefetchRules.targets(plans, instant).filterNot { hasStock(it, native) }
+        var prepared = 0
+        var nativeReviews = 0
+        for (target in pending) {
+            currentCoroutineContext().ensureActive()
+            if (native) {
+                val decision = LocalScenePrefetchRules.decision(resources(), target.nextDay)
+                if (!decision.allowed) return LocalSceneStockResult(prepared, true, decision.reason)
+            }
+            val received = try {
+                if (native) backgrounds.get(chat, target.scene.dayId, profile.visualVersion, target.slot)
+                else generatedBackgrounds.get(chat, target.scene.dayId, profile.visualVersion, target.slot)
+            } catch (_: LocalSceneBackgroundUnavailable) { continue }
+            if (received == null && native) return LocalSceneStockResult(prepared, true, "pending")
+            if (native && nativeReviews >= 1) { received?.recycle(); return LocalSceneStockResult(prepared, true, "yield") }
+            val placeholder = received == null
+            val background = if (received == null) LocalSceneBackgrounds.draw("${target.scene.sceneId}:${target.index}".hashCode(), target.slot)
+                else try { checkNotNull(received.copy(Bitmap.Config.ARGB_8888, true)) { "生活背景无法复制" } } finally { received.recycle() }
             try {
-                val view = LocalDayStockRules.view(index)
-                val portrait = view == "portrait" && profile.referenceId != null
-                val bytes = if (portrait && snapshot != null) {
-                    val scene = OcScene(name = slot.activity,
-                        background = Color.TRANSPARENT, motion = OcMotion(headTurn = .05f, breath = .03f))
-                    val image = renderer.render(chat, snapshot.packageSha, scene, background = background)
-                    require(characters.read(chat)?.packageSha == image.packageSha) { "角色已更新" }
-                    image.png
-                } else if (portrait) {
-                    val ref = media.details(profile.referenceId!!).attachment
-                    bitmap = LocalPortraitProcessor.decode(media.download(ref.id, ref.sha256))
-                    composite(background, bitmap!!)
-                } else {
-                    if (view == "pov") drawPov(background, profile, pictureIdentity)
-                    png(background)
+                val image = render(chat, target, profile, snapshot, pictureIdentity, background)
+                if (native) {
+                    nativeReviews++
+                    if (!backgrounds.reviewComposite(chat, target.scene.dayId, profile.visualVersion, target.slot, image,
+                            reviewReference(target, profile, snapshot))) continue
                 }
-                visual.withCurrentProfile(chat) { current ->
-                    require(current.visualVersion == profile.visualVersion && current.referenceId == profile.referenceId &&
-                        LocalDailyRules.dayId(Instant.now()) == day.dayId) { "当天或外观已更新" }
-                    if (snapshot != null) require(characters.read(chat)?.packageSha == snapshot.packageSha) { "角色已更新" }
-                    media.ingest("image", bytes, "恋人的生活画面", profile.visualVersion, day.dayId,
-                        "${slot.activity} · ${if(portrait) "固定角色场景" else if(view=="pov") "第一人称画面" else "生活场景"}",
-                        slot.tags + listOf("daily_stock", marker) + if(portrait) listOf("contains_person") else emptyList())
-                }
-            } finally { bitmap?.recycle(); background.recycle() }
+                publish(chat, target, profile, snapshot, image, native, placeholder)
+                prepared++
+            } finally { background.recycle() }
         }
+        return LocalSceneStockResult(prepared)
     }
+    private fun hasStock(target: LocalScenePrefetchTarget, native: Boolean): Boolean = media.list("image", limit = 1000, dayId = target.scene.dayId)
+        .map { media.details(it.id) }.any { item -> item.attachment.dayId == target.scene.dayId &&
+            item.attachment.visualVersion == target.scene.visualVersion && "daily_stock" in item.tags && marker(target) in item.tags &&
+            revision(target) in item.tags && (!native || "qwen_generated" in item.tags && "composite_reviewed" in item.tags) }
+
+    private suspend fun render(chat: String, target: LocalScenePrefetchTarget, profile: VisualProfile, snapshot: OcIdentitySnapshot?,
+        pictureIdentity: OcIdentity?, background: Bitmap): ByteArray {
+        val portrait = LocalDayStockRules.view(target.index) == "portrait" && profile.referenceId != null
+        if (portrait && snapshot != null) {
+            val image = renderer.render(chat, snapshot.packageSha, OcScene(name = target.slot.activity.take(80),
+                background = Color.TRANSPARENT, motion = OcMotion(headTurn = .05f, breath = .03f)), background = background)
+            require(characters.read(chat)?.packageSha == image.packageSha) { "角色已更新" }
+            return image.png
+        }
+        if (portrait) {
+            val ref = media.details(profile.referenceId!!).attachment
+            val bitmap = LocalPortraitProcessor.decode(media.download(ref.id, ref.sha256))
+            try { return composite(background, bitmap) } finally { bitmap.recycle() }
+        }
+        if (LocalDayStockRules.view(target.index) == "pov") drawPov(background, profile, pictureIdentity)
+        return png(background)
+    }
+    private fun originalReference(profile: VisualProfile, snapshot: OcIdentitySnapshot?): ByteArray? {
+        val source = snapshot?.identity?.photoSource ?: snapshot?.identity?.reference
+        if (source != null) return media.download(source.id, source.sha256)
+        val id = profile.referenceId ?: return null
+        val asset = media.details(id).attachment
+        return media.download(id, asset.sha256)
+    }
+    private fun reviewReference(target: LocalScenePrefetchTarget, profile: VisualProfile, snapshot: OcIdentitySnapshot?): ByteArray? =
+        if (LocalDayStockRules.view(target.index) == "landscape") null else originalReference(profile, snapshot)
+    private fun publish(chat: String, target: LocalScenePrefetchTarget, profile: VisualProfile, snapshot: OcIdentitySnapshot?,
+        bytes: ByteArray, native: Boolean, placeholder: Boolean) = visual.withCurrentProfile(chat) { current ->
+        require(current.visualVersion == profile.visualVersion && current.referenceId == profile.referenceId &&
+            LocalDailyRepository(app).use { it.matches(chat, target.scene, now()) }) { "轨迹或外观已更新" }
+        if (native) require(backgrounds.hasInstalledPack()) { "本机模型已变更" }
+        if (snapshot != null) require(characters.read(chat)?.packageSha == snapshot.packageSha) { "角色已更新" }
+        val portrait = LocalDayStockRules.view(target.index) == "portrait" && profile.referenceId != null
+        val origin = when { native -> "本机生成并审核的生活画面"; placeholder -> "本地示意生活画面"; else -> "恋人的生活画面" }
+        val tags = target.slot.tags + listOf("daily_stock", "decoded_final", marker(target), revision(target)) +
+            if (native) listOf("qwen_generated", "composite_reviewed") else if (placeholder) listOf("local_placeholder") else listOf("legacy_background")
+        media.ingest("image", bytes, origin, profile.visualVersion, target.scene.dayId, "${target.slot.activity} · ${if (placeholder) "本地示意" else "角色生活画面"}",
+            tags + if (portrait) listOf("contains_person") else emptyList())
+    }
+    private fun marker(target: LocalScenePrefetchTarget) = "slot_${target.slot.time.replace(":", "")}"
+    private fun revision(target: LocalScenePrefetchTarget) = "trajectory_${LocalDailyRules.revision(target.scene).take(24)}"
     private fun composite(background: Bitmap, source: Bitmap): ByteArray {
         val c=Canvas(background); val scale=minOf(background.width*.9f/source.width,background.height*.85f/source.height)
         val width=source.width*scale; val height=source.height*scale
@@ -76,4 +130,5 @@ class LocalSceneStock(context: Context) {
         c.drawOval(bitmap.width*.38f,bitmap.height*(.68f/tall),bitmap.width*.6f,bitmap.height.toFloat(),p)
     }
     private fun png(bitmap: Bitmap) = ByteArrayOutputStream().use { out -> check(bitmap.compress(Bitmap.CompressFormat.PNG,100,out)); out.toByteArray() }
+    companion object { private val serial = Mutex() }
 }

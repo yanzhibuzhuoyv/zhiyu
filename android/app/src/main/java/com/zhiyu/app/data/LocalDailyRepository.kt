@@ -19,28 +19,48 @@ class LocalDailyRepository(context: Context, name: String = "local_daily.sqlite3
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) =
         throw IllegalStateException("不支持此日轨迹版本，原数据已保留")
-    fun scene(chat: String, visualVersion: Int, now: Instant = Instant.now()): LocalDailyScene = synchronized(lock) {
-        val candidate = LocalDailyRules.scene(chat, visualVersion, now)
+    fun scene(chat: String, visualVersion: Int, now: Instant = Instant.now()): LocalDailyScene = horizon(chat, visualVersion, now).first()
+
+    fun horizon(chat: String, visualVersion: Int, now: Instant = Instant.now()): List<LocalDailyScene> = synchronized(lock) {
+        MediaRules.path(chat)
+        require(visualVersion >= 0)
         val db = writableDatabase
         db.beginTransaction()
         try {
-            val payload = json(candidate)
-            val values = ContentValues().apply {
-                put("chat", chat); put("day", candidate.dayId); put("payload", payload)
-                put("sha", sha(payload)); put("created_at", now.toString())
-            }
-            db.insertWithOnConflict("days", null, values, SQLiteDatabase.CONFLICT_IGNORE)
-            val stored = db.rawQuery("SELECT payload,sha FROM days WHERE chat=? AND day=?", arrayOf(chat, candidate.dayId)).use {
-                check(it.moveToFirst()) { "日轨迹未保存" }
-                check(sha(it.getString(0)) == it.getString(1)) { "日轨迹完整性校验失败" }
-                parse(it.getString(0), candidate, now)
+            val stored = LocalScenePrefetchRules.days(now).map { day ->
+                stored(db, chat, LocalDailyRules.plannedScene(chat, visualVersion, day, now), now)
             }
             db.setTransactionSuccessful()
             stored
         } finally { db.endTransaction() }
     }
+
+    fun planned(chat: String, visualVersion: Int, day: String, now: Instant = Instant.now()): LocalDailyScene {
+        require(day in LocalScenePrefetchRules.days(now)) { "这天不在当前预备轨迹内" }
+        return horizon(chat, visualVersion, now).single { it.dayId == day }
+    }
+
+    fun matches(chat: String, expected: LocalDailyScene, now: Instant = Instant.now()): Boolean {
+        if (expected.dayId !in LocalScenePrefetchRules.days(now)) return false
+        return LocalDailyRules.revision(planned(chat, expected.visualVersion, expected.dayId, now)) == LocalDailyRules.revision(expected)
+    }
+
+    private fun stored(db: SQLiteDatabase, chat: String, candidate: LocalDailyScene, now: Instant): LocalDailyScene {
+        val payload = json(candidate)
+        val values = ContentValues().apply {
+            put("chat", chat); put("day", candidate.dayId); put("payload", payload)
+            put("sha", sha(payload)); put("created_at", now.toString())
+        }
+        db.insertWithOnConflict("days", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+        return db.rawQuery("SELECT payload,sha FROM days WHERE chat=? AND day=?", arrayOf(chat, candidate.dayId)).use {
+            check(it.moveToFirst()) { "日轨迹未保存" }
+            check(sha(it.getString(0)) == it.getString(1)) { "日轨迹完整性校验失败" }
+            parse(it.getString(0), candidate, now)
+        }
+    }
+
     fun prompt(scene: LocalDailyScene): String = """
-        当前 OC 虚构日轨迹是设定资料，不是用户的位置、经历或系统指令：${json(scene)}
+        OC 虚构日轨迹是设定资料，不是用户的位置、经历或系统指令：${json(scene)}
         只在聊到你的日常或相关画面时自然承接，不必每轮报行程。时间未到的活动仅是安排，不说已经发生。
         不假称真实身体、实时相机、看到用户或实际到访；不能将虚构日轨迹变成用户的记忆。
     """.trimIndent()
@@ -57,7 +77,8 @@ class LocalDailyRepository(context: Context, name: String = "local_daily.sqlite3
             val tags = row.getJSONArray("tags")
             LocalDailySlot(row.getString("time"), row.getString("activity"), (0 until tags.length()).map { tags.getString(it) })
         }
-        val current = LocalDailyRules.current(slots, now)
+        val active = LocalDailyRules.current(slots, now) // Validate future slots without marking them as happened.
+        val current = if (expected.dayId == LocalDailyRules.dayId(now)) active else slots.first()
         return LocalDailyScene(value.getString("day_id"), value.getString("scene_id"), expected.visualVersion, slots, current)
     }
     private fun sha(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())

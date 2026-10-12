@@ -5,10 +5,12 @@ import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import android.content.Context
 import android.graphics.*
-import android.media.ExifInterface
+import androidx.exifinterface.media.ExifInterface
 import com.zhiyu.app.domain.MediaRules
 import com.zhiyu.app.domain.PortraitRefinementRules
 import com.zhiyu.app.domain.PortraitStroke
+import com.zhiyu.app.domain.ChatPhotoRules
+import com.zhiyu.app.domain.PhotoInputRules
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -26,24 +28,18 @@ class LocalPortraitProcessor(context: Context) {
         const val MAX_WORK_EDGE = 1536
         private val inferenceLock = Any()
         fun decode(bytes: ByteArray, maxEdge: Int = MAX_WORK_EDGE): Bitmap {
-            require(bytes.size in 1..MediaRules.MAX_BYTES) { "图片须在 5 MB 以内" }
+            require(bytes.size in 1..ChatPhotoRules.MAX_ORIGINAL_BYTES) { "图片须在 64 MiB 以内" }
             val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-            require(options.outWidth in 1..8192 && options.outHeight in 1..8192 &&
-                options.outWidth.toLong() * options.outHeight <= 20_000_000) { "图片尺寸过大或无法解码" }
+            PhotoInputRules.checkSource(options.outWidth, options.outHeight)
             require(maxEdge in 1..MAX_WORK_EDGE)
             options.inJustDecodeBounds = false
             options.inPreferredConfig = Bitmap.Config.ARGB_8888
-            options.inSampleSize = 1
-            while ((max(options.outWidth, options.outHeight) + options.inSampleSize - 1) / options.inSampleSize > maxEdge ||
-                ((options.outWidth.toLong() + options.inSampleSize - 1) / options.inSampleSize) *
-                ((options.outHeight.toLong() + options.inSampleSize - 1) / options.inSampleSize) > 4_000_000)
-                options.inSampleSize *= 2
+            options.inSampleSize = PhotoInputRules.sampleSize(options.outWidth, options.outHeight, maxEdge, 4_000_000)
             val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
                 ?: throw IllegalArgumentException("图片无法解码")
-            if (options.outMimeType != "image/jpeg") return bitmap
-            val orientation = ExifInterface(ByteArrayInputStream(bytes)).getAttributeInt(
-                ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            val orientation = try { orientation(bytes, options.outMimeType) }
+            catch (error: Exception) { bitmap.recycle(); throw error }
             val matrix = Matrix()
             when (orientation) {
                 ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
@@ -55,8 +51,10 @@ class LocalPortraitProcessor(context: Context) {
                 ExifInterface.ORIENTATION_ROTATE_270 -> matrix.setRotate(270f)
                 else -> return bitmap
             }
-            return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-                .also { if (it !== bitmap) bitmap.recycle() }
+            return try {
+                Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                    .also { if (it !== bitmap) bitmap.recycle() }
+            } catch (error: Exception) { bitmap.recycle(); throw error }
         }
         private fun png(bitmap: Bitmap): ByteArray {
             val output = object : ByteArrayOutputStream() {
@@ -81,12 +79,16 @@ class LocalPortraitProcessor(context: Context) {
         private fun originalDimensions(bytes: ByteArray): Pair<Int, Int> {
             val info = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, info)
-            val orientation = if (info.outMimeType == "image/jpeg") ExifInterface(ByteArrayInputStream(bytes))
-                .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL) else ExifInterface.ORIENTATION_NORMAL
+            PhotoInputRules.checkSource(info.outWidth, info.outHeight)
+            val orientation = orientation(bytes, info.outMimeType)
             return if (orientation in setOf(ExifInterface.ORIENTATION_ROTATE_90, ExifInterface.ORIENTATION_ROTATE_270,
                     ExifInterface.ORIENTATION_TRANSPOSE, ExifInterface.ORIENTATION_TRANSVERSE)) info.outHeight to info.outWidth
                 else info.outWidth to info.outHeight
         }
+        private fun orientation(bytes: ByteArray, mime: String?): Int =
+            if (mime in setOf("image/jpeg", "image/png", "image/webp")) ExifInterface(ByteArrayInputStream(bytes))
+                .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            else ExifInterface.ORIENTATION_NORMAL
         private fun withOriginal(result: LocalPortrait, bytes: ByteArray): LocalPortrait {
             val (width, height) = originalDimensions(bytes)
             return result.copy(sourceWidth = width, sourceHeight = height)

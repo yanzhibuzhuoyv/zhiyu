@@ -7,13 +7,14 @@ plugins {
 android {
     namespace = "com.zhiyu.app"
     compileSdk = 36
+    ndkVersion = "30.0.16248370"
     defaultConfig {
         applicationId = "com.zhiyu.app"
         minSdk = 26
         targetSdk = 36
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
-        versionCode = 9
-        versionName = "0.2.3"
+        versionCode = 10
+        versionName = "0.2.4"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"https://local.zhiyu.invalid\"")
         buildConfigField("boolean", "USE_USB_BACKEND", "false")
@@ -32,6 +33,9 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/portraitAssets").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/semanticAssets").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/voiceAssets").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/qwenAssets").get().asFile)
+    sourceSets.getByName("main").jniLibs.srcDir(rootProject.file("../artifacts/android-qwen-jni/r2/jniLibs"))
+    sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("generated/qwenTestAssets").get().asFile)
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -44,6 +48,53 @@ android {
     }
     testOptions { unitTests.isReturnDefaultValues = true }
 }
+val prepareQwenAssets = tasks.register("prepareQwenAssets") {
+    val source = rootProject.file("../artifacts/model-packs/qwen-edge/manifest.json")
+    val target = layout.buildDirectory.dir("generated/qwenAssets/qwen")
+    inputs.file(source); outputs.dir(target)
+    doLast {
+        val actual = MessageDigest.getInstance("SHA-256").digest(source.readBytes()).joinToString("") { "%02x".format(it) }
+        require(actual == "9232afcbed6d188a9bdc58c0b8841b35bb12773aaee9fc745dc8027641c656e6") { "Qwen model manifest SHA mismatch" }
+        target.get().asFile.mkdirs()
+        source.copyTo(target.get().file("manifest.json").asFile, overwrite = true)
+    }
+}
+tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(prepareQwenAssets) }
+val verifyQwenJni = tasks.register("verifyQwenJni") {
+    val source = rootProject.file("../artifacts/android-qwen-jni/r2/jniLibs")
+    val checks = mapOf(
+        "arm64-v8a/libzhiyu_qwen_text_jni.so" to "7aa938187d3fc0888ae1799894ae6e37ebde72a87464268a626c94c5a8c8b0d4",
+        "arm64-v8a/libzhiyu_qwen_image_jni.so" to "d8ecc376b5eea5efb5e053fceed9f3353feebd8ee3a3a7531063051af0611e86",
+        "x86_64/libzhiyu_qwen_text_jni.so" to "9f37ff9eac8e2373d25661f345249c00ecfb80221271bfe95028eb585c2f3b4f",
+        "x86_64/libzhiyu_qwen_image_jni.so" to "c9552869ffe2ca883758b763a0c238a599620e9ed8b2095e2ea6b8e873aeda40",
+    )
+    inputs.files(checks.keys.map { source.resolve(it) })
+    doLast {
+        checks.forEach { (name, expected) ->
+            val digest = MessageDigest.getInstance("SHA-256")
+            source.resolve(name).inputStream().use { stream ->
+                val buffer = ByteArray(128 * 1024)
+                while (true) { val count = stream.read(buffer); if (count < 0) break; digest.update(buffer,0,count) }
+            }
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            require(actual == expected) { "Qwen JNI SHA mismatch: $name" }
+        }
+    }
+}
+tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(verifyQwenJni) }
+val prepareQwenTestAssets = tasks.register("prepareQwenTestAssets") {
+    val source = rootProject.file("../artifacts/qwen-phone-split-image-20261012-r1/checkpoint.qwenlatent")
+    val target = layout.buildDirectory.dir("generated/qwenTestAssets/qwen")
+    inputs.file(source); outputs.dir(target)
+    doLast {
+        require(source.length() == 262288L)
+        val actual = MessageDigest.getInstance("SHA-256").digest(source.readBytes()).joinToString("") { "%02x".format(it) }
+        require(actual == "305ea06a35066e3fd290b6e43293128215bde0eb9549d711e999ce59d84f9b61") { "Qwen public test checkpoint SHA mismatch" }
+        target.get().asFile.mkdirs()
+        source.copyTo(target.get().file("phone-seed42-reference.qwenlatent").asFile, overwrite = true)
+    }
+}
+tasks.matching { it.name == "preDebugAndroidTestBuild" }.configureEach { dependsOn(prepareQwenTestAssets) }
 val preparePortraitAssets = tasks.register("preparePortraitAssets") {
     val model = providers.gradleProperty("zhiyuPortraitModel").orElse("../artifacts/portrait-models/u2netp.onnx")
     val source = rootProject.file(model.get())

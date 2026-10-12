@@ -1,5 +1,8 @@
 package com.zhiyu.app.domain
 
+import java.io.IOException
+import java.time.Instant
+
 data class ProactivePreferences(val enabled: Boolean = false, val quietStart: Int = 22, val quietEnd: Int = 8, val timeZone: String = "Asia/Shanghai")
 data class ProactiveCheck(val emitted: Boolean, val message: Message?, val nextDueAt: String?, val reason: String?)
 
@@ -14,11 +17,12 @@ interface ProactiveWorkState {
     fun requestId(conversationId: String): String
     fun complete(conversationId: String, requestId: String)
     fun claimMessage(messageId: String): Boolean
+    fun recordRun(conversationId: String, record: ProactiveRunRecord) = Unit
 }
 
 enum class ProactiveWorkOutcome { COMPLETE, RETRY, STOP }
 
-/** Backend decides timing/personality/caps. The device only decides whether it may interrupt its owner. */
+/** The service decides personality/timing; notification permission remains a device decision. */
 class ProactiveDelivery(
     private val service: ProactiveService,
     private val state: ProactiveWorkState,
@@ -26,15 +30,36 @@ class ProactiveDelivery(
     private val foreground: () -> Boolean,
     private val notify: (Message) -> Unit,
 ) {
+    private fun record(id: String, outcome: String, due: Instant? = null) =
+        state.recordRun(id, ProactiveRunRecord(Instant.now(), outcome, due))
     suspend fun run(conversationId: String): ProactiveWorkOutcome {
-        if (!state.enabled(conversationId) || !permission() || foreground()) return ProactiveWorkOutcome.COMPLETE
+        val skipped = when {
+            !state.enabled(conversationId) -> "disabled"
+            !permission() -> "permission"
+            foreground() -> "foreground"
+            else -> null
+        }
+        if (skipped != null) {
+            record(conversationId, skipped)
+            return ProactiveWorkOutcome.COMPLETE
+        }
         val requestId = state.requestId(conversationId)
         val result = try { service.check(conversationId, requestId) } catch (failure: ApiFailure) {
-            if (failure.status == 0 || failure.status == 408 || failure.status == 429 || failure.status >= 500) return ProactiveWorkOutcome.RETRY
+            if (failure.status == 0 || failure.status == 408 || failure.status == 429 || failure.status >= 500) {
+                record(conversationId, "retry")
+                return ProactiveWorkOutcome.RETRY
+            }
             state.complete(conversationId, requestId)
+            record(conversationId, "needs_connection", Instant.now().plusSeconds(6 * 3600))
             return ProactiveWorkOutcome.STOP
+        } catch (_: IOException) {
+            record(conversationId, "retry")
+            return ProactiveWorkOutcome.RETRY
         }
-        if (result.reason in setOf("processing", "pending", "in_progress")) return ProactiveWorkOutcome.RETRY
+        if (result.reason in setOf("processing", "pending", "in_progress")) {
+            record(conversationId, "retry")
+            return ProactiveWorkOutcome.RETRY
+        }
         val message = result.message
         if (result.emitted && message != null && state.enabled(conversationId) && permission() && !foreground() && state.claimMessage(message.id)) {
             try { notify(message) } catch (_: SecurityException) {
@@ -42,6 +67,7 @@ class ProactiveDelivery(
             }
         }
         state.complete(conversationId, requestId)
+        record(conversationId, if (result.emitted) "sent" else "not_due", ProactiveSchedulePolicy.parseNextDue(result.nextDueAt))
         return ProactiveWorkOutcome.COMPLETE
     }
 }

@@ -75,4 +75,23 @@ class LocalDailyRulesTest {
         assertEquals(0, LocalDailyRules.mediaAffinity("image", setOf("morning", "food"), slot))
         assertEquals(0, LocalDailyRules.mediaAffinity("sticker", setOf("landscape", "evening"), slot))
     }
+
+    @Test fun futurePlanIsAnArrangementRatherThanTodaysCurrentActivity() {
+        val now = Instant.parse("2026-10-12T10:00:00Z") // 18:00 now.
+        val future = LocalDailyRules.plannedScene(chat, 2, "2026-10-13", now)
+        assertEquals("2026-10-13", future.dayId)
+        assertEquals("00:00", future.current.time)
+        assertNotEquals(LocalDailyRules.current(future.slots, now), future.current)
+        assertEquals(future.slots, LocalDailyRules.scene(chat, 2, Instant.parse("2026-10-12T16:00:00Z")).slots)
+    }
+
+    @Test fun trajectoryRevisionIgnoresClockAdvancingButChangesWithActualActivityOrAppearance() {
+        val first = LocalDailyRules.scene(chat, 2, Instant.parse("2026-10-12T01:00:00Z"))
+        val later = LocalDailyRules.scene(chat, 2, Instant.parse("2026-10-12T10:00:00Z"))
+        assertEquals(LocalDailyRules.revision(first), LocalDailyRules.revision(later))
+        assertNotEquals(LocalDailyRules.revision(first), LocalDailyRules.revision(first.copy(visualVersion = 3)))
+        assertNotEquals(LocalDailyRules.revision(first), LocalDailyRules.revision(first.copy(slots = first.slots.mapIndexed { i, slot ->
+            if (i == 0) slot.copy(activity = "新的角色休息安排") else slot
+        })))
+    }
 }

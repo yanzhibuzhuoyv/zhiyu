@@ -73,7 +73,7 @@ class PhotoSendFlowNativeTest {
     }
 
     private suspend fun repository(context: NativeV4Context, archive: LocalChatDatabase,
-        transport: Transport, provider: String = "deepseek", model: String = "deepseek-flash"): LocalChatRepository {
+        transport: Transport, provider: String = "deepseek", model: String = "deepseek-v4-pro"): LocalChatRepository {
         val repository = LocalChatRepository(context, Store(), DirectProviderClient(transport), database = archive,
             semanticEncoder = UnavailableEncoder(), daily = null)
         repository.login(LocalChatRepository.LOCAL_URL, provider, "synthetic-key-only", model, CompanionProfile())
@@ -84,7 +84,7 @@ class PhotoSendFlowNativeTest {
         List(array.length()) { array.getJSONObject(it) }
     }
 
-    @Test fun deepseekPurePhotoWithoutImageKeyUsesRealTextProtocolAndKeepsExactOriginal(): Unit = runBlocking {
+    @Test fun deepseekProWithoutImageKeyUsesExplicitFallbackAndKeepsExactOriginal(): Unit = runBlocking {
         NativeV4Context(base).use { context ->
             assertNull("Isolated image credentials must never come from a user's preferences", AgnesCredentialStore(context).read())
             LocalChatDatabase(context, "photo_send_${UUID.randomUUID()}.sqlite3").use { archive ->
@@ -100,8 +100,31 @@ class PhotoSendFlowNativeTest {
                 assertEquals(listOf(photo.attachment), pair.first.mediaAttachments)
                 assertEquals(pair.first, repo.messages(chat.id).first())
                 assertEquals("", archive.promptHistory("companion-" + LocalMemoryCodec.sha(
-                    "deepseek\u0000deepseek-flash".toByteArray()), chat.id).first().content)
+                    "deepseek\u0000deepseek-v4-pro".toByteArray()), chat.id).first().content)
                 assertArrayEquals(source, LocalMediaStore(context).download(photo.attachment.id, photo.attachment.sha256))
+            }
+        }
+    }
+
+    @Test fun deepseekFlashPhotoReachesOfficialVisionRequestWithPixelsAndHighDetail(): Unit = runBlocking {
+        NativeV4Context(base).use { context ->
+            assertNull(AgnesCredentialStore(context).read())
+            LocalChatDatabase(context, "photo_send_${UUID.randomUUID()}.sqlite3").use { archive ->
+                val transport = Transport()
+                val repo = repository(context, archive, transport, "deepseek", "deepseek-flash")
+                val chat = repo.conversations().single()
+                val source = png(); val store = ChatPhotoStore(context)
+                val photo = store.importBytes(source); val expected = store.payload(photo.attachment)
+                val result = repo.sendPhotoMessage(chat.id, "这张图里是什么？", photo.attachment)
+                val user = messages(transport.chats.single()).last { it.getString("role") == "user" }
+                val parts = user.getJSONArray("content")
+                assertEquals("这张图里是什么？", parts.getJSONObject(0).getString("text"))
+                val image = parts.getJSONObject(1).getJSONObject("image_url")
+                assertEquals(expected.dataUri(), image.getString("url"))
+                assertEquals("high", image.getString("detail"))
+                assertEquals("deepseek-flash", transport.chats.single().getString("model"))
+                assertEquals(photo.attachment, result.first.mediaAttachments.single())
+                assertTrue("Native vision must not create OCR or Agnes observations", store.observations(photo.attachment).isEmpty())
             }
         }
     }

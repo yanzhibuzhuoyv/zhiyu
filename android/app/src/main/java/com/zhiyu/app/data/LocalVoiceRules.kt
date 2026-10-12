@@ -6,13 +6,16 @@ import kotlin.math.floor
 data class LocalVoiceChoice(val id: Int, val name: String)
 
 object LocalVoiceRules {
+    const val SPEAKER_COUNT = 174
     const val ASR_SAMPLE_RATE = 16000
     const val MAX_RECORD_SECONDS = 120
     const val MAX_SPOKEN_CHARS = 128000
     private const val CHUNK_CHARS = 120
     val choices = listOf(LocalVoiceChoice(10, "声音一"), LocalVoiceChoice(33, "声音二"), LocalVoiceChoice(0, "声音三"))
-    fun voice(id: Int): LocalVoiceChoice = choices.firstOrNull { it.id == id }
-        ?: throw IllegalArgumentException("请从内置声音中选择")
+    fun voice(id: Int): LocalVoiceChoice {
+        require(id in 0 until SPEAKER_COUNT) { "请选择有效的内置音色" }
+        return choices.firstOrNull { it.id == id } ?: LocalVoiceChoice(id, "音色 ${id + 1}")
+    }
     /** Retain the third-choice slot when upgrading superseded trial voices; other choices stay fixed. */
     fun storedVoice(id: Int): Int = voice(if (id == 99 || id == 2) 0 else id).id
 

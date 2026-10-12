@@ -13,19 +13,20 @@ class LocalSceneStockWorker(context: Context, params: WorkerParameters): Corouti
     override suspend fun doWork(): Result {
         val chat=inputData.getString("chat") ?: return Result.failure()
         val day=inputData.getString("day") ?: return Result.failure()
-        if(day!=LocalDailyRules.dayId(Instant.now())) return Result.success()
+        val now = Instant.now()
+        if(day !in LocalScenePrefetchRules.days(now)) return Result.success()
+        val version = inputData.getInt("version", -1).takeIf { it >= 0 }
         return try {
             MediaRules.path(chat)
             withContext(Dispatchers.IO) {
                 LocalChatDatabase(applicationContext).use { archive ->
                     val sweep = LocalMediaRetention(applicationContext, archive::pinnedMediaIds).sweep()
-                    if (sweep.failures.isNotEmpty()) Log.w("ZhiYuImages", "Unsent scene cache cleanup incomplete; referenced images are retained")
+                    if (sweep.failures.isNotEmpty()) Log.w("ZhiYuImages", "Decoded image audit incomplete; all stored pictures are retained")
                 }
+                com.zhiyu.app.data.local.qwen.QwenImageJobStore(applicationContext).sweepBefore(LocalDailyRules.dayId(now))
             }
-            // Free expired, unreferenced cache before an ingest can hit the media record limit.
-            // A render/provider failure cannot prevent this sweep; originals remain protected.
-            LocalSceneStock(applicationContext).prepare(chat,day)
-            Result.success()
+            val result = LocalSceneStock(applicationContext).prepare(chat,day,version)
+            if (result.reason == "yield") Result.retry() else Result.success()
         }
         catch(error:CancellationException) { throw error }
         catch(_:IllegalArgumentException) { Result.failure() }
@@ -35,7 +36,11 @@ class LocalSceneStockWorker(context: Context, params: WorkerParameters): Corouti
 object LocalSceneStockScheduler {
     fun enqueue(context: Context, chat: String, version: Int, day: String = LocalDailyRules.dayId(Instant.now())) {
         MediaRules.path(chat); require(version>=0 && Regex("\\d{4}-\\d{2}-\\d{2}").matches(day))
-        val work=OneTimeWorkRequestBuilder<LocalSceneStockWorker>().setInputData(workDataOf("chat" to chat,"day" to day)).build()
-        WorkManager.getInstance(context).enqueueUniqueWork("zhiyu_stock_${chat}_${day}_$version",ExistingWorkPolicy.KEEP,work)
+        java.time.LocalDate.parse(day)
+        val work=OneTimeWorkRequestBuilder<LocalSceneStockWorker>().setInputData(workDataOf("chat" to chat,"day" to day,"version" to version))
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,java.util.concurrent.TimeUnit.SECONDS).build()
+        // Every run covers the whole window. Future job callbacks must not start parallel stock renderers.
+        WorkManager.getInstance(context).enqueueUniqueWork("zhiyu_stock_${chat}_$version",ExistingWorkPolicy.KEEP,work)
     }
 }

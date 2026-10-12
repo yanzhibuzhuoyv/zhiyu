@@ -16,13 +16,13 @@ data class LocalMediaRetentionResult(val examinedRecords: Int = 0, val eligibleR
     val pendingRecords: Int = 0, val failures: List<LocalMediaRetentionFailure> = emptyList(), val auditSaved: Boolean = false)
 
 /**
- * A bounded cache sweep shares the ingest / attachment-commit lock. Persist intent first, remove
- * metadata first, then only blobs with no remaining references. A crash can leave an orphan blob;
- * its verified intent is retried. Unknown orphan blobs and all non-cache assets stay untouched.
- * pinnedIds MUST include every message attachment, and its writes must use LocalMediaStore.lock.
+ * Audits existing final images under the ingest / attachment-commit lock. Final decoded images
+ * and metadata are retained for later conversation/reproduction. A historical deletion journal
+ * is validated and retired without executing its old targets. Intermediate cleanup belongs only
+ * to the separate Qwen job store; no LocalMediaStore image or original OC is deleted here.
  */
 class LocalMediaRetention(context: Context, private val pinnedIds: () -> Set<String>,
-    private val deleteFile: (File) -> Boolean = { it.delete() }) {
+    @Suppress("UNUSED_PARAMETER") deleteFile: (File) -> Boolean = { false }) {
     private val filesAnchor = context.applicationContext.filesDir.canonicalFile
     private val root = File(filesAnchor, "local_media")
     private val store = LocalMediaStore(context.applicationContext)
@@ -31,9 +31,6 @@ class LocalMediaRetention(context: Context, private val pinnedIds: () -> Set<Str
         val id get() = record.id
         val blob get() = MediaRetentionBlob(record.kind, record.sha256)
     }
-    private data class Progress(val records: MutableMap<String, MediaRetentionRecord>, val pending: MutableList<Target>,
-        val failures: MutableList<LocalMediaRetentionFailure>, var removedMetadata: Int = 0,
-        var removedBlobs: Int = 0, var freedBytes: Long = 0)
 
     fun sweep(today: LocalDate = LocalDate.now(ZoneId.of("Asia/Shanghai"))): LocalMediaRetentionResult =
         synchronized(LocalMediaStore.lock) { sweepLocked(today) }
@@ -46,70 +43,8 @@ class LocalMediaRetention(context: Context, private val pinnedIds: () -> Set<Str
         catch (error: Exception) { return save(previous, failure("pins", error)) }
         val records = try { scan() } catch (error: Exception) { return save(previous, failure("metadata", error)) }
         val plan = LocalMediaRetentionRules.plan(records, pins, today)
-        val byId = records.associateBy { it.id }
-        val targets = if (previous.isNotEmpty()) previous else plan.removeIds.map { id ->
-            Target(byId.getValue(id))
-        }
-        val initial = LocalMediaRetentionResult(records.size, plan.eligibleRecords, pendingRecords = targets.size)
-        // An unsuccessful intent write means no destructive action is authorized for this sweep.
-        val prepared = save(targets, initial)
-        if (!prepared.auditSaved) return prepared
-        val progress = Progress(byId.toMutableMap(), mutableListOf(), mutableListOf())
-        val blobTargets = mutableListOf<Target>()
-        targets.forEach { target -> removeMetadata(target, today, pins, progress, blobTargets) }
-        removeBlobs(blobTargets, pins, progress)
-        val result = LocalMediaRetentionResult(records.size, plan.eligibleRecords, progress.removedMetadata,
-            progress.removedBlobs, progress.freedBytes, progress.pending.size, progress.failures.toList())
-        return save(progress.pending, result)
-    }
-
-    private fun removeMetadata(target: Target, today: LocalDate, pins: Set<String>, progress: Progress,
-        blobTargets: MutableList<Target>) {
-        val record = progress.records[target.id]
-        if (target.id in pins) {
-            // A missing pinned metadata record must still protect its pending SHA.
-            if (record == null) {
-                progress.pending.add(target)
-                progress.failures.add(LocalMediaRetentionFailure("pinned_missing", target.id, target.blob.sha256, "已引用的素材标注缺失，保留其文件"))
-            }
-            return
-        }
-        if (!LocalMediaRetentionRules.eligible(target.record, today)) return
-        if (record == null) { blobTargets.add(target); return }
-        if (record.kind != target.blob.kind || record.sha256 != target.blob.sha256) {
-            progress.pending.add(target)
-            progress.failures.add(LocalMediaRetentionFailure("intent_mismatch", target.id, target.blob.sha256, "素材与回收意图不一致，未删除"))
-            return
-        }
-        if (!LocalMediaRetentionRules.eligible(record, today)) return
-        val file = metadata(target); val bytes = file.length()
-        if (!remove(file, "metadata_delete", target, progress)) { progress.pending.add(target); return }
-        progress.records.remove(target.id); progress.removedMetadata++; progress.freedBytes += bytes
-        blobTargets.add(target)
-    }
-
-    private fun removeBlobs(targets: List<Target>, pins: Set<String>, progress: Progress) {
-        val grouped = targets.groupBy { it.blob }
-        val remaining = progress.records.values.toList()
-        val unreferenced = LocalMediaRetentionRules.unreferenced(grouped.keys, remaining)
-        val missingPinnedShas = progress.pending.filter { it.id in pins }.map { it.blob.sha256 }.toSet()
-        for (key in unreferenced) {
-            if (key.sha256 in missingPinnedShas) { progress.pending.addAll(grouped.getValue(key)); continue }
-            val target = grouped.getValue(key).first(); val file = blob(key)
-            if (!file.exists()) continue
-            val bytes = file.length()
-            if (remove(file, "blob_delete", target, progress)) { progress.removedBlobs++; progress.freedBytes += bytes }
-            else progress.pending.addAll(grouped.getValue(key))
-        }
-    }
-
-    private fun remove(file: File, phase: String, target: Target, progress: Progress): Boolean = try {
-        requireInsideRoot(file)
-        check(file.isFile && deleteFile(file) && !file.exists()) { "素材缓存删除失败" }
-        true
-    } catch (error: Exception) {
-        progress.failures.add(LocalMediaRetentionFailure(phase, target.id, target.blob.sha256, safeMessage(error)))
-        false
+        check(plan.removeIds.isEmpty() && plan.deleteBlobs.isEmpty()) { "已解码图片不能进入回收计划" }
+        return save(emptyList(), LocalMediaRetentionResult(examinedRecords = records.size))
     }
 
     /** Complete scan, no list(limit=1000) shortcut. Any unreadable metadata aborts before deletion. */
@@ -160,8 +95,10 @@ class LocalMediaRetention(context: Context, private val pinnedIds: () -> Set<Str
             val record = LocalMediaRetentionRules.check(MediaRetentionRecord(id, blob.kind, blob.sha256,
                 target.getString("day"), target.getString("purpose"), List(tags.length()) { tags.getString(it) }.toSet(),
                 target.getString("source")))
-            val date = LocalDate.parse(record.dayId!!)
-            require(LocalMediaRetentionRules.eligible(record, date.plusDays(LocalMediaRetentionRules.KEEP_DAYS + 1))) { "回收日志包含非缓存素材" }
+            LocalDate.parse(record.dayId!!)
+            val historicalCache = record.purpose == "scene_background" && record.sourceLabel == "生成的空场景" ||
+                record.purpose == "library" && record.sourceLabel == "恋人的生活画面" && "daily_stock" in record.tags
+            require(historicalCache) { "历史回收日志包含非缓存素材" }
             Target(record)
         }
         require(result.map { it.id }.toSet().size == result.size) { "素材回收日志编号重复" }
@@ -193,8 +130,6 @@ class LocalMediaRetention(context: Context, private val pinnedIds: () -> Set<Str
         is SecurityException -> "素材文件访问受限，请稍后重试"
         else -> error.message?.take(160) ?: "素材回收未完成"
     }
-    private fun metadata(target: Target) = File(File(root, target.blob.kind), "${target.id}.json")
-    private fun blob(key: MediaRetentionBlob) = File(File(File(root, key.kind), "blobs"), "${key.sha256}.bin")
     private fun requireInsideRoot(file: File) {
         val expected = root.absoluteFile.normalize(); val candidate = file.absoluteFile.normalize()
         require(candidate == expected || candidate.path.startsWith(expected.path + File.separator)) { "素材路径越界" }

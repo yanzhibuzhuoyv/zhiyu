@@ -228,16 +228,16 @@ class LocalChatRepository(
         database.proactiveResult(currentOwner(), id, requestId)
     }
     suspend fun proactivePolicyHistory(id: String): List<Message> = withContext(Dispatchers.IO) { database.proactivePolicyHistory(currentOwner(), id) }
-    suspend fun sendProactive(id: String, requestId: String): Message = withTimeout(180000) { coroutineScope {
+    suspend fun sendProactive(id: String, requestId: String, nightEvent: LocalNightEvent? = null): Message = withTimeout(180000) { coroutineScope {
         val scope = this
         val foregroundWatcher = launch {
             ProactiveForeground.changes.first { it }
             scope.cancel(CancellationException("用户回到前台，取消后台主动生成"))
         }
-        try { serial.withLock { generateProactive(id, requestId) } }
+        try { serial.withLock { generateProactive(id, requestId, nightEvent) } }
         finally { foregroundWatcher.cancel() }
     } }
-    private suspend fun generateProactive(id: String, requestId: String): Message {
+    private suspend fun generateProactive(id: String, requestId: String, nightEvent: LocalNightEvent?): Message {
         lastCalendarNotice = null
         require(requestPattern.matches(requestId)) { "主动消息请求标识无效" }
         val saved = withContext(Dispatchers.IO) { connection() }
@@ -252,6 +252,7 @@ class LocalChatRepository(
         val system = LocalCompanionPrompt.build(conversation.profile, emptyList(), emptyList(), careContext(),
             LocalRetrievalStatus.NOT_SEARCHED, promptContext.size) + "\n" + plan.prompt +
             "\n本次由应用发起主动联系，并非用户新原话。遵循恋人性格，只发一条自然消息；不指责未回复，不虚构用户活动、天气、共同约定或自己的真实线下生活。" +
+            nightEvent?.prompt()?.let { "\n$it" }.orEmpty() +
             calendarPlan.prompt.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty()
         val context = listOf(DirectChatMessage("system", system)) + promptContext.filter { it.content.isNotBlank() }.map { DirectChatMessage(it.role, it.content) } +
             DirectChatMessage("user", "[应用的主动联系请求，不是真实用户消息] 请自然地同恋人说一句话，可以选择不索要回应。")

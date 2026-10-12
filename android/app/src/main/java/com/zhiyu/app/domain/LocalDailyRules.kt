@@ -46,6 +46,21 @@ object LocalDailyRules {
         val current = current(slots, now)
         return LocalDailyScene(day, identity, visualVersion, slots, current)
     }
+    fun plannedScene(chat: String, visualVersion: Int, day: String, now: Instant): LocalDailyScene {
+        val date = java.time.LocalDate.parse(day)
+        require(date.toString() == day) { "日轨迹日期无效" }
+        val candidate = scene(chat, visualVersion, date.atStartOfDay(zone).toInstant())
+        return if (day == dayId(now)) candidate.copy(current = current(candidate.slots, now)) else candidate
+    }
+    fun revision(scene: LocalDailyScene): String {
+        val canonical = buildString {
+            fun token(value: String) { append(value.length).append(':').append(value) }
+            token(scene.dayId); token(scene.sceneId); token(scene.visualVersion.toString()); token(scene.timezone)
+            token(scene.slots.size.toString())
+            scene.slots.forEach { slot -> token(slot.time); token(slot.activity); token(slot.tags.size.toString()); slot.tags.forEach(::token) }
+        }
+        return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    }
     fun current(slots: List<LocalDailySlot>, now: Instant): LocalDailySlot {
         require(slots.size in 1..24 && slots.first().time == "00:00" &&
             slots.zipWithNext().all { (a, b) -> a.time < b.time })

@@ -9,7 +9,7 @@ object DirectProviderCatalog {
         Entry(Provider(id, name, model, models, hint, docs), base)
     private val entries = listOf(
         entry("deepseek", "DeepSeek", "https://api.deepseek.com", "deepseek-flash", listOf("deepseek-flash", "deepseek-v4-pro"),
-            "DeepSeek 开放平台 Key；默认关闭思考，可填写已授权纯文本模型。", "https://api-docs.deepseek.com/"),
+            "DeepSeek 开放平台 Key；默认关闭思考，Flash 支持识图，Pro 图片需另配识别服务。", "https://api-docs.deepseek.com/"),
         entry("qwen", "阿里云百炼 / 通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", listOf("qwen-plus", "qwen-flash"),
             "使用中国站北京地域百炼 Key，模型需开通；其他地域 Key 不通用。", "https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions"),
         entry("kimi", "Kimi / 月之暗面", "https://api.moonshot.cn/v1", "kimi-k2.6", listOf("kimi-k2.6"),

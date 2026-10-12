@@ -23,7 +23,7 @@ class ChatPhotoStore(context: Context, private val processor: ChatPhotoImageProc
     }
 
     fun importBytes(original: ByteArray): ChatImageDraft = synchronized(lock) {
-        require(original.size in 1..ChatPhotoRules.MAX_ORIGINAL_BYTES) { "请选择 5 MiB 以内的聊天图片" }
+        require(original.size in 1..ChatPhotoRules.MAX_ORIGINAL_BYTES) { "请选择 64 MiB 以内的聊天图片" }
         val copy = original.copyOf()
         val normalized = processor.normalize(copy)
         val attachment = media.ingest("image", copy, sourceLabel = "你发送的图片", purpose = "chat")

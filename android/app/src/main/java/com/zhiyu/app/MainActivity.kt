@@ -19,6 +19,7 @@ import com.zhiyu.app.data.NativeCareContext
 import com.zhiyu.app.data.appCredentialStore
 import com.zhiyu.app.notifications.ProactiveForeground
 import com.zhiyu.app.notifications.ProactiveNotifications
+import com.zhiyu.app.notifications.ProactiveScheduler
 import com.zhiyu.app.ui.ChatViewModel
 import com.zhiyu.app.ui.ZhiYuApp
 import com.zhiyu.app.ui.theme.ZhiYuTheme
@@ -31,6 +32,7 @@ class MainActivity : ComponentActivity() {
         ProactiveForeground.setVisible(true)
         enableEdgeToEdge()
         ProactiveNotifications.createChannel(applicationContext)
+        lifecycleScope.launch { ProactiveScheduler.recover(applicationContext) }
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = ChatViewModel(
@@ -59,6 +61,7 @@ class MainActivity : ComponentActivity() {
             ProactiveForeground.setVisible(false)
             LocalSemanticScheduler.enqueue(applicationContext)
             LocalMemoryRecognitionScheduler.schedule(applicationContext)
+            lifecycleScope.launch { ProactiveScheduler.recover(applicationContext) }
         }
         super.onStop()
     }

@@ -74,7 +74,8 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
     fun apiKey(value: String) { mutableState.update { it.copy(apiKey = value, error = null) } }
     fun model(value: String) { if (mutableState.value.binding == null) mutableState.update { it.copy(model = value, error = null) } }
     fun draft(value: String) { mutableState.update { it.copy(draft = value) } }
-    fun draftImage(value: ChatImageDraft?) { if (!mutableState.value.isBusy) mutableState.update { it.copy(draftImage = value) } }
+    // A completed picker import must survive an unrelated refresh or an older send.
+    fun draftImage(value: ChatImageDraft?) { mutableState.update { it.copy(draftImage = value) } }
     fun dismissError() { mutableState.update { it.copy(error = null, notice = null) } }
     fun provider(id: String) {
         if (mutableState.value.binding != null) return
@@ -271,6 +272,7 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
     fun send() = sendCurrent(null)
     fun sendVoiceText(value: String) = sendCurrent(ConnectionRules.message(value))
     private fun sendCurrent(voiceText: String?) = action("AI 正在输入") {
+        val originalDraft = mutableState.value.draft
         val image = if(voiceText!=null) null else mutableState.value.draftImage
         val content = voiceText ?: if (image == null) ConnectionRules.message(mutableState.value.draft) else mutableState.value.draft
         val conversation = mutableState.value.selected ?: throw IllegalStateException("对话还未准备好，请刷新后重试")
@@ -284,11 +286,13 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
                     photoSubmitted = true
                 }
             mutableState.update {
+                if (it.selectedId != conversation.id) return@update it
                 val combined = ((if (wasViewingOlder && image == null) emptyList() else it.messages) + result.first + result.second).distinctBy { row -> row.id }
                 val messages = combined.takeLast(100)
                 val hasOlder = wasViewingOlder || it.hasOlder || combined.size > messages.size
                 it.copy(messages = messages, hasOlder = hasOlder, nextBefore = if (hasOlder) messages.first().id else null,
-                    draft = if(voiceText!=null) it.draft else "", draftImage = if(voiceText!=null) it.draftImage else null,
+                    draft = if (voiceText == null && it.draft == originalDraft) "" else it.draft,
+                    draftImage = if (voiceText == null && it.draftImage?.attachment?.id == image?.attachment?.id) null else it.draftImage,
                     pendingMessage = null, pendingImage = null, viewingOlder = false,
                     notice = (repository as? com.zhiyu.app.data.LocalChatRepository)?.lastCalendarNotice)
             }

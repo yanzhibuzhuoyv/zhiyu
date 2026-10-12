@@ -7,7 +7,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.json.JSONArray
-import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 
 class VisualRepository(store: CredentialStore, private val allowHttp: Boolean, private val api: HttpApi = HttpApi()) {
@@ -59,16 +58,6 @@ class VisualReferenceReader(context: Context) {
     suspend fun read(uri: Uri): ByteArray = withContext(Dispatchers.IO) {
         require(uri.scheme == "content") { "请选择本机图片" }
         val input = resolver.openInputStream(uri) ?: throw IllegalArgumentException("无法打开参考图片")
-        input.use { stream ->
-            val output = ByteArrayOutputStream()
-            val buffer = ByteArray(8192)
-            while (true) {
-                val count = stream.read(buffer)
-                if (count < 0) break
-                require(output.size() + count <= MediaRules.MAX_BYTES) { "OC 参考图不能超过 5 MB" }
-                output.write(buffer, 0, count)
-            }
-            output.toByteArray().also { require(it.isNotEmpty()) { "参考图为空" } }
-        }
+        input.use(PhotoInputRules::boundedBytes)
     }
 }

@@ -61,7 +61,7 @@ class LocalPhotoChatTest {
         var count=0
         val client=DirectProviderClient { _,_,_-> count++; error("should not send") }
         val payload=ChatPhotoImageProcessor().normalize(png())
-        try { client.complete("deepseek","synthetic-key","deepseek-flash",listOf(DirectChatMessage("user","",listOf(payload)))); fail("不应盲发") }
+        try { client.complete("deepseek","synthetic-key","deepseek-v4-pro",listOf(DirectChatMessage("user","",listOf(payload)))); fail("不应盲发") }
         catch(_:IllegalArgumentException) { }
         assertEquals(0,count)
     }
@@ -83,7 +83,7 @@ class LocalPhotoChatTest {
             }
             LocalChatDatabase(context).use { db ->
                 val original = db.history(owner, chat.id).messages.first()
-                val result = LocalPhotoPromptHistory(ChatPhotoStore(context)).build(db.promptHistory(owner, chat.id), "deepseek", "deepseek-flash")
+                val result = LocalPhotoPromptHistory(ChatPhotoStore(context)).build(db.promptHistory(owner, chat.id), "deepseek", "deepseek-v4-pro")
                 assertEquals(0, result.messages.sumOf { it.photos.size })
                 assertTrue(result.evidence.contains("窗边的绿色盆栽"))
                 assertTrue(result.evidence.contains("\"confirmed\":false"))

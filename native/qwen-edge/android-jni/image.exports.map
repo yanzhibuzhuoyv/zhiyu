@@ -1,0 +1,8 @@
+{
+    global:
+        Java_com_zhiyu_app_data_local_qwen_QwenImageNative_sample;
+        Java_com_zhiyu_app_data_local_qwen_QwenImageNative_decode;
+        Java_com_zhiyu_app_data_local_qwen_QwenImageNative_inspectCP;
+        Java_com_zhiyu_app_data_local_qwen_QwenImageNative_runtimeIdentity;
+    local: *;
+};

@@ -112,6 +112,25 @@ class PhotoSendUiNativeTest {
         assertTrue(viewModel.state.value.error!!.contains("合成回复暂时失败"))
     }
 
+    @Test fun completedPickerImportDuringBusyStateIsImmediatelyUsableWithoutReopening() {
+        compose.onNodeWithContentDescription("发送消息").performClick()
+        compose.waitUntil(10_000) { viewModel.state.value.messages.any { it.id == "photo-user" } }
+        assertTrue(viewModel.state.value.isBusy)
+        val bytes = LocalMediaStore(context).download(draft.attachment.id, draft.attachment.sha256)
+        val store = ChatPhotoStore(context)
+        val returnedFromPicker = store.importBytes(bytes).also(store::saveDraft)
+        assertNotEquals(draft.attachment.id, returnedFromPicker.attachment.id)
+        // This is the real controller callback after its IO work. It can overlap restore/refresh/send.
+        compose.runOnUiThread { viewModel.draftImage(returnedFromPicker) }
+        assertEquals("A completed import must not be silently ignored while busy",
+            returnedFromPicker, viewModel.state.value.draftImage)
+        gate.complete(Unit)
+        compose.waitUntil(10_000) { !viewModel.state.value.isBusy }
+        assertEquals("Completing the previous send must not clear a later attachment",
+            returnedFromPicker, viewModel.state.value.draftImage)
+        assertEquals(returnedFromPicker, store.readDraft())
+    }
+
     private fun assertRenderedPhoto() {
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("图片准备中…").fetchSemanticsNodes().isEmpty()

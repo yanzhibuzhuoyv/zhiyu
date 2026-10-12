@@ -30,7 +30,10 @@ class PortraitRulesTest {
         assertEquals(4000, PortraitRules.check(working).sourceWidth)
         assertEquals(640, PortraitRules.check(working).originalWidth)
         assertThrows(IllegalArgumentException::class.java) { PortraitRules.check(working.copy(originalWidth = 2000)) }
-        assertThrows(IllegalArgumentException::class.java) { PortraitRules.check(working.copy(sourceWidth = 9000)) }
+        assertEquals(9000, PortraitRules.check(working.copy(sourceWidth = 9000)).sourceWidth)
+        assertThrows(IllegalArgumentException::class.java) { PortraitRules.check(working.copy(sourceWidth = 32769)) }
+        assertThrows(IllegalArgumentException::class.java) { PortraitRules.check(working.copy(sourceWidth = 16000, sourceHeight = 8000)) }
+        assertThrows(IllegalArgumentException::class.java) { PortraitRules.check(working.copy(sourceWidth = 0)) }
         assertThrows(IllegalArgumentException::class.java) { PortraitRules.check(working.copy(coordinateSpace = "unknown")) }
     }
     @Test fun manualSelectionAndRefinementBothStillRequireConfirmation() {

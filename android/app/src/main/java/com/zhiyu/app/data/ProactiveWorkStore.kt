@@ -3,6 +3,8 @@ package com.zhiyu.app.data
 import android.content.Context
 import com.zhiyu.app.domain.ProactiveRules
 import com.zhiyu.app.domain.ProactiveWorkState
+import com.zhiyu.app.domain.ProactiveRunRecord
+import java.time.Instant
 import java.util.UUID
 
 /** Only opt-in flags, request IDs and notification IDs. API Keys and message text never enter this store. */
@@ -35,5 +37,20 @@ class ProactiveWorkStore(context: Context, name: String = "proactive_delivery") 
         require(messageId.isNotBlank() && messageId.none { it.code < 32 }) { "消息标识无效" }
         check(preferences.edit().putString("notified_ids", (ids.takeLast(127) + messageId).joinToString("\n")).commit()) { "通知状态未保存" }
         true
+    }
+
+    override fun recordRun(conversationId: String, record: ProactiveRunRecord) = synchronized(lock) {
+        val prefix = "run_${ProactiveRules.conversationId(conversationId)}_"
+        val editor = preferences.edit().putString(prefix + "checked", record.checkedAt.toString())
+            .putString(prefix + "outcome", record.outcome)
+        if (record.nextDue == null) editor.remove(prefix + "next") else editor.putString(prefix + "next", record.nextDue.toString())
+        check(editor.commit()) { "主动联系检查状态未保存" }
+    }
+
+    fun lastRun(conversationId: String): ProactiveRunRecord? = synchronized(lock) {
+        val prefix = "run_${ProactiveRules.conversationId(conversationId)}_"
+        val checked = preferences.getString(prefix + "checked", null) ?: return@synchronized null
+        val outcome = preferences.getString(prefix + "outcome", null) ?: error("主动联系检查状态不完整")
+        ProactiveRunRecord(Instant.parse(checked), outcome, preferences.getString(prefix + "next", null)?.let(Instant::parse))
     }
 }

@@ -4,11 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LocalVoiceRulesTest {
-    @Test fun threeKnownSpeakerIdsAreFixedAndUnsupportedVoicesRejected() {
+    @Test fun threeShortcutsStayFixedButEveryBundledTimbreCanBeChosen() {
         assertEquals(listOf(10, 33, 0), LocalVoiceRules.choices.map { it.id })
         assertEquals(3, LocalVoiceRules.choices.map { it.name }.distinct().size)
-        try { LocalVoiceRules.voice(999); fail() } catch (_: IllegalArgumentException) { }
-        try { LocalVoiceRules.voice(99); fail() } catch (_: IllegalArgumentException) { }
+        assertEquals(174, LocalVoiceRules.SPEAKER_COUNT)
+        (0 until 174).forEach { assertEquals(it, LocalVoiceRules.voice(it).id) }
+        listOf(-1,174,999).forEach { try { LocalVoiceRules.voice(it); fail() } catch (_: IllegalArgumentException) { } }
     }
     @Test fun previousQuietThirdVoiceMigratesButOtherSelectionsAndUnknownIdsDoNotChange() {
         assertEquals(0, LocalVoiceRules.storedVoice(99))
@@ -18,7 +19,7 @@ class LocalVoiceRulesTest {
 
     @Test fun supersededThirdVoiceKeepsTheSelectedSlotWithTheClearerVoice() {
         assertEquals(0, LocalVoiceRules.storedVoice(2))
-        try { LocalVoiceRules.voice(2); fail() } catch (_: IllegalArgumentException) { }
+        assertEquals(2, LocalVoiceRules.voice(2).id)
     }
     @Test fun everySpokenChunkKeepsCompleteTextAndUnicodePairsIncludingVeryLongAnswers() {
         val text = ("我想陪你慢慢聊，今天的天气真好。🙂𠀀\n".repeat(300)) + "结尾不会丢"

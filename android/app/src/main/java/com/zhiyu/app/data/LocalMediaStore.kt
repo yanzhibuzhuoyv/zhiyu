@@ -5,6 +5,8 @@ import android.graphics.BitmapFactory
 import android.util.AtomicFile
 import com.zhiyu.app.domain.MediaAttachment
 import com.zhiyu.app.domain.MediaRules
+import com.zhiyu.app.domain.ChatPhotoRules
+import com.zhiyu.app.domain.PhotoInputRules
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -39,7 +41,7 @@ class LocalMediaStore(context: Context) {
         require(visualVersion >= 0 && sourceLabel.length <= 200 && description.length <= 1000 &&
             tags.size <= 30 && tags.all { it.isNotBlank() && it.length <= 40 } &&
             (dayId == null || Regex("\\d{4}-\\d{2}-\\d{2}").matches(dayId))) { "素材标注无效" }
-        val mime = validateImage(bytes)
+        val mime = validateImage(bytes, purpose)
         val hash = sha(bytes)
         val folder = File(root, kind)
         val records = metadataFiles(kind)
@@ -78,10 +80,11 @@ class LocalMediaStore(context: Context) {
         readRecord(file)
     }
     fun download(id: String, expectedSha: String? = null): ByteArray = synchronized(lock) {
-        val asset = details(id).attachment
+        val record = details(id)
+        val asset = record.attachment
         if (expectedSha != null) require(expectedSha == asset.sha256) { "素材已变更，请重新打开" }
         val file = File(File(File(root, asset.kind), "blobs"), "${asset.sha256}.bin")
-        require(file.isFile && file.length() in 1..MediaRules.MAX_BYTES.toLong()) { "本地素材缺失或过大" }
+        require(file.isFile && file.length() in 1..byteLimit(record.purpose).toLong()) { "本地素材缺失或过大" }
         file.readBytes().also { require(sha(it) == asset.sha256) { "本地素材校验失败" } }
     }
     private fun parse(value: JSONObject): LocalMediaDetails {
@@ -108,12 +111,14 @@ class LocalMediaStore(context: Context) {
         require(files.size <= MAX_RECORDS) { "本地素材过多，请先整理素材库" }
         return files
     }
-    private fun validateImage(bytes: ByteArray): String {
-        require(bytes.size in 1..MediaRules.MAX_BYTES) { "素材须为 5 MB 以内的图片" }
+    private fun byteLimit(purpose: String) = if (purpose in setOf("chat", "portrait")) ChatPhotoRules.MAX_ORIGINAL_BYTES else MediaRules.MAX_BYTES
+    private fun validateImage(bytes: ByteArray, purpose: String): String {
+        require(bytes.size in 1..byteLimit(purpose)) { "图片超过本地素材大小范围" }
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-        require(options.outWidth in 1..8192 && options.outHeight in 1..8192 &&
-            options.outWidth.toLong() * options.outHeight <= 20_000_000) { "图片须小于 2000 万像素，单边不超过 8192" }
+        if (purpose in setOf("chat", "portrait")) PhotoInputRules.checkSource(options.outWidth, options.outHeight)
+        else require(options.outWidth in 1..8192 && options.outHeight in 1..8192 &&
+            options.outWidth.toLong() * options.outHeight <= 20_000_000) { "素材图片须小于 2000 万像素，单边不超过 8192" }
         val mime = options.outMimeType
         require(mime in setOf("image/png", "image/jpeg", "image/webp", "image/gif")) { "请选择 PNG、JPEG、WebP 或 GIF 图片" }
         return mime

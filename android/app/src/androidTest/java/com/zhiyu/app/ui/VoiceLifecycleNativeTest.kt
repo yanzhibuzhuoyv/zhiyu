@@ -40,6 +40,7 @@ class VoiceLifecycleNativeTest {
         }
         compose.runOnIdle { controller.preview(33); assertTrue(controller.busy) }
         compose.onNodeWithText("好了").performClick()
+        compose.waitUntil(5000) { dismissed }
         compose.runOnIdle {
             assertTrue(dismissed)
             assertEquals(VoicePhase.IDLE, controller.phase)

@@ -3,6 +3,7 @@ package com.zhiyu.app.data
 import android.content.Context
 import com.k2fsa.sherpa.onnx.*
 import com.zhiyu.app.domain.LocalMemoryCodec
+import com.zhiyu.app.domain.VoiceTuningSettings
 
 data class LocalVoiceAudio(val samples: FloatArray, val sampleRate: Int)
 
@@ -33,25 +34,43 @@ class LocalVoiceEngine(context: Context) : AutoCloseable {
         LocalVoiceRecognition(model, model.createStream(), lock) { sessions.remove(it) }.also { sessions.add(it) }
     }
 
-    fun synthesize(text: String, voiceId: Int, active: () -> Boolean = { true }): LocalVoiceAudio = synchronized(lock) {
+    fun synthesize(text: String, voiceId: Int, active: () -> Boolean = { true }): LocalVoiceAudio =
+        synthesize(text, voiceId, VoiceTuningSettings(), active)
+
+    fun synthesize(text: String, voiceId: Int, tuning: VoiceTuningSettings,
+        active: () -> Boolean = { true }): LocalVoiceAudio = synchronized(lock) {
         check(!closed) { "语音会话已结束，请重新打开" }
+        if (!active()) throw kotlinx.coroutines.CancellationException()
         LocalVoiceRules.voice(voiceId)
         require(text.isNotBlank() && text.length <= 120)
         LocalMemoryCodec.bytes(text)
-        val model = tts ?: OfflineTts(assets, OfflineTtsConfig(
+        val model = synthesisModel()
+        require(voiceId < model.numSpeakers()) { "内置模型没有这个声音" }
+        val audio = model.generateWithCallback(text, voiceId, tuning.speed, LocalVoiceTtsCallback(active))
+        if (!active()) throw kotlinx.coroutines.CancellationException()
+        LocalVoiceRules.checkAudio(audio.samples, audio.sampleRate)
+        LocalVoiceAudio(audio.samples, audio.sampleRate)
+    }
+
+    fun speakerCount(): Int = synchronized(lock) {
+        check(!closed) { "语音会话已结束，请重新打开" }
+        synthesisModel().numSpeakers()
+    }
+
+    private fun synthesisModel(): OfflineTts = tts ?: OfflineTts(assets, OfflineTtsConfig(
             model = OfflineTtsModelConfig(vits = OfflineTtsVitsModelConfig(model = "$TTS/model.onnx",
                 lexicon = "$TTS/lexicon.txt", tokens = "$TTS/tokens.txt",
                 // Disable stochastic acoustics/durations so identical text and voice can remain stable.
                 noiseScale = 0f, noiseScaleW = 0f, lengthScale = 1f), numThreads = 2,
                 provider = "cpu", debug = false),
             ruleFsts = "$TTS/phone.fst,$TTS/date.fst,$TTS/number.fst", ruleFars = "", maxNumSentences = 1,
-        )).also { tts = it }
-        require(voiceId < model.numSpeakers()) { "内置模型没有这个声音" }
-        val audio = model.generateWithCallback(text, voiceId, 1f, LocalVoiceTtsCallback(active))
-        if (!active()) throw kotlinx.coroutines.CancellationException()
-        LocalVoiceRules.checkAudio(audio.samples, audio.sampleRate)
-        LocalVoiceAudio(audio.samples, audio.sampleRate)
-    }
+        )).also { model ->
+            if (model.numSpeakers() != LocalVoiceRules.SPEAKER_COUNT) {
+                model.release()
+                error("内置音色数量与声音库不一致，请使用完整安装包")
+            }
+            tts = model
+        }
 
     fun recognizePcm(samples: FloatArray, sampleRate: Int): String {
         val normalized = LocalVoiceRules.resample(samples, sampleRate)

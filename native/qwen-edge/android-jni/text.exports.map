@@ -1,0 +1,6 @@
+{
+    global:
+        Java_com_zhiyu_app_data_local_qwen_QwenTextNative_encode;
+        Java_com_zhiyu_app_data_local_qwen_QwenTextNative_runtimeIdentity;
+    local: *;
+};

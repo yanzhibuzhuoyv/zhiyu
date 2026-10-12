@@ -8,46 +8,77 @@ import android.os.Build
 import androidx.exifinterface.media.ExifInterface
 import com.zhiyu.app.domain.ChatPhotoPayload
 import com.zhiyu.app.domain.ChatPhotoRules
+import com.zhiyu.app.domain.PhotoInputRules
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
-import kotlin.math.roundToInt
 
 /** Creates an EXIF/GPS-free upload; does not modify the original byte array or its digest. */
 class ChatPhotoImageProcessor {
     fun normalize(original: ByteArray): ChatPhotoPayload {
-        require(original.size in 1..ChatPhotoRules.MAX_ORIGINAL_BYTES) { "请选择 5 MiB 以内的聊天图片" }
+        require(original.size in 1..ChatPhotoRules.MAX_ORIGINAL_BYTES) { "请选择 64 MiB 以内的聊天图片" }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(original, 0, original.size, bounds)
-        require(bounds.outWidth in 1..ChatPhotoRules.MAX_SIDE && bounds.outHeight in 1..ChatPhotoRules.MAX_SIDE &&
-            bounds.outWidth.toLong() * bounds.outHeight <= ChatPhotoRules.MAX_PIXELS &&
-            bounds.outMimeType in setOf("image/jpeg", "image/png", "image/webp")) {
-            "请选择 2000 万像素以内的 JPEG、PNG 或 WebP 图片"
-        }
+        PhotoInputRules.checkSource(bounds.outWidth, bounds.outHeight)
+        require(bounds.outMimeType in setOf("image/jpeg", "image/png", "image/webp")) { "请选择 JPEG、PNG 或 WebP 图片" }
         val decoded = decode(original, bounds)
         try {
-            val output = ByteArrayOutputStream()
-            val format = if (decoded.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
-            check(decoded.compress(format, 90, output)) { "图片处理失败，原图已保留" }
-            val bytes = output.toByteArray()
-            require(bytes.size in 1..ChatPhotoRules.MAX_UPLOAD_BYTES) { "图片处理后仍过大，请选择较小的图片" }
-            val mime = if (format == Bitmap.CompressFormat.PNG) "image/png" else "image/jpeg"
+            val (bytes, mime) = encodeWithinBudget(decoded)
             return ChatPhotoPayload(ChatPhotoRules.sha(original), ChatPhotoRules.sha(bytes), mime, bytes)
         } finally { decoded.recycle() }
+    }
+
+    private fun encodeWithinBudget(original: Bitmap): Pair<ByteArray, String> {
+        var working = original
+        try {
+            repeat(10) {
+                val alpha = working.hasAlpha()
+                val format = if (alpha) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+                val qualities = if (alpha) listOf(100) else listOf(95, 90, 85)
+                for (quality in qualities) encode(working, format, quality)?.let {
+                    return it to if (alpha) "image/png" else "image/jpeg"
+                }
+                val width = maxOf(1, (working.width * .8).toInt())
+                val height = maxOf(1, (working.height * .8).toInt())
+                require(width != working.width || height != working.height) { "图片处理后仍过大，原图已保留" }
+                val smaller = Bitmap.createScaledBitmap(working, width, height, true)
+                if (working !== original) working.recycle()
+                working = smaller
+            }
+            throw IllegalArgumentException("图片处理后仍过大，原图已保留")
+        } finally { if (working !== original) working.recycle() }
+    }
+
+    private fun encode(bitmap: Bitmap, format: Bitmap.CompressFormat, quality: Int): ByteArray? {
+        val output = object : ByteArrayOutputStream() {
+            var exceeded = false
+            override fun write(value: Int) {
+                if (count >= ChatPhotoRules.MAX_UPLOAD_BYTES) exceeded = true
+                if (!exceeded) super.write(value)
+            }
+            override fun write(bytes: ByteArray, offset: Int, length: Int) {
+                if (count.toLong() + length > ChatPhotoRules.MAX_UPLOAD_BYTES) exceeded = true
+                if (!exceeded) super.write(bytes, offset, length)
+            }
+        }
+        val compressed = bitmap.compress(format, quality, output)
+        if (output.exceeded) return null // Do not throw through the platform's native encoder callback.
+        check(compressed) { "图片处理失败，原图已保留" }
+        return output.toByteArray().also { require(it.isNotEmpty()) { "图片处理失败，原图已保留" } }
     }
 
     private fun decode(bytes: ByteArray, bounds: BitmapFactory.Options): Bitmap {
         if (Build.VERSION.SDK_INT >= 28) {
             return ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
-                val ratio = minOf(1.0, ChatPhotoRules.UPLOAD_SIDE.toDouble() / maxOf(info.size.width, info.size.height))
-                decoder.setTargetSize(maxOf(1, (info.size.width * ratio).roundToInt()), maxOf(1, (info.size.height * ratio).roundToInt()))
+                val (width, height) = PhotoInputRules.uploadSize(info.size.width, info.size.height)
+                decoder.setTargetSize(width, height)
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                 decoder.setOnPartialImageListener { false }
             }
         }
         val orientation = ExifInterface(ByteArrayInputStream(bytes)).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-        var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > ChatPhotoRules.UPLOAD_SIDE) sample *= 2
+        val sample = PhotoInputRules.sampleSize(bounds.outWidth, bounds.outHeight,
+            ChatPhotoRules.UPLOAD_SIDE, ChatPhotoRules.UPLOAD_PIXELS)
         val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
             BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.ARGB_8888 })
             ?: throw IllegalArgumentException("图片损坏，无法发送；原图未改写")

@@ -4,6 +4,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.UUID
+import java.time.Instant
+import com.zhiyu.app.domain.ProactiveRunRecord
 
 /** Separate test preferences only; no API Key, cloud call, worker execution or permission mutation. */
 class ProactiveWorkStoreTest {
@@ -36,5 +38,16 @@ class ProactiveWorkStoreTest {
         assertTrue(state.claimMessage("message-1"))
         assertFalse(recreate().claimMessage("message-1"))
         assertTrue(recreate().claimMessage("message-2"))
+    }
+
+    @Test fun nextCheckAndSafeOutcomeSurviveProcessStyleRecreation() = store { state, recreate ->
+        assertNull(state.lastRun("chat"))
+        val record = ProactiveRunRecord(Instant.parse("2026-10-12T12:00:00Z"), "not_due", Instant.parse("2026-10-12T13:30:00Z"))
+        state.recordRun("chat", record)
+        assertEquals(record, recreate().lastRun("chat"))
+        assertNull(recreate().lastRun("other_chat"))
+        val denied = record.copy(outcome = "permission", nextDue = null)
+        recreate().recordRun("chat", denied)
+        assertEquals(denied, recreate().lastRun("chat"))
     }
 }

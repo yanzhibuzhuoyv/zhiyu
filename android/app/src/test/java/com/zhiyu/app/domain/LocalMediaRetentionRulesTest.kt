@@ -10,10 +10,17 @@ class LocalMediaRetentionRulesTest {
         MediaRetentionRecord(n.toString(16).padStart(32, '0'), "image", sha, day,
             "library", setOf("daily_stock"), "恋人的生活画面")
 
-    @Test fun strictSevenDayBoundaryAndUndatedOrInvalidAssetsStay() {
+    @Test fun decodedFinalsStayAcrossOldSevenDayBoundaryAndClockChanges() {
         val records = listOf(stock(1), stock(2, "2026-10-03"), stock(3, null),
             stock(4, "2026-02-30"), stock(5, "2027-01-01"))
-        assertEquals(listOf(records.first().id), LocalMediaRetentionRules.plan(records, emptySet(), today).removeIds)
+        assertTrue(LocalMediaRetentionRules.plan(records, emptySet(), today).removeIds.isEmpty())
+    }
+    @Test fun decodedHistoricalPicturesStayAvailableForReproductionEvenWhenNeverSent() {
+        val finals = listOf(stock(101, "2026-08-01"), stock(102, "2026-08-01").copy(
+            purpose = "scene_background", sourceLabel = "生成的空场景", tags = emptySet()))
+        val plan = LocalMediaRetentionRules.plan(finals, emptySet(), today)
+        assertTrue("Decoded PNGs and their metadata must not be discarded", plan.removeIds.isEmpty())
+        assertTrue(plan.deleteBlobs.isEmpty())
     }
     @Test fun allSentAssetsAndNonCachePurposesStayForever() {
         val original = stock(1)
@@ -22,24 +29,24 @@ class LocalMediaRetentionRulesTest {
             stock(6).copy(sourceLabel = "本地导入"), stock(7).copy(sourceLabel = "内置素材"))
         assertTrue(LocalMediaRetentionRules.plan(records, setOf(original.id), today).removeIds.isEmpty())
     }
-    @Test fun onlyKnownOldGeneratedBackgroundIsEligible() {
+    @Test fun generatedBackgroundsAreFinalDecodedImagesAndRemainAvailable() {
         val cache = stock(1).copy(purpose = "scene_background", tags = emptySet(), sourceLabel = "生成的空场景")
         val user = stock(2).copy(purpose = "scene_background", sourceLabel = "用户图片")
-        assertEquals(listOf(cache.id), LocalMediaRetentionRules.plan(listOf(cache, user), emptySet(), today).removeIds)
+        assertTrue(LocalMediaRetentionRules.plan(listOf(cache, user), emptySet(), today).removeIds.isEmpty())
     }
     @Test fun shaRemainsProtectedByAnySurvivingRecordAcrossKinds() {
         val old = stock(1)
         val protected = stock(2).copy(kind = "sticker", purpose = "library", sourceLabel = "内置素材")
         val plan = LocalMediaRetentionRules.plan(listOf(old, protected), emptySet(), today)
-        assertEquals(listOf(old.id), plan.removeIds)
+        assertTrue(plan.removeIds.isEmpty())
         assertTrue(plan.deleteBlobs.isEmpty())
         assertTrue(LocalMediaRetentionRules.unreferenced(setOf(MediaRetentionBlob("image", old.sha256)), listOf(protected)).isEmpty())
     }
-    @Test fun boundedBatchUsesOldestFirstWithoutDependingOnEnumerationOrder() {
+    @Test fun boundedBatchNeverReclaimsFinalsEvenWhenEnumeratedInDifferentOrders() {
         val records = listOf(stock(3, "2026-10-02"), stock(2, "2026-09-10"), stock(1, "2026-09-10"))
         val plan = LocalMediaRetentionRules.plan(records, emptySet(), today, limit = 2)
-        assertEquals(3, plan.eligibleRecords)
-        assertEquals(listOf(stock(1).id, stock(2).id), plan.removeIds)
+        assertEquals(0, plan.eligibleRecords)
+        assertTrue(plan.removeIds.isEmpty())
         assertEquals(plan, LocalMediaRetentionRules.plan(records.reversed(), emptySet(), today, limit = 2))
         assertTrue(plan.deleteBlobs.isEmpty()) // Third metadata still references the shared blob.
     }

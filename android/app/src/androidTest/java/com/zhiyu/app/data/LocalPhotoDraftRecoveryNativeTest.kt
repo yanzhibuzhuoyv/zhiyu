@@ -97,9 +97,9 @@ class LocalPhotoDraftRecoveryNativeTest {
             assertEquals(listOf(library), media.list("image", visualVersion = 7))
             val swept = LocalMediaRetention(context, { setOf(first.attachment.id) }).sweep(LocalDate.parse("2026-10-11"))
             assertTrue(swept.failures.toString(), swept.failures.isEmpty())
-            assertEquals(1, swept.removedMetadata); assertEquals(0, swept.removedBlobs)
-            assertEquals(5, count("local_media/image", "json")); assertEquals(1, count("local_media/image/blobs", "bin"))
-            listOf(first.attachment, second.attachment, library, otherVersion, portrait).forEach {
+            assertEquals(0, swept.removedMetadata); assertEquals(0, swept.removedBlobs)
+            assertEquals(6, count("local_media/image", "json")); assertEquals(1, count("local_media/image/blobs", "bin"))
+            listOf(first.attachment, second.attachment, library, otherVersion, portrait, background).forEach {
                 assertArrayEquals(bytes, media.download(it.id, it.sha256))
                 assertEquals(it.visualVersion, media.details(it.id).attachment.visualVersion)
             }

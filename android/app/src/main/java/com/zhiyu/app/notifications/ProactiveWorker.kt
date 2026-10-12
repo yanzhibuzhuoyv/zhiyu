@@ -3,7 +3,6 @@ package com.zhiyu.app.notifications
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.zhiyu.app.BuildConfig
 import com.zhiyu.app.data.LocalProactiveService
 import com.zhiyu.app.data.ProactiveWorkStore
 import com.zhiyu.app.data.appCredentialStore
@@ -18,14 +17,21 @@ class ProactiveWorker(context: Context, parameters: WorkerParameters) : Coroutin
         try {
             val credentials = appCredentialStore(applicationContext)
             val state = ProactiveWorkStore(applicationContext)
+            val continueChain = inputData.getBoolean(ProactiveScheduler.CHAIN_INPUT, false)
+            val due = state.lastRun(id)?.nextDue
+            if (state.enabled(id) && due != null && due.isAfter(java.time.Instant.now())) {
+                ProactiveScheduler.next(applicationContext, id, continueChain = continueChain)
+                return@withContext Result.success()
+            }
             val service = LocalProactiveService(applicationContext, credentials)
             val engine = ProactiveDelivery(service, state, { ProactiveNotifications.allowed(applicationContext) }, ProactiveForeground::isVisible) { message ->
                 ProactiveNotifications.post(applicationContext, id, message, credentials.readBinding()?.profile?.name)
             }
             when (engine.run(id)) {
-                ProactiveWorkOutcome.COMPLETE -> Result.success()
+                ProactiveWorkOutcome.COMPLETE -> { ProactiveScheduler.next(applicationContext, id, continueChain = continueChain); Result.success() }
                 ProactiveWorkOutcome.RETRY -> Result.retry()
-                ProactiveWorkOutcome.STOP -> { ProactiveScheduler.cancel(applicationContext); Result.failure() }
+                // A provider rejection pauses this attempt; it must not erase the user's durable opt-in.
+                ProactiveWorkOutcome.STOP -> { ProactiveScheduler.next(applicationContext, id, continueChain = continueChain); Result.success() }
             }
         } catch (failure: Exception) {
             if (failure is CancellationException) throw failure

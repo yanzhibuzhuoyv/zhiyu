@@ -40,7 +40,7 @@ class LocalMediaRetentionNativeTest {
     private fun blob(asset: MediaAttachment) = File(context.filesDir, "local_media/${asset.kind}/blobs/${asset.sha256}.bin")
     private fun audit() = File(context.filesDir, "local_media/retention_v1.json")
 
-    @Test fun oldUnsentStockAndBackgroundAreRemovedButAllProtectedRecordsStay() {
+    @Test fun allDecodedStockAndBackgroundsStayIncludingOldUnsentPictures() {
         val expired = stock()
         val recent = stock("2026-10-03", 0xff111122.toInt())
         val sent = stock("2026-09-01", 0xff222233.toInt())
@@ -51,9 +51,9 @@ class LocalMediaRetentionNativeTest {
         val undated = media.ingest("image", picture(0xff777788.toInt()), "生成的空场景", purpose = "scene_background")
         val result = LocalMediaRetention(context, { setOf(sent.id) }).sweep(today)
         assertTrue(result.failures.toString(), result.failures.isEmpty()); assertTrue(result.auditSaved)
-        assertEquals(2, result.removedMetadata); assertEquals(2, result.removedBlobs)
-        assertTrue(result.freedBytes > 0); assertFalse(metadata(expired).exists()); assertFalse(blob(background).exists())
-        listOf(recent, sent, portrait, user, sticker, undated).forEach { assertArrayEquals(pictureFor(it), media.download(it.id, it.sha256)) }
+        assertEquals(0, result.removedMetadata); assertEquals(0, result.removedBlobs)
+        assertEquals(0L, result.freedBytes); assertTrue(metadata(expired).exists()); assertTrue(blob(background).exists())
+        listOf(expired, background, recent, sent, portrait, user, sticker, undated).forEach { assertArrayEquals(pictureFor(it), media.download(it.id, it.sha256)) }
         assertEquals(0, LocalMediaRetention(context, { setOf(sent.id) }).sweep(today).removedMetadata)
     }
     private fun pictureFor(asset: MediaAttachment): ByteArray = blob(asset).readBytes()
@@ -63,7 +63,7 @@ class LocalMediaRetentionNativeTest {
         val protected = media.ingest("image", picture(), "人物原图", purpose = "portrait")
         val sticker = media.ingest("sticker", picture(), "内置素材")
         val result = LocalMediaRetention(context, { emptySet() }).sweep(today)
-        assertEquals(1, result.removedMetadata); assertEquals(0, result.removedBlobs)
+        assertEquals(0, result.removedMetadata); assertEquals(0, result.removedBlobs)
         assertTrue(blob(expired).isFile); assertTrue(blob(sticker).isFile)
         assertArrayEquals(picture(), media.download(protected.id))
     }
@@ -85,23 +85,24 @@ class LocalMediaRetentionNativeTest {
         assertEquals("metadata", LocalMediaRetention(context, { emptySet() }).sweep(today).failures.single().phase)
         assertTrue(sidecar.isFile); assertTrue(blob(expired).isFile)
     }
-    @Test fun metadataDeleteFailureKeepsItsBlobAndPersistsRetryIntent() {
+    @Test fun obsoleteMetadataDeleteHookIsNeverInvokedForDecodedFinals() {
         val expired = stock()
-        val failed = LocalMediaRetention(context, { emptySet() }, deleteFile = { file -> if (file.extension == "json") false else file.delete() }).sweep(today)
-        assertEquals("metadata_delete", failed.failures.single().phase)
-        assertTrue(metadata(expired).isFile); assertTrue(blob(expired).isFile); assertEquals(1, failed.pendingRecords)
+        var calls = 0
+        val failed = LocalMediaRetention(context, { emptySet() }, deleteFile = { calls++; false }).sweep(today)
+        assertEquals(0, calls); assertTrue(failed.failures.isEmpty())
+        assertTrue(metadata(expired).isFile); assertTrue(blob(expired).isFile); assertEquals(0, failed.pendingRecords)
         val retried = LocalMediaRetention(context, { emptySet() }).sweep(today)
-        assertTrue(retried.failures.isEmpty()); assertEquals(1, retried.removedMetadata); assertEquals(1, retried.removedBlobs)
+        assertTrue(retried.failures.isEmpty()); assertEquals(0, retried.removedMetadata); assertEquals(0, retried.removedBlobs)
         assertEquals(0, retried.pendingRecords)
     }
-    @Test fun blobDeleteFailureRecoversAfterReloadWithoutScanningUnknownOrphans() {
+    @Test fun decodedBlobsAndUnknownOrphansAreNotDeletedAfterRecreation() {
         val expired = stock()
         val orphan = File(blob(expired).parentFile, "${"d".repeat(64)}.bin").apply { writeBytes(picture()) }
-        val failed = LocalMediaRetention(context, { emptySet() }, deleteFile = { file -> if (file.extension == "bin") false else file.delete() }).sweep(today)
-        assertEquals(1, failed.removedMetadata); assertEquals("blob_delete", failed.failures.single().phase)
-        assertFalse(metadata(expired).exists()); assertTrue(blob(expired).isFile)
+        val failed = LocalMediaRetention(context, { emptySet() }, deleteFile = { error("No image deletion is allowed") }).sweep(today)
+        assertEquals(0, failed.removedMetadata); assertTrue(failed.failures.isEmpty())
+        assertTrue(metadata(expired).exists()); assertTrue(blob(expired).isFile)
         val retried = LocalMediaRetention(context, { emptySet() }).sweep(today)
-        assertEquals(0, retried.removedMetadata); assertEquals(1, retried.removedBlobs); assertEquals(0, retried.pendingRecords)
+        assertEquals(0, retried.removedMetadata); assertEquals(0, retried.removedBlobs); assertEquals(0, retried.pendingRecords)
         assertTrue(orphan.isFile)
     }
     @Test fun interruptedIntentDoesNotDeleteARecentlyPinnedAssetOrItsSharedBlob() {
@@ -133,27 +134,24 @@ class LocalMediaRetentionNativeTest {
             val ingest = pool.submit<MediaAttachment> { ingestStarted.countDown(); stock("2026-10-10", 0xff123456.toInt()) }
             check(ingestStarted.await(3, TimeUnit.SECONDS)); assertFalse(ingest.isDone)
             release.countDown()
-            assertEquals(1, sweep.get(3, TimeUnit.SECONDS).removedMetadata)
-            assertTrue(metadata(ingest.get(3, TimeUnit.SECONDS)).isFile); assertFalse(metadata(expired).exists())
+            assertEquals(0, sweep.get(3, TimeUnit.SECONDS).removedMetadata)
+            assertTrue(metadata(ingest.get(3, TimeUnit.SECONDS)).isFile); assertTrue(metadata(expired).exists())
         } finally { release.countDown(); pool.shutdownNow() }
     }
-    @Test fun slowStaleAttachmentCannotCreateAReferenceAfterItsCacheWasSwept() {
+    @Test fun historicalDecodedImageCanStillBeAttachedWithoutRegeneration() {
         val expired = stock()
         LocalChatDatabase(context).use { database ->
             val owner = "synthetic-retention-owner"
             val conversation = database.ensureConversation(owner, "synthetic-model", null)
             val result = LocalMediaRetention(context, { database.pinnedMediaIds() }).sweep(today)
-            assertEquals(1, result.removedMetadata)
-            try {
-                database.append(owner, conversation.id, "assistant", "这是已过期的慢请求", attachments = listOf(expired))
-                fail("A stale cached attachment must not be committed")
-            } catch (_: IllegalArgumentException) { }
-            assertTrue(database.pinnedMediaIds().isEmpty())
-            assertTrue(database.history(owner, conversation.id).messages.isEmpty())
+            assertEquals(0, result.removedMetadata)
+            database.append(owner, conversation.id, "assistant", "这是以前的一张图片", attachments = listOf(expired))
+            assertTrue(database.pinnedMediaIds().contains(expired.id))
+            assertEquals(1, database.history(owner, conversation.id).messages.size)
         }
     }
 
-    @Test fun aLateMediaSelectionKeepsTheNaturalReplyAfterItsCacheWasSwept() {
+    @Test fun aStaleDaySelectionCannotMasqueradeAsCurrentDayDespiteRetainedPixels() {
         val expired = stock()
         val chat = LocalMediaStore.identifier(); val nonce = LocalMediaStore.identifier()
         val plan = LocalMediaPlan("", listOf(expired), nonce)
