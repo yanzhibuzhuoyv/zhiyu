@@ -45,14 +45,15 @@ class LocalDailyShareServiceNativeTest {
         var sends = 0
         var visualVersion = 1
         var activityChanged = false
+        var extraSlots = emptyList<LocalDailySlot>()
         val results = mutableMapOf<String, Message>()
         val receivedSha = mutableListOf<Set<String>>()
         val requests = mutableListOf<String>()
         val slot get() = LocalDailySlot("09:00", if (activityChanged) "changed activity" else "合成书桌日常", listOf("object", "morning"))
         val scene get(): LocalDailyScene {
             val base = LocalDailyRules.scene(chat, visualVersion, clock)
-            val slots = listOf(LocalDailySlot("00:00", "休息", listOf("night")), slot,
-                LocalDailySlot("12:00", "合成午餐", listOf("food")))
+            val slots = (listOf(LocalDailySlot("00:00", "休息", listOf("night")), slot,
+                LocalDailySlot("12:00", "合成午餐", listOf("food"))) + extraSlots).sortedBy { it.time }
             return base.copy(slots = slots, current = LocalDailyRules.current(slots, clock))
         }
         val event get(): LocalDailyShareEvent {
@@ -123,7 +124,7 @@ class LocalDailyShareServiceNativeTest {
             assertTrue(first.emitted && retry.emitted)
             assertEquals(first.message, retry.message)
             assertEquals("daily_share", first.message!!.origin)
-            assertEquals(listOf(f.image), first.message!!.mediaAttachments)
+            assertEquals(listOf(f.image), first.message.mediaAttachments)
             assertFalse(newRequest.emitted)
             assertEquals(1, f.sends)
             assertEquals(1, f.pictureCalls)
@@ -268,6 +269,35 @@ class LocalDailyShareServiceNativeTest {
             assertEquals(original, f.state().plan(f.chat, original.dayId))
             assertEquals(setOf(original.events.single().requestId), f.state().finished(f.chat, original.dayId))
             assertEquals(0, f.sends + f.pictureCalls)
+        }
+    }
+
+    @Test fun failedOldRequestReleasesItsExpiredEventAndOnlyANewRequestCanSendTheNextEvent() = runBlocking {
+        Fixture().use { f ->
+            val secondSlot = LocalDailySlot("10:00", "合成第二段日常", listOf("object", "morning"))
+            f.extraSlots = listOf(secondSlot)
+            val first = f.event
+            val second = first.copy(requestId = f.request(), slot = secondSlot,
+                due = first.due.plusSeconds(3600), expires = first.expires.plusSeconds(3600))
+            f.state().savePlan(f.chat, LocalDailySharePlan(first.dayId, 2, listOf(first, second)))
+            val oldRequest = f.request()
+            f.sendFailure = true
+            try { f.service().check(f.chat, oldRequest); fail("Synthetic pre-commit network failure was swallowed") }
+            catch (_: IOException) { }
+            assertEquals(first, f.state().aliasEvent(f.chat, oldRequest))
+            f.sendFailure = false
+            f.clock = second.due.plusSeconds(1)
+            f.image = f.image.copy(id = "c".repeat(32), url = MediaRules.path("c".repeat(32)), sha256 = "d".repeat(64))
+            val release = f.service().check(f.chat, oldRequest)
+            assertFalse(release.emitted)
+            assertEquals("not_due", release.reason)
+            assertEquals(first, f.state().aliasEvent(f.chat, oldRequest))
+            assertEquals(setOf(first.requestId), f.state().finished(f.chat, first.dayId))
+            assertEquals(1, f.sends)
+            val next = f.service().check(f.chat, f.request())
+            assertTrue(next.emitted)
+            assertEquals(2, f.sends)
+            assertEquals(listOf(first.requestId, second.requestId), f.requests)
         }
     }
 }
