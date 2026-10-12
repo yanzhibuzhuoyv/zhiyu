@@ -12,11 +12,13 @@ import java.util.UUID
 /** Streams into an owned staging directory; the active pack is never edited in place. */
 class QwenPackInstaller(private val root: File) {
     fun install(manifest: QwenModelPackManifest, open: (String) -> InputStream,
-        checkCancelled: () -> Unit = {}, progress: (Long, Long) -> Unit = { _, _ -> }): File = synchronized(lock) {
+        checkCancelled: () -> Unit = {}, validateSource: () -> Unit = {},
+        progress: (Long, Long) -> Unit = { _, _ -> }): File = synchronized(lock) {
         require(root.absoluteFile == root.canonicalFile && root.isDirectory && !Files.isSymbolicLink(root.toPath()))
         val target = File(root, manifest.manifestSha256)
         if (target.exists()) {
             QwenModelPackVerifier.verify(target, manifest, manifest.runtime, checkCancelled)
+            validateSource()
             progress(manifest.totalBytes, manifest.totalBytes)
             return@synchronized target
         }
@@ -33,6 +35,7 @@ class QwenPackInstaller(private val root: File) {
                     progress(copied, manifest.totalBytes)
                 }
             }
+            validateSource()
             QwenModelPackVerifier.verify(staging, manifest, manifest.runtime, checkCancelled)
             FileOutputStream(File(staging, "verified.sha256")).use {
                 it.write(manifest.manifestSha256.toByteArray(Charsets.US_ASCII)); it.fd.sync()
