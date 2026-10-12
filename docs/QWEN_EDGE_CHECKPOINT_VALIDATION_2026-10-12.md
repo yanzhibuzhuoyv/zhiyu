@@ -11,6 +11,7 @@
 | 桌面原流程附加checkpoint | native0，538.380s，完整PNG／检查点均通过，峰值工作集7142457344B |
 | 桌面独立检查点解码 | native0，包装38.261s，PNG与原流程／学生A图逐字节一致 |
 | 红米独立真实检查点解码 | native directwait0／timeout0，decode201.752s、包装206.501s，完整512×512 RGBA |
+| 红米实际八步采样→独立VAE | 两阶段native directwait0／timeout0，采样1684.73s、解码224.194s，总包装1926.814s；完整512×512 RGBA |
 | 红米守护合成短夹具 | 正常0、错误17、超时124／native143、正PID取消native143均符合预期；不是模型／图像验证 |
 
 桌面使用27token条件（SHA `474bde4c28a8c6304f5cb965565bd43945fd29bde0653f75c54c932416ab7173`）、seed42、CPU4、Euler8/CFG1/512²。提示词：
@@ -29,10 +30,18 @@ A watercolor lakeside garden at sunrise, pale pink flowers, no people, no text.
 
 新增真手机检查点合同18/18通过，`artifacts/qwen-phone-checkpoint-contract-20261012-r1.log`。另四种实际Android符号链接（common、native、条件输入、检查点输出）均在创建run.lock／native.identity／native.log前拒绝退出73，受保护检查点SHA未变；`artifacts/qwen-stage-real-filetypes-20261012-r1.json`。这四项补充是真文件类型，不能把Windows stub测试或小合同扩大为完整热停止／USB断线恢复验收。
 
-## 手机完整拆分链（进行中）
+## 手机采样／解码拆分链（已通过）
 
-2026-10-12用户重连红米，实际serial6659de32／transport1为device。核验原DiT／VAE／手机条件SHA后，新job进行CPU八步 `--sample-only`，保存后再启动独立VAE进程；尚未完成。脚本 `artifacts/qwen-phone-split-image-20261012-r1.py`，输出目录同名去掉`.py`。sample/decode手机目录分别 `/data/local/tmp/zhiyu_qwen_research_20261012_sample_r1` 和 `..._decode_r1`；sampling budget3900s／decode600s，44°C／thermal≥3／低内存／未知读数停止，launch与部署已即时落盘。手机条件SHA `70f165dc5aaf17b5396f354cdbda087f6f5a2f2a56309f58749fdfbcf3dcdc2c`，不能混称与桌面同字节输入。旧完整手机r1的ADB255根因仍未知。
+2026-10-12用户重连红米，实际serial6659de32／transport1为device。核验原DiT／VAE／手机条件SHA后，CPU八步 `--sample-only` 成功保存检查点并退出，再由独立VAE进程出图，两阶段direct shell wait与timeout均0。脚本 `artifacts/qwen-phone-split-image-20261012-r1.py`，同名目录内run.json、sample/decode-run.json、summary.json、两套原始回执和日志完整保留。sampling budget3900s／decode600s，44°C／thermal≥3／384MiB／未知读数守护未触发；不代表已实测热触发或拔USB。
+
+本次使用手机先前真实学生编码导出的冻结27token条件（442368B，SHA `70f165dc5aaf17b5396f354cdbda087f6f5a2f2a56309f58749fdfbcf3dcdc2c`），未在同次实验中重新编码新prompt。八步采样与VAE计算均在手机上，无电脑推理；条件不同于桌面474b输入，不能混称相同字节输入或新prompt端到端APK验证。
+
+实际采样nativeTOTAL1684.73s／包装1690.042s，8/8均有progress；采样检查点262288B SHA `305ea06a35066e3fd290b6e43293128215bde0eb9549d711e999ce59d84f9b61`，CRC471404210／finite／shape／stage严格reader通过，sample阶段未创建PNG。另一个进程full解码224.194s／包装227.032s；PNG714219B SHA `aed306e7cff731f507fcffc98e48020aaf011b694a22d2ca94bff9e45aa56fce`。总包装1926.814s（32.11分钟，包括部署校验／监控／传输）。观测sample HWM4210642944B／decode2995859456B，最高电池38.1°C、thermal0；最小可用分别6670176256B／4823392256B。解码最大观测swap144969728B，不把VmHWM当全部系统/GPU峰值。
+
+原图未经编辑复制到 `C:/Users/32202/Desktop/pk/学生版-手机原生-20261012-01/学生版-红米原图.png`，旁附 `提示词与参数.txt`，复制SHA一致；已查看实际图像符合湖畔日出／粉花／水彩／无人物文字，此主观检查不是OC身份评分。手机native PID采样22962／decode28611分别退出、wait confirmed1／term interrupted0；随后pidof image_smoke返回1无进程。研究目录和历史失败保留。新的拆分执行已通过，旧完整手机r1的ADB255根因仍未知；不倒推原失败是OOM或USB。
 
 ## 产品边界
 
 学生编码更轻，但DiT仍主导耗时与体积。GPU见 [QWEN_VULKAN_RESEARCH_2026-10-12.md](QWEN_VULKAN_RESEARCH_2026-10-12.md)：attention小图通过，Q4_K三种配置都创建管线失败，暂不用于完整GPU生图、不声称提速。正式APK仍0.2.3/code9；模型私有安装、JNI隔离、产品审核库存接线未完成，Agnes尚未替换。OC固定参考／动作全身／扩图偏好／每日轨迹同版本提示词与用户Key真实审图遵循 [OC_DAILY_IMAGE_PIPELINE_2026-10-11.md](OC_DAILY_IMAGE_PIPELINE_2026-10-11.md)，不能只靠提示词把T2I当参考编辑。本轮无Key／私人库／付费API／万轮及五千万重跑。
+
+下一轮具体安装／JNI／图库／用户Key prompt与双图审核接线顺序已按实际源码写入 [APK迁移规划](QWEN_APK_MIGRATION_NEXT_2026-10-12.md)。纯CPU当前耗时不适合聊天即时出图；不要把本次研究CLI通过当作用户可脱离电脑在正式App内生图已交付。
