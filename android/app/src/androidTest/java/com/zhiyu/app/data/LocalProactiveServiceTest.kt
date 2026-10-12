@@ -149,4 +149,15 @@ class LocalProactiveServiceTest {
             assertTrue(test.gateway.requestIds.isEmpty())
         }
     }
+
+    @Test fun aDailyShareDoesNotPretendTheUserSpokeOrResetOrdinaryContactSpacing() = runBlocking {
+        Fixture().use { test ->
+            test.enable()
+            test.gateway.rows.add(Message("daily-share", "assistant", "合成分享", emptyList(),
+                test.clock.minusSeconds(60).toString(), origin = "daily_share"))
+            val result = test.service().check("synthetic_oc", test.request())
+            assertTrue(result.emitted)
+            assertEquals(listOf<LocalNightEvent?>(null), test.gateway.events)
+        }
+    }
 }

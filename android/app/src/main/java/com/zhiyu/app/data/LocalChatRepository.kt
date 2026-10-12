@@ -228,6 +228,10 @@ class LocalChatRepository(
         database.proactiveResult(currentOwner(), id, requestId)
     }
     suspend fun proactivePolicyHistory(id: String): List<Message> = withContext(Dispatchers.IO) { database.proactivePolicyHistory(currentOwner(), id) }
+    suspend fun sendDailyShare(id: String, requestId: String, event: LocalDailyShareEvent,
+        attachment: MediaAttachment): Message {
+        throw UnsupportedOperationException("TDD pending: daily share required-image delivery")
+    }
     suspend fun sendProactive(id: String, requestId: String, nightEvent: LocalNightEvent? = null): Message = withTimeout(180000) { coroutineScope {
         val scope = this
         val foregroundWatcher = launch {
