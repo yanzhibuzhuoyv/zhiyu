@@ -40,6 +40,19 @@ class QwenPackStore(context: Context) {
         val manifest = QwenRelease.manifest(app)
         return QwenModelPackVerifier.verify(installed() ?: error("请先导入学生模型包"), manifest, manifest.runtime, cancelled)
     }
+    suspend fun importPackage(uri: Uri, progress: (Long, Long) -> Unit) = withContext(Dispatchers.IO) {
+        require(QwenRelease.supported()) { "本机生图需要 Android 10 及 64 位设备" }
+        require(uri.scheme == "content" && !DocumentsContract.isTreeUri(uri)) { "请选择模型包文件" }
+        val manifest = QwenRelease.manifest(app)
+        QwenPackCapacity.requireStorage(manifest, StatFs(root.path).availableBytes, 1, 512L * 1024 * 1024)
+        val coroutine = currentCoroutineContext()
+        var lastProgress = 0L
+        val input = app.contentResolver.openInputStream(uri) ?: error("无法读取模型包文件")
+        QwenSinglePackImporter(root).install(input, QwenRelease.MANIFEST_SHA, coroutine::ensureActive) { done, total ->
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (done == total || now - lastProgress >= 100) { lastProgress = now; progress(done, total) }
+        }
+    }
     suspend fun import(tree: Uri, progress: (Long, Long) -> Unit) = withContext(Dispatchers.IO) {
         require(QwenRelease.supported()) { "本机生图需要 Android 10 及 64 位设备" }
         require(tree.scheme == "content" && DocumentsContract.isTreeUri(tree)) { "请选择模型包文件夹" }

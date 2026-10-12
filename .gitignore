@@ -19,6 +19,7 @@ android/.kotlin/
 android/local.properties
 android/**/build/
 *.apk
+*.zyqwen
 *.aab
 artifacts/
 .codex/TASK_HANDOFF.local.md
