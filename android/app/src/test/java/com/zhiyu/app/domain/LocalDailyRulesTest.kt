@@ -94,4 +94,27 @@ class LocalDailyRulesTest {
             if (i == 0) slot.copy(activity = "新的角色休息安排") else slot
         })))
     }
+
+    @Test fun newPlansHaveSevenDistinctNonRestActivitiesForDailyPhotoSharing() {
+        val start = Instant.parse("2026-10-16T00:00:00Z")
+        (0 until 90).forEach { offset ->
+            val scene = LocalDailyRules.scene(chat, 4, start.plusSeconds(offset * 86400L))
+            assertEquals(8, scene.slots.size)
+            assertEquals("00:00", scene.slots.first().time)
+            val activities = scene.slots.drop(1)
+            assertEquals(7, activities.map { it.activity }.distinct().size)
+            assertEquals(7, activities.map { it.time }.distinct().size)
+            assertTrue(activities.all { it.activity != "休息" && it.time >= "07:00" && it.time <= "22:59" })
+            assertTrue(scene.slots.zipWithNext().all { (a, b) -> a.time < b.time })
+        }
+    }
+
+    @Test fun oldPersistedFiveSlotTrajectoriesRemainValidAndUnchanged() {
+        val slots = listOf(LocalDailySlot("00:00", "休息", listOf("night")), LocalDailySlot("08:00", "旧早餐", listOf("food")),
+            LocalDailySlot("12:00", "旧午餐", listOf("food")), LocalDailySlot("18:00", "旧晚餐", listOf("food")),
+            LocalDailySlot("21:00", "旧阅读", listOf("object")))
+        val original = slots.toList()
+        assertEquals(slots[2], LocalDailyRules.current(slots, Instant.parse("2026-10-16T04:00:00Z")))
+        assertEquals(original, slots)
+    }
 }
