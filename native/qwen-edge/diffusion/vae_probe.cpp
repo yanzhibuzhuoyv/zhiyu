@@ -1,5 +1,6 @@
 // Research-only decoder isolation; no DiT, text encoder, GPU or cloud fallback.
 #include "qwen_edge_vae_probe.hpp"
+#include "qwen_edge_latent_checkpoint.hpp"
 #include "stable-diffusion.h"
 #include "ggml-cpu.h"
 #include "model_manager.h"
@@ -135,12 +136,20 @@ struct probe_config {
     latent_mode pattern;
     std::filesystem::path output;
     std::string mode_label, pattern_label;
+    std::optional<std::filesystem::path> checkpoint;
 };
 probe_config parse_config(int argc, char** argv) {
+#ifdef QWEN_EDGE_CHECKPOINT_DECODE
+    if (argc != 5) { throw std::invalid_argument("Usage: qwen-edge-latent-decode VAE full|tile256 CHECKPOINT NEW_PNG"); }
+    zhiyu::qwen_edge::checkpoint::validate_source_path(argv[1]);
+    zhiyu::qwen_edge::checkpoint::validate_output_path(argv[4], {argv[1],argv[3]});
+    return {argv[1], parse_decode_mode(argv[2]), latent_mode::zero, argv[4], argv[2], "checkpoint", std::filesystem::path(argv[3])};
+#else
     if (argc != 5) {
         throw std::invalid_argument("Usage: qwen-edge-vae-probe VAE full|tile256 zero|sine NEW_PNG");
     }
-    return {argv[1], parse_decode_mode(argv[2]), parse_latent_mode(argv[3]), argv[4], argv[2], argv[3]};
+    return {argv[1], parse_decode_mode(argv[2]), parse_latent_mode(argv[3]), argv[4], argv[2], argv[3], std::nullopt};
+#endif
 }
 void configure_logging() {
     sd_set_log_callback([](sd_log_level_t level, const char* message, void*) {
@@ -152,14 +161,23 @@ void configure_logging() {
 }
 void run_probe(const probe_config& config, clock_type::time_point started) {
     if (!std::filesystem::is_regular_file(config.vae)) { throw std::invalid_argument("VAE file is absent"); }
+    auto values=make_diffusion_latent(config.pattern);
+    if (config.checkpoint) {
+        auto record=zhiyu::qwen_edge::checkpoint::read_checkpoint(*config.checkpoint);
+        values=std::move(record.values);
+        std::cout << "CHECKPOINT_VALIDATED true STAGE diffusion_normalized SEED " << record.seed
+                  << " CRC32 " << record.checksum << std::endl;
+    }
     exclusive_output output(config.output);
     configure_logging();
-    std::cout << "VAE_PROBE_BEGIN VERSION QWEN_IMAGE_2_1 MODE " << config.mode_label
-              << " SYNTHETIC_DIFFUSION_LATENT " << config.pattern_label << " THREADS 4" << std::endl;
+    std::cout << (config.checkpoint ? "LATENT_DECODE_BEGIN" : "VAE_PROBE_BEGIN")
+              << " VERSION QWEN_IMAGE_2_1 MODE " << config.mode_label
+              << (config.checkpoint ? " CHECKPOINT_DIFFUSION_LATENT " : " SYNTHETIC_DIFFUSION_LATENT ")
+              << config.pattern_label << " THREADS 4" << std::endl;
     decoder_runtime runtime;
     runtime.load(config.vae);
     std::cout << "METADATA_SECONDS " << elapsed(started) << std::endl;
-    const sd::Tensor<float> latent({32,32,64,1}, make_diffusion_latent(config.pattern));
+    const sd::Tensor<float> latent({32,32,64,1}, std::move(values));
     const auto decoded_input = runtime.runner->diffusion_to_vae_latents(latent);
     std::cout << "DECODE_BEGIN ELAPSED_SECONDS " << elapsed(started) << std::endl;
     memory_marker();
@@ -173,11 +191,33 @@ void run_probe(const probe_config& config, clock_type::time_point started) {
     std::cout << "PNG_COMPLETE true PNG_BYTES " << std::filesystem::file_size(config.output)
               << " TOTAL_SECONDS " << elapsed(started) << std::endl;
 }
+#ifdef QWEN_EDGE_CHECKPOINT_DECODE
+void inspect_checkpoint(const char* path, bool json) {
+    const auto record=zhiyu::qwen_edge::checkpoint::read_checkpoint(path);
+    if (json) {
+        std::cout << "{\"scope\":\"research_checkpoint_inspection\",\"version\":1,\"format_version\":1,\"model\":\"QwenImage2.1\",\"stage\":\"diffusion_normalized\","
+                  << "\"width\":32,\"height\":32,\"channels\":64,\"batch\":1,\"steps\":8,"
+                  << "\"shape\":[32,32,64,1],\"value_count\":65536,\"dtype\":\"F32LE\",\"layout\":\"width_fast\","
+                  << "\"sampling_steps\":8,\"seed\":" << record.seed << ",\"crc32\":" << record.checksum
+                  << ",\"bytes\":" << zhiyu::qwen_edge::checkpoint::file_bytes
+                  << ",\"crc_verified\":true,\"finite\":true,\"model_loaded\":false}" << std::endl;
+        return;
+    }
+    std::cout << "CHECKPOINT_VALIDATED true STAGE diffusion_normalized SEED " << record.seed
+              << " CRC32 " << record.checksum << " BYTES " << zhiyu::qwen_edge::checkpoint::file_bytes << std::endl;
+}
+#endif
 }  // namespace
 
 int main(int argc, char** argv) {
     const auto started = clock_type::now();
     try {
+#ifdef QWEN_EDGE_CHECKPOINT_DECODE
+        if (argc == 3 && (std::string(argv[1]) == "--verify" || std::string(argv[1]) == "--inspect")) {
+            inspect_checkpoint(argv[2], std::string(argv[1]) == "--inspect");
+            return 0;
+        }
+#endif
         run_probe(parse_config(argc, argv), started);
         return 0;
     } catch (const std::exception& error) {

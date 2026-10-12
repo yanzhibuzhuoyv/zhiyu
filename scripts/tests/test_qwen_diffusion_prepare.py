@@ -14,6 +14,9 @@ SPEC.loader.exec_module(PREPARE)
 
 
 class RuntimePinTest(unittest.TestCase):
+    def test_checkpoint_headers_are_part_of_single_prepare_contract(self):
+        self.assertEqual(PREPARE.FORK_HEADERS['qwen_edge_latent_checkpoint.h'],'include/qwen_edge_latent_checkpoint.h')
+        self.assertEqual(PREPARE.FORK_HEADERS['qwen_edge_latent_boundary.hpp'],'src/conditioning/qwen_edge_latent_boundary.hpp')
     def test_patch_matches_lock(self):
         lock = json.loads((PREPARE.FORK / "upstream-lock.json").read_text(encoding="utf-8"))
         digest = hashlib.sha256((PREPARE.FORK / "patches/external-condition.patch").read_bytes()).hexdigest()
@@ -66,9 +69,8 @@ class RuntimePinTest(unittest.TestCase):
     def test_verify_only_rejects_unapplied_patch(self):
         with tempfile.TemporaryDirectory() as temporary:
             source = Path(temporary)
-            for name, target in (('qwen_edge_external_condition.h', 'include'),
-                                 ('qwen_edge_condition.hpp', 'src/conditioning')):
-                destination = source / target / name
+            for name, relative in PREPARE.FORK_HEADERS.items():
+                destination = source / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.write_bytes((PREPARE.FORK / 'include' / name).read_bytes())
             with patch.object(PREPARE, 'verify_pin'), patch.object(PREPARE, 'git',

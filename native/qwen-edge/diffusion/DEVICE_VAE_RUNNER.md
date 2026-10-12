@@ -8,6 +8,7 @@
 
 - 已编译 ARM64 probe，固定名 `image_smoke`（测试时可用明确非模型 fixture 替换）。
 - `device_vae_runner.sh`，固定名 `vae_guardian.sh`，保持 LF。
+- 本地共享版还需同目录固定名 `device_guard_common.sh`；wrapper加载时校验它的固定SHA。原VAE接口与17项host行为保持，旧远端单文件不回写。当前源码/新增部署合同见 [两阶段守护](DEVICE_IMAGE_STAGES.md)；下面四项历史实机证据仍归属旧单文件SHA。
 - VAE 固定名 `vae.safetensors`，也可引用另一个满足上述 owned 模式的物理目录。
 
 `scripts/qwen_device_vae_runner.py` 不运行 ADB；调用 `launch_command(directory, vae_path, mode, pattern, budget)` 获取 shell 命令，再由协调者发送一次。mode 为 `full` / `tile256`；pattern 为 `zero` / `sine`；budget 为整数 1..900 秒。正常研究 VAE 900 秒，短 fixture 可 2 秒。

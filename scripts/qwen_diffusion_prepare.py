@@ -13,6 +13,12 @@ import subprocess
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 FORK = REPOSITORY / "native/qwen-edge/diffusion"
+FORK_HEADERS = {
+    "qwen_edge_external_condition.h": "include/qwen_edge_external_condition.h",
+    "qwen_edge_condition.hpp": "src/conditioning/qwen_edge_condition.hpp",
+    "qwen_edge_latent_checkpoint.h": "include/qwen_edge_latent_checkpoint.h",
+    "qwen_edge_latent_boundary.hpp": "src/conditioning/qwen_edge_latent_boundary.hpp",
+}
 
 
 def git(source: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -40,9 +46,8 @@ def verify_prepared(source: Path) -> dict:
     patch = FORK / 'patches/external-condition.patch'
     if hashlib.sha256(patch.read_bytes()).hexdigest() != lock['patch_sha256']:
         raise ValueError('patch content differs from pinned hash')
-    for name, target in (('qwen_edge_external_condition.h', 'include'),
-                         ('qwen_edge_condition.hpp', 'src/conditioning')):
-        destination = source / target / name
+    for name, relative in FORK_HEADERS.items():
+        destination = source / relative
         if (not destination.resolve().is_relative_to(source) or not destination.is_file()
                 or destination.read_bytes() != (FORK / 'include' / name).read_bytes()):
             raise ValueError(f'Expected exact prepared fork header: {name}')
@@ -61,11 +66,7 @@ def prepare(source: Path) -> dict:
     patch_hash = hashlib.sha256(patch.read_bytes()).hexdigest()
     if patch_hash != lock["patch_sha256"]:
         raise ValueError("patch content differs from pinned hash")
-    headers = {
-        "qwen_edge_external_condition.h": "include/qwen_edge_external_condition.h",
-        "qwen_edge_condition.hpp": "src/conditioning/qwen_edge_condition.hpp",
-    }
-    for filename, relative in headers.items():
+    for filename, relative in FORK_HEADERS.items():
         header = FORK / "include" / filename
         destination = source / relative
         if not destination.resolve().is_relative_to(source):
@@ -77,7 +78,7 @@ def prepare(source: Path) -> dict:
         git(source, "apply", "--check", str(patch))
         git(source, "apply", str(patch))
     copied = {}
-    for filename, relative in headers.items():
+    for filename, relative in FORK_HEADERS.items():
         header = FORK / "include" / filename
         destination = source / relative
         shutil.copyfile(header, destination)

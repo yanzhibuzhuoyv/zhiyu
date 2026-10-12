@@ -44,16 +44,23 @@ def _integer(fields: dict[str, str], key: str, low: int, high: int) -> int:
     return int(value)
 
 
-def parse_receipt(text: str, kind: str) -> dict[str, str]:
-    """Validate a complete, unique-key receipt; reject transport/truncation text."""
-    if kind not in IDENTITY_FIELDS or not isinstance(text, str) or len(text) > 4096:
-        raise ValueError("invalid receipt kind or size")
+def _receipt_fields(text: str) -> dict[str, str]:
+    if not isinstance(text, str) or len(text) > 4096:
+        raise ValueError("invalid receipt size")
     fields: dict[str, str] = {}
     for line in text.splitlines():
         key, separator, value = line.partition("=")
         if not separator or not key or key in fields or not value:
             raise ValueError("malformed or duplicate receipt field")
         fields[key] = value
+    return fields
+
+
+def parse_receipt(text: str, kind: str) -> dict[str, str]:
+    """Validate a complete, unique-key receipt; reject transport/truncation text."""
+    if kind not in IDENTITY_FIELDS:
+        raise ValueError("invalid receipt kind")
+    fields = _receipt_fields(text)
     if fields.get("version") != "1" or fields.get("kind") != kind or fields.get("complete") != "1":
         raise ValueError("receipt is incomplete or has a different kind/version")
     _owned(fields.get("directory", ""))
@@ -84,6 +91,11 @@ def parse_run(guardian_text: str, native_text: str | None) -> dict[str, object]:
     native = parse_receipt(native_text, "native") if native_text is not None else None
     if native and native["directory"] != guardian["directory"]:
         raise ValueError("receipts refer to different jobs")
+    return _run_result(guardian, native)
+
+
+def _run_result(guardian: dict[str, str], native: dict[str, str] | None) -> dict[str, object]:
+    """Shared interpretation of already-validated direct wait/guardian fields."""
     timeout_code = int(guardian["timeout_wait_code"])
     native_code = int(native["native_wait_code"]) if native and native["wait_confirmed"] == "1" else None
     state = "timeout" if timeout_code in (124, 137) else guardian["stop_reason"]

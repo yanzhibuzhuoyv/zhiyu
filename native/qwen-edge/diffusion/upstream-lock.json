@@ -4,5 +4,6 @@
   "submodules": {
     "ggml": "d25b121ce1d6ae0c7e62ad080460d9fc1e46dd93"
   },
-  "patch_sha256": "a0a24a843f21eca490979fcdfa27db6e18bb1d2fc755bdc0c2368dcbd5fc1e6c"
+  "patch_sha256": "9bf82bfd37dd1ffd5df28fd32e0a3948ae10ab8f086c886496c01203f300cc95",
+  "fork_revision": 2
 }
