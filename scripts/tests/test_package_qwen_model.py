@@ -79,7 +79,7 @@ class OfflineQwenPackageTest(unittest.TestCase):
     def test_production_anchor_matches_release_manifest_and_kotlin(self):
         repo = Path(__file__).resolve().parents[2]
         self.assertEqual(pack.MANIFEST_SHA, sha((repo / "artifacts/model-packs/qwen-edge/manifest.json").read_bytes()))
-        self.assertIn(pack.MANIFEST_SHA, (repo / "android/app/src/main/java/com/zhiyu/app/data/local/qwen/QwenPackStore.kt").read_text())
+        self.assertIn(pack.MANIFEST_SHA, (repo / "android/app/src/main/java/com/zhiyu/app/data/local/qwen/QwenPackStore.kt").read_text(encoding="utf-8"))
 
     def test_missing_truncated_extra_or_corrupt_payload_never_publishes(self):
         path = self.source / self.manifest["files"][0]["path"]
