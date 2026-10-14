@@ -37,6 +37,7 @@ import com.zhiyu.app.ui.screens.*
     var imageServiceOpen by remember { mutableStateOf(false) }
     var voiceSettingsOpen by remember { mutableStateOf(false) }
     var callOpen by remember { mutableStateOf(false) }
+    var planarOpen by remember { mutableStateOf(false) }
     val voice = rememberVoiceController()
     val photos = rememberChatPhotoController(state.draftImage, viewModel::draftImage)
     val media = rememberMediaController(state.selectedId, state.connected)
@@ -47,6 +48,14 @@ import com.zhiyu.app.ui.screens.*
             onCommitted = { id, snapshot -> com.zhiyu.app.data.LocalSceneStockScheduler.enqueue(appContext, id,
                 snapshot.identity.reference?.visualVersion ?: 0) })
     }
+    val planar=remember(appContext,ocScope){PlanarWorkshopController(appContext,ocScope)}
+    val originalPhoto=ocCreator.callIdentity?.photoSource
+    val planarBinding=if(state.connected&&state.selectedId!=null&&originalPhoto!=null)"${state.selectedId}:${originalPhoto.sha256}"else null
+    LaunchedEffect(planarBinding) {planar.connect(planarBinding)}
+    LaunchedEffect(planarOpen,planar.busy,planarBinding) {
+        if(planarOpen&&!planar.busy&&planar.source==null&&planar.error==null)planar.open {ocCreator.callIdentity?.let {ocCreator.source(it)}}
+    }
+    DisposableEffect(planar){onDispose {planar.dispose()}}
     LaunchedEffect(state.selectedId, state.connected, media.profile?.referenceId, media.profile?.visualVersion) {
         val reference = try { if (state.connected) media.currentReference() else null }
         catch (failure: Exception) {
@@ -72,7 +81,7 @@ import com.zhiyu.app.ui.screens.*
     val companionName = state.profile?.name?.takeIf { it.isNotBlank() } ?: providerName
     LaunchedEffect(state.connected, state.restoring) {
         if (!state.connected) { menuOpen = false; libraryOpen = false; revalidate = false; styleOpen = false; appearanceOpen = false; visualOpen = false; careOpen = false; typographyOpen = false; mediaLibraryOpen = false }
-        if (!state.connected) { callOpen=false; voiceSettingsOpen=false; imageServiceOpen=false; voice.stop() }
+        if (!state.connected) { callOpen=false; planarOpen=false; voiceSettingsOpen=false; imageServiceOpen=false; voice.stop() }
         if (!state.restoring && !state.connected && !state.canRestoreConnection) ProactiveScheduler.cancel(appContext)
     }
     LaunchedEffect(media.suggestSetup) { if (media.suggestSetup && state.connected) visualOpen = true }
@@ -93,6 +102,9 @@ import com.zhiyu.app.ui.screens.*
                                 onClick = { menuOpen = false; appearanceOpen = true }, modifier = Modifier.testTag("appearance_menu"))
                             DropdownMenuItem(text = { Text("恋人外观") }, leadingIcon = { Icon(Icons.Outlined.Face, null) },
                                 onClick = { menuOpen = false; visualOpen = true }, modifier = Modifier.testTag("visual_menu"))
+                            DropdownMenuItem(text={Text("动态形象")},leadingIcon={Icon(Icons.Outlined.FaceRetouchingNatural,null)},
+                                onClick={menuOpen=false;planarOpen=true},
+                                modifier=Modifier.testTag("planar_menu"))
                             DropdownMenuItem(text = { Text("本机照片") }, leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
                                 onClick = { menuOpen = false; imageServiceOpen = true })
                             DropdownMenuItem(text = { Text("恋人的声音") }, leadingIcon = { Icon(Icons.Outlined.RecordVoiceOver,null) },
@@ -171,6 +183,7 @@ import com.zhiyu.app.ui.screens.*
     if (careOpen && state.connected) CareSettingsDialog(care) { careOpen = false }
     if (imageServiceOpen && state.connected) QwenModelDialog(onSaved = media::reload, onDismiss = { imageServiceOpen = false })
     if (voiceSettingsOpen && state.connected) VoiceSettingsDialog(voice) { voiceSettingsOpen=false }
+    if(planarOpen&&state.connected)PlanarWorkshopDialog(planar,companionName){planarOpen=false}
     if (callOpen && state.connected) {
         val cycle by rememberInfiniteTransition(label="character_idle").animateFloat(0f,1f,
             infiniteRepeatable(tween(5000,easing=LinearEasing)),label="character_motion")
@@ -180,7 +193,9 @@ import com.zhiyu.app.ui.screens.*
                     identity.reference?.id == media.profile?.referenceId &&
                         identity.reference?.visualVersion == media.profile?.visualVersion
                 }
-                CharacterPreview(character,OcMotion(mouthOpen=if(speaking)mouth.coerceIn(0f,1f) else 0f,
+                val animatedCharacter=planar.forBinding(planarBinding)
+                if(animatedCharacter!=null)PlanarPreview(animatedCharacter,if(speaking)mouth.coerceIn(0f,1f)else 0f,true,Modifier.fillMaxSize())
+                else CharacterPreview(character,OcMotion(mouthOpen=if(speaking)mouth.coerceIn(0f,1f) else 0f,
                     breath=kotlin.math.sin(cycle*6.28318f)*.06f,blink=if(cycle>.97f) .8f else 0f),
                     ocCreator::source,modifier=Modifier.fillMaxSize())
             })

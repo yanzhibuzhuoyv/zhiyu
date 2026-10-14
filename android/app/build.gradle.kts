@@ -13,8 +13,8 @@ android {
         minSdk = 26
         targetSdk = 36
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
-        versionCode = 12
-        versionName = "0.2.6"
+        versionCode = 13
+        versionName = "0.2.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"https://local.zhiyu.invalid\"")
         buildConfigField("boolean", "USE_USB_BACKEND", "false")
@@ -36,6 +36,7 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/qwenAssets").get().asFile)
     sourceSets.getByName("main").jniLibs.srcDir(rootProject.file("../artifacts/android-qwen-jni/r2/jniLibs"))
     sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("generated/qwenTestAssets").get().asFile)
+    sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("generated/planarTestAssets").get().asFile)
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -60,6 +61,29 @@ val prepareQwenAssets = tasks.register("prepareQwenAssets") {
     }
 }
 tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(prepareQwenAssets) }
+val verifyPlanarCore = tasks.register("verifyPlanarCore") {
+    val checks = mapOf("libs/rig2d-0.2.0-studio.jar" to "0b0d161e52f182d3e58bba9baae30bb044458f2aab4fb395172cfcea3610e115",
+        "src/main/assets/planar/contract.json" to "5e659b2e83b3ed72db2b3d9eb5d024c2e49cc2055f3e33979ee715a7a9489483")
+    inputs.files(checks.keys.map { project.file(it) })
+    doLast { checks.forEach { (name, expected) ->
+        val actual = MessageDigest.getInstance("SHA-256").digest(project.file(name).readBytes()).joinToString("") { "%02x".format(it) }
+        require(actual == expected) { "Planar core/contract SHA mismatch: $name" }
+    } }
+}
+tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(verifyPlanarCore) }
+val preparePlanarTestAssets=tasks.register("preparePlanarTestAssets") {
+    val source=rootProject.file("../artifacts/planar-user-inputs-r1")
+    val target=layout.buildDirectory.dir("generated/planarTestAssets/user_oc")
+    inputs.dir(source);outputs.dir(target)
+    val checks=mapOf("sword.png" to "169afd8553d6eb1fe14cce4028f806780bb790a286c72c357c5a43665f98c8e9",
+        "portrait.jpg" to "46ed9585a34b9d9e6e04e0218ca629170546e32b921c52016c6df10aa441a720")
+    doLast {target.get().asFile.mkdirs();checks.forEach {(name,expected)->
+        val raw=source.resolve(name).readBytes()
+        require(MessageDigest.getInstance("SHA-256").digest(raw).joinToString(""){"%02x".format(it)}==expected){"User OC test input changed"}
+        target.get().file(name).asFile.writeBytes(raw)
+    }}
+}
+tasks.matching {it.name=="preDebugAndroidTestBuild"}.configureEach {dependsOn(preparePlanarTestAssets)}
 val verifyQwenJni = tasks.register("verifyQwenJni") {
     val source = rootProject.file("../artifacts/android-qwen-jni/r2/jniLibs")
     val checks = mapOf(
@@ -181,6 +205,7 @@ val prepareVoiceAssets = tasks.register("prepareVoiceAssets") {
 tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(prepareVoiceAssets) }
 
 dependencies {
+    implementation(files("libs/rig2d-0.2.0-studio.jar"))
     val composeBom = platform("androidx.compose:compose-bom:2026.06.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)

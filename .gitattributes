@@ -12,6 +12,7 @@ gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
 shared/companion-contract.json text eol=lf
+android/app/src/main/assets/planar/contract.json text eol=lf
 native/qwen-edge/** text eol=lf
 # A blank context line in a unified diff requires its leading space.
 native/qwen-edge/diffusion/patches/*.patch whitespace=-blank-at-eol

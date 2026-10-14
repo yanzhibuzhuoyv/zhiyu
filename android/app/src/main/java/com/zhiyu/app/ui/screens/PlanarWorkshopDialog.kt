@@ -1,0 +1,111 @@
+package com.zhiyu.app.ui.screens
+
+import android.content.Context
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.zhiyu.app.domain.planar.*
+import com.zhiyu.app.ui.PlanarWorkshopController
+import java.util.UUID
+
+internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
+    override fun createIntent(context:Context,input:Array<String>):Intent =
+        super.createIntent(context,input).addCategory(Intent.CATEGORY_OPENABLE)
+}
+
+@Composable fun PlanarWorkshopDialog(controller:PlanarWorkshopController,name:String,close:()->Unit) {
+    var selected by remember {mutableStateOf("eyeLeft")}
+    var tool by remember {mutableStateOf("polygon")}
+    var radius by remember {mutableStateOf(24f)}
+    var original by remember {mutableStateOf(false)}
+    var animated by remember {mutableStateOf(false)}
+    var gesture by remember {mutableStateOf(false)}
+    var pickerBinding by remember {mutableStateOf<Long?>(null)}
+    var exportBinding by remember {mutableStateOf<Long?>(null)}
+    val picker=rememberLauncherForActivityResult(PlanarDocumentPicker()){uri->
+        val token=pickerBinding;pickerBinding=null;if(uri!=null&&token!=null)controller.import(uri,token)}
+    val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")){uri->
+        val token=exportBinding;exportBinding=null;if(uri!=null&&token!=null)controller.export(uri,token)}
+    val draft=controller.draft;val photo=controller.source
+    val enabled=!controller.busy&&!original&&!animated&&!gesture
+    val maxRadius=minOf(160f,maxOf(photo?.width?:160,photo?.height?:160).toFloat())
+    val effectiveRadius=radius.coerceIn(.5f,maxRadius)
+    fun partChange(change:(PlanarPart)->PlanarPart){val d=draft?:return;controller.edit(d.copy(parts=d.parts.map {if(it.id==selected)change(it)else it}))}
+    Dialog(onDismissRequest={if(!controller.busy&&!gesture)close()},properties=DialogProperties(usePlatformDefaultWidth=false)) {
+        Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.surface) {
+            Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                    Text("动态形象",style=MaterialTheme.typography.titleLarge)
+                    TextButton(close,enabled=!controller.busy&&!gesture){Text("关闭")}
+                }
+                if(photo!=null&&draft!=null) {
+                    if(animated&&controller.active!=null)PlanarPreview(controller.active!!,0f,true,Modifier.fillMaxWidth().height(260.dp))
+                    else PlanarEditorCanvas(photo,draft,selected,tool,effectiveRadius.toDouble(),original,!controller.busy,
+                        Modifier.fillMaxWidth().height(260.dp),{gesture=it},controller::edit)
+                } else Text(if(controller.busy)"正在准备形象…" else "请先在恋人外观中导入或生成图片。",Modifier.padding(16.dp))
+                Row(horizontalArrangement=Arrangement.spacedBy(4.dp)) {
+                    TextButton(controller::undo,enabled=enabled&&controller.canUndo,modifier=Modifier.testTag("planar_undo")){Text("撤销")}
+                    TextButton(controller::redo,enabled=enabled&&controller.canRedo,modifier=Modifier.testTag("planar_redo")){Text("重做")}
+                    TextButton({original=!original;animated=false},enabled=!controller.busy&&!gesture&&photo!=null){Text(if(original)"返回编辑"else "原图对照")}
+                    TextButton({animated=!animated;original=false},enabled=!controller.busy&&!gesture&&controller.active!=null){Text(if(animated)"返回标注"else "动画预览")}
+                }
+                Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                    Text("自动建议供你确认。拖动框选眼口，点击定位头和颈；附件可逐层修正。",style=MaterialTheme.typography.bodySmall)
+                    if(animated&&controller.dirty)Text("当前预览是上次保存的形象，保存后会更新。",style=MaterialTheme.typography.bodySmall)
+                    if(draft!=null) {
+                        Row {listOf("eyeLeft" to "左眼","eyeRight" to "右眼","mouth" to "嘴巴").forEach {(id,label)->
+                            TextButton({selected=id},enabled=enabled){Text(label+(if(selected==id)" ✓"else ""))}}}
+                        Row {listOf("head" to "头部","neck" to "颈部").forEach {(id,label)->TextButton({selected=id},enabled=enabled){Text(label)}}
+                            TextButton({selected="subject";tool="erase"},enabled=enabled){Text("整体范围")}}
+                        Row {
+                            OutlinedButton({val id="part_"+UUID.randomUUID().toString().replace("-","").take(16)
+                                val p=PlanarPart(id,"附件 ${draft.parts.size+1}","accessory",20.0+draft.parts.size,emptyList(),
+                                    PlanarPoint(photo!!.width/2.0,photo.height/2.0),.5)
+                                controller.edit(draft.copy(parts=draft.parts+p));selected=id;tool="polygon"
+                            },enabled=enabled&&photo!=null&&draft.parts.size<60,modifier=Modifier.testTag("planar_add_part")){Text("添加头发／附件")}
+                        }
+                        draft.parts.forEach {p->TextButton({selected=p.id},enabled=enabled){Text(p.name+(if(selected==p.id)" ✓"else ""))}}
+                        val p=draft.parts.firstOrNull {it.id==selected}
+                        if(p!=null) {
+                            OutlinedTextField(p.name,{value->if(value.codePointCount(0,value.length)<=80)partChange {it.copy(name=value)}},label={Text("图层名称")},enabled=enabled,modifier=Modifier.fillMaxWidth())
+                            Row {TextButton({partChange {it.copy(role="hair")}},enabled=enabled){Text("头发")}
+                                TextButton({partChange {it.copy(role="accessory")}},enabled=enabled){Text("翼／武器／道具")}}
+                            Row {TextButton({partChange {it.copy(z=(it.z-1).coerceAtLeast(-1000.0))}},enabled=enabled&&p.z>-1000){Text("移后一层")}
+                                TextButton({partChange {it.copy(z=(it.z+1).coerceAtMost(90.0))}},enabled=enabled&&p.z<90){Text("移前一层")}}
+                            Text("随动幅度",style=MaterialTheme.typography.bodySmall)
+                            Slider(p.strength.toFloat(),{v->partChange {it.copy(strength=v.toDouble())}},enabled=enabled,valueRange=0f..1f)
+                            TextButton({controller.edit(draft.copy(parts=draft.parts.filter {it.id!=selected}));selected="eyeLeft"},enabled=enabled){Text("删除此层（可撤销）")}
+                        }
+                        if(p!=null||selected=="subject") {
+                            Row {if(p!=null)TextButton({
+                                if(p.baseMaskPng!=null)partChange {it.copy(baseMaskPng=null,polygon=emptyList(),brush=emptyList())}
+                                tool="polygon"
+                            },enabled=enabled){Text(if(p.baseMaskPng!=null)"重画轮廓（可撤销）"else "点选轮廓")}
+                                TextButton({tool="keep"},enabled=enabled){Text("画保留")};TextButton({tool="erase"},enabled=enabled){Text("擦除")}}
+                            if(p!=null)TextButton({if(p.polygon.size>=3)partChange {it.copy(pivot=PlanarPoint(it.polygon.map {q->q.x}.average(),it.polygon.map {q->q.y}.average()))}},enabled=enabled&&p.polygon.size>=3){Text("完成轮廓")}
+                            Text("画笔半径：${effectiveRadius.toInt()} 像素",style=MaterialTheme.typography.bodySmall)
+                            Slider(effectiveRadius,{radius=it},enabled=enabled,valueRange=.5f..maxRadius,modifier=Modifier.testTag("planar_brush_radius"))
+                        }
+                    }
+                    controller.error?.let {Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("planar_error"))}
+                    controller.notice?.let {Text(it,style=MaterialTheme.typography.bodySmall)}
+                    OutlinedButton({pickerBinding=controller.bindingRevision;picker.launch(arrayOf("application/zip","application/octet-stream"))},enabled=!controller.busy&&!gesture){Text("打开角色包")}
+                    Text("角色包用于通话动画；日常照片使用恋人外观中确认的图片。",style=MaterialTheme.typography.bodySmall)
+                    TextButton({exportBinding=controller.bindingRevision;export.launch("${name.take(40)}.zyrig.zip")},enabled=!controller.busy&&!controller.dirty&&controller.active!=null&&!gesture){Text("导出角色包")}
+                }
+                Button({controller.save(name)},enabled=!controller.busy&&!gesture&&draft!=null&&photo!=null&&!original,
+                    modifier=Modifier.fillMaxWidth().testTag("planar_save")){Text(if(controller.busy)"正在准备…" else "保存并用于通话")}
+            }
+        }
+    }
+}
