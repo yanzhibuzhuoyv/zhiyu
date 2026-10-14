@@ -10,6 +10,14 @@ import java.io.ByteArrayOutputStream
 import java.time.Instant
 
 class LocalSceneStockNativeTest {
+    @Test fun defaultStockDefersWithoutImageServiceAndNeverPublishesPlaceholders()=runBlocking {
+        isolated { context ->
+            val chat=LocalMediaStore.identifier()
+            val result=LocalSceneStock(context).prepare(chat)
+            assertTrue(result.deferred);assertEquals("unconfigured",result.reason)
+            assertTrue(LocalMediaStore(context).list("image").isEmpty())
+        }
+    }
     private suspend fun isolated(test: suspend (NativeV4Context) -> Unit) {
         val base = InstrumentationRegistry.getInstrumentation().targetContext
         val context = NativeV4Context(base)
@@ -30,7 +38,7 @@ class LocalSceneStockNativeTest {
     @Test fun localStockNeedsNoUploadsOrImageKeyAndReusesOneDatedSet()=runBlocking {
         isolated { context ->
             val instant=Instant.now()
-            val chat=LocalMediaStore.identifier(); val stock=LocalSceneStock(context,now={instant})
+            val chat=LocalMediaStore.identifier(); val stock=LocalSceneStock(context,QwenSceneBackgroundSource(context),now={instant})
             stock.prepare(chat)
             val store=LocalMediaStore(context); val pictures=store.list("image")
             val plans=LocalDailyRepository(context).use { it.horizon(chat,0,instant) }
@@ -57,7 +65,7 @@ class LocalSceneStockNativeTest {
             val ref=OcAssetRef(asset.id,asset.sha256,profile.visualVersion)
             val archive=OcCreatorStore(context)
             val saved=archive.commit(chat,0,draft.copy(reference=ref))
-            LocalSceneStock(context).prepare(chat)
+            LocalSceneStock(context,QwenSceneBackgroundSource(context)).prepare(chat)
             val assets=LocalMediaStore(context)
             val people=assets.list("image").filter { "contains_person" in assets.details(it.id).tags }
             assertTrue(people.isNotEmpty()); assertTrue(people.all { it.visualVersion==ref.visualVersion })

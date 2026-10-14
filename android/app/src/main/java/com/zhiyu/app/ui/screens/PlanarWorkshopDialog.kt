@@ -49,7 +49,7 @@ internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
                     TextButton(close,enabled=!controller.busy&&!gesture){Text("关闭")}
                 }
                 if(photo!=null&&draft!=null) {
-                    if(animated&&controller.active!=null)PlanarPreview(controller.active!!,0f,true,Modifier.fillMaxWidth().height(260.dp))
+                    if(animated&&controller.previewDocument!=null)PlanarPreview(controller.previewDocument!!,0f,true,Modifier.fillMaxWidth().height(260.dp))
                     else PlanarEditorCanvas(photo,draft,selected,tool,effectiveRadius.toDouble(),original,!controller.busy,
                         Modifier.fillMaxWidth().height(260.dp),{gesture=it},controller::edit)
                 } else Text(if(controller.busy)"正在准备形象…" else "请先在恋人外观中导入或生成图片。",Modifier.padding(16.dp))
@@ -57,16 +57,20 @@ internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
                     TextButton(controller::undo,enabled=enabled&&controller.canUndo,modifier=Modifier.testTag("planar_undo")){Text("撤销")}
                     TextButton(controller::redo,enabled=enabled&&controller.canRedo,modifier=Modifier.testTag("planar_redo")){Text("重做")}
                     TextButton({original=!original;animated=false},enabled=!controller.busy&&!gesture&&photo!=null){Text(if(original)"返回编辑"else "原图对照")}
-                    TextButton({animated=!animated;original=false},enabled=!controller.busy&&!gesture&&controller.active!=null){Text(if(animated)"返回标注"else "动画预览")}
+                    TextButton({animated=!animated;original=false},enabled=!controller.busy&&!gesture&&controller.previewDocument!=null){Text(if(animated)"返回标注"else "动画预览")}
                 }
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                    Text("自动建议供你确认。拖动框选眼口，点击定位头和颈；附件可逐层修正。",style=MaterialTheme.typography.bodySmall)
+                    Text("背景保持原样。建议位置供你确认：框选可见的眼口，点击定位头颈；侧脸、遮脸可关闭看不到的部位。",style=MaterialTheme.typography.bodySmall)
                     if(animated&&controller.dirty)Text("当前预览是上次保存的形象，保存后会更新。",style=MaterialTheme.typography.bodySmall)
                     if(draft!=null) {
                         Row {listOf("eyeLeft" to "左眼","eyeRight" to "右眼","mouth" to "嘴巴").forEach {(id,label)->
                             TextButton({selected=id},enabled=enabled){Text(label+(if(selected==id)" ✓"else ""))}}}
                         Row {listOf("head" to "头部","neck" to "颈部").forEach {(id,label)->TextButton({selected=id},enabled=enabled){Text(label)}}
-                            TextButton({selected="subject";tool="erase"},enabled=enabled){Text("整体范围")}}
+                            TextButton({selected="subject";tool="erase"},enabled=enabled){Text("人物活动范围")}}
+                        val v=draft.featureVisibility
+                        Row {Checkbox(v.eyeLeft,{controller.edit(draft.copy(featureVisibility=v.copy(eyeLeft=it)))},enabled=enabled);Text("左眼动作")}
+                        Row {Checkbox(v.eyeRight,{controller.edit(draft.copy(featureVisibility=v.copy(eyeRight=it)))},enabled=enabled);Text("右眼动作")}
+                        Row {Checkbox(v.mouth,{controller.edit(draft.copy(featureVisibility=v.copy(mouth=it)))},enabled=enabled);Text("口型")}
                         Row {
                             OutlinedButton({val id="part_"+UUID.randomUUID().toString().replace("-","").take(16)
                                 val p=PlanarPart(id,"附件 ${draft.parts.size+1}","accessory",20.0+draft.parts.size,emptyList(),
@@ -80,6 +84,8 @@ internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
                             OutlinedTextField(p.name,{value->if(value.codePointCount(0,value.length)<=80)partChange {it.copy(name=value)}},label={Text("图层名称")},enabled=enabled,modifier=Modifier.fillMaxWidth())
                             Row {TextButton({partChange {it.copy(role="hair")}},enabled=enabled){Text("头发")}
                                 TextButton({partChange {it.copy(role="accessory")}},enabled=enabled){Text("翼／武器／道具")}}
+                            Row {TextButton({partChange {it.copy(role="face")}},enabled=enabled){Text("人物头部")}
+                                TextButton({partChange {it.copy(role="body")}},enabled=enabled){Text("人物身体")}}
                             Row {TextButton({partChange {it.copy(z=(it.z-1).coerceAtLeast(-1000.0))}},enabled=enabled&&p.z>-1000){Text("移后一层")}
                                 TextButton({partChange {it.copy(z=(it.z+1).coerceAtMost(90.0))}},enabled=enabled&&p.z<90){Text("移前一层")}}
                             Text("随动幅度",style=MaterialTheme.typography.bodySmall)

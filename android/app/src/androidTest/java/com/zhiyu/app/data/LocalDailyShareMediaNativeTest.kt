@@ -9,6 +9,17 @@ import java.time.Instant
 
 /** Real private metadata, immutable PNG bytes and persisted trajectories; no models or API calls. */
 class LocalDailyShareMediaNativeTest {
+    @Test fun remoteStockRequiresReviewAndTheExactChatMarker() {
+        DailyShareNativeFixture().use { f ->
+            val tags=f.tags - "qwen_generated" + listOf("remote_generated","remote_chat_${f.chat.take(24)}")
+            val picture=f.image(labels=tags)
+            assertEquals(picture,f.selector.prepare(f.chat,f.event,emptySet()))
+            f.rewriteMetadata(picture){it.put("tags",JSONArray(tags - "composite_reviewed"))}
+            assertNull(f.selector.prepare(f.chat,f.event,emptySet()))
+            f.rewriteMetadata(picture){it.put("tags",JSONArray(tags.filterNot {t->t.startsWith("remote_chat_")}+"remote_chat_wrong") )}
+            assertNull(f.selector.prepare(f.chat,f.event,emptySet()))
+        }
+    }
     @Test fun selectsExactReviewedSlotWithoutRenderingOrAcceptingEmoji() {
         DailyShareNativeFixture().use { f ->
             f.image(kind = "sticker", color = 0xff328421.toInt())

@@ -12,6 +12,7 @@ object PlanarBasisFactory {
     fun create(
         bounds: IntArray, role: String, anchors: PlanarAnchors, pivot: PlanarPoint,
         strength: Double, width: Int, height: Int, contract: PlanarContract,
+        motionMode: PlanarMotionMode = PlanarMotionMode.CHARACTER,
     ): PlanarMesh {
         PlanarDraft(anchors).validate(width, height)
         require(bounds.size == 4 && bounds[0] >= 0 && bounds[1] >= 0 && bounds[2] > 0 && bounds[3] > 0 &&
@@ -61,6 +62,12 @@ object PlanarBasisFactory {
                 put(deltas, "sway", index, -(y - pivot.y) * scale, (x - pivot.x) * scale)
             }
         }
+        val active = when (motionMode) {
+            PlanarMotionMode.STATIC -> emptySet()
+            PlanarMotionMode.EXPRESSION -> setOf("blinkLeft", "blinkRight", "mouth")
+            PlanarMotionMode.CHARACTER -> CHANNELS.toSet()
+        }
+        if (motionMode != PlanarMotionMode.CHARACTER) deltas.forEach { (name, values) -> if (name !in active) values.fill(0f) }
         return PlanarMesh(contract, FloatArray(vertices.size) { vertices[it].toFloat() }, uv, indices, deltas)
     }
 

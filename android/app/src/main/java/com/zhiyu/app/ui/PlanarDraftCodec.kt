@@ -18,7 +18,11 @@ internal object PlanarDraftCodec {
             PlanarPart(p["id"] as String,p["name"] as String,p["role"] as String,num(p["z"]),
                 (p["polygon"] as? List<*> ?: emptyList<Any>()).map(::point),point(p["pivot"]),num(p["strength"]),
                 strokes(p["brush"]),p["mask"] as? String) }
-        return PlanarDraft(anchors,parts,strokes(d["subjectBrush"]),true,d["subjectMask"] as? String).also {it.validate(width,height)}
+        val visibility=if(d.containsKey("featureVisibility")) obj(d["featureVisibility"]) else null
+        if(visibility!=null)require(visibility.keys==setOf("eyeLeft","eyeRight","mouth")){"眼口动作选项无效"}
+        fun visible(key:String)=if(visibility==null)true else visibility[key] as? Boolean ?: error("眼口动作选项无效")
+        val features=PlanarFeatureVisibility(visible("eyeLeft"),visible("eyeRight"),visible("mouth"))
+        return PlanarDraft(anchors,parts,strokes(d["subjectBrush"]),true,d["subjectMask"] as? String,features).also {it.validate(width,height)}
     }
     fun measure(d:PlanarDraft):Int {
         val points=d.parts.sumOf {it.polygon.size+it.brush.sumOf {s->s.points.size}}+d.subjectBrush.sumOf {it.points.size}

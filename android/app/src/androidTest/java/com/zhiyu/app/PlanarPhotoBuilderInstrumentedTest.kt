@@ -52,7 +52,7 @@ class PlanarPhotoBuilderInstrumentedTest {
         } finally { source.recycle() }
     }
 
-    @Test fun orderedSubjectEraseAndKeepModifyOnlyExplicitSourcePixels() {
+    @Test fun subjectEraseAndKeepRetainTheOriginalScene() {
         val source = fixture(64, 64) { _, _ -> Color.RED }
         try {
             val erase = PlanarBrushStroke(listOf(PlanarPoint(4.0, 4.0), PlanarPoint(12.0, 4.0)), 2.0, false)
@@ -62,7 +62,7 @@ class PlanarPhotoBuilderInstrumentedTest {
             val result = compose(document)
             try {
                 assertEquals(Color.RED, result.getPixel(4, 4))
-                assertEquals(0, Color.alpha(result.getPixel(10, 4)))
+                assertEquals(Color.RED, result.getPixel(10, 4))
                 assertEquals(Color.RED, result.getPixel(30, 60))
             } finally { result.recycle() }
         } finally { source.recycle() }
@@ -87,7 +87,7 @@ class PlanarPhotoBuilderInstrumentedTest {
             assertEquals(Color.RED, layerPixel(layer.texturePng, layer.mesh.baseVertices(), 50, 50))
             assertTrue(document.definitionJson.contains("subjectMask"))
             val composed = compose(document)
-            try { assertEquals(0, Color.alpha(composed.getPixel(63, 63))) } finally { composed.recycle() }
+            try { assertEquals(Color.RED, composed.getPixel(63, 63)) } finally { composed.recycle() }
         } finally { source.recycle(); mask.recycle() }
     }
 
@@ -127,18 +127,19 @@ class PlanarPhotoBuilderInstrumentedTest {
         } finally { source.recycle() }
     }
 
-    @Test fun confirmationEmptySubjectAndTextureBudgetReject() {
+    @Test fun confirmationEmptySourceAndTextureBudgetReject() {
         val source = fixture(32, 32) { _, _ -> Color.RED }
         try {
             assertThrows(IllegalArgumentException::class.java) {
                 PlanarPhotoBuilder().build(source, PlanarDraft.suggest(32, 32), "待确认", contract())
             }
-            val erase = PlanarBrushStroke(listOf(PlanarPoint(16.0, 16.0)), 32.0, false)
-            assertThrows(IllegalArgumentException::class.java) {
-                PlanarPhotoBuilder().build(source,
-                    PlanarDraft.suggest(32, 32).copy(subjectBrush = listOf(erase), suggestionsConfirmed = true), "空", contract())
-            }
         } finally { source.recycle() }
+        val empty = fixture(32, 32) { _, _ -> Color.TRANSPARENT }
+        try {
+            assertThrows(IllegalArgumentException::class.java) {
+                PlanarPhotoBuilder().build(empty, PlanarDraft.suggest(32, 32).copy(suggestionsConfirmed = true), "空原图", contract())
+            }
+        } finally { empty.recycle() }
         val big = fixture(1536, 1536) { _, _ -> Color.RED }
         try {
             val parts = (0..2).map { i -> PlanarPart("islands_$i", "分离岛", "accessory", i.toDouble(),

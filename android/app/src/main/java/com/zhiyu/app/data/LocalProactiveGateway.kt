@@ -10,6 +10,7 @@ interface LocalProactiveGateway {
     suspend fun result(id: String, requestId: String): Message?
     suspend fun history(id: String): List<Message>
     suspend fun send(id: String, requestId: String, event: LocalNightEvent?): Message
+    suspend fun send(id:String,requestId:String,event:LocalNightEvent?,contactRevision:Int):Message=send(id,requestId,event)
 }
 
 class RepositoryProactiveGateway(private val repository: LocalChatRepository) : LocalProactiveGateway {
@@ -17,4 +18,6 @@ class RepositoryProactiveGateway(private val repository: LocalChatRepository) : 
     override suspend fun result(id: String, requestId: String) = repository.proactiveResult(id, requestId)
     override suspend fun history(id: String) = repository.proactivePolicyHistory(id)
     override suspend fun send(id: String, requestId: String, event: LocalNightEvent?) = repository.sendProactive(id, requestId, event)
+    override suspend fun send(id:String,requestId:String,event:LocalNightEvent?,contactRevision:Int)=
+        repository.sendProactive(id,requestId,event,contactRevision)
 }

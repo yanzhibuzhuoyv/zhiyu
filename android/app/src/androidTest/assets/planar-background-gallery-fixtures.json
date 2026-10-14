@@ -1,0 +1,595 @@
+{
+  "manualLandmarks": true,
+  "semanticAccuracyGroundTruth": false,
+  "globalMotionPartQualityReviewed": false,
+  "cases": [
+    {
+      "id": "scene_01",
+      "assetPath": "user_oc_background/scene_01.jpg",
+      "sha256": "67735c6cc16471cbfcf2a0c7111c81274bfedc52c72588fea5300a3d3869ce6a",
+      "width": 1080,
+      "height": 1508,
+      "sourceName": "codex-clipboard-184c7da9-36a4-47f6-bda7-a59bae22e66b.jpg",
+      "anchors": {
+        "head": [
+          520,
+          416
+        ],
+        "neck": [
+          615,
+          514
+        ],
+        "eyeLeft": [
+          425,
+          400,
+          475,
+          435
+        ],
+        "eyeRight": [
+          545,
+          400,
+          585,
+          435
+        ],
+        "mouth": [
+          445,
+          445,
+          475,
+          470
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": false,
+        "eyeRight": false,
+        "mouth": false
+      },
+      "manualNote": "back pose; eyes and mouth not visible"
+    },
+    {
+      "id": "scene_02",
+      "assetPath": "user_oc_background/scene_02.jpg",
+      "sha256": "f18eba3d812bdace74e047cc12e64dd88d43d5c67933b6a4557c033dc5246e66",
+      "width": 1080,
+      "height": 1485,
+      "sourceName": "codex-clipboard-8330e860-8839-4759-9b06-04ea9aed754e.jpg",
+      "anchors": {
+        "head": [
+          282,
+          337
+        ],
+        "neck": [
+          302,
+          426
+        ],
+        "eyeLeft": [
+          230,
+          320,
+          273,
+          343
+        ],
+        "eyeRight": [
+          292,
+          319,
+          338,
+          345
+        ],
+        "mouth": [
+          262,
+          371,
+          297,
+          393
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": true,
+        "mouth": true
+      },
+      "manualNote": "front face; seated scene and chair retained"
+    },
+    {
+      "id": "scene_03",
+      "assetPath": "user_oc_background/scene_03.jpg",
+      "sha256": "8e07e9f5cfb280d7e4856217d57c803ec2a1bd5b6825e1f621024ef643fd1756",
+      "width": 1074,
+      "height": 1491,
+      "sourceName": "codex-clipboard-636e4cb6-4312-4d77-94ce-7d96ad43c8b9.jpg",
+      "anchors": {
+        "head": [
+          748,
+          255
+        ],
+        "neck": [
+          757,
+          365
+        ],
+        "eyeLeft": [
+          682,
+          231,
+          724,
+          253
+        ],
+        "eyeRight": [
+          749,
+          207,
+          784,
+          239
+        ],
+        "mouth": [
+          668,
+          257,
+          703,
+          282
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": false,
+        "mouth": true
+      },
+      "manualNote": "upward profile; hidden eye disabled"
+    },
+    {
+      "id": "scene_04",
+      "assetPath": "user_oc_background/scene_04.jpg",
+      "sha256": "2eb0525371c9fd0c4ce7bbb5b551772d063fc56045f568429371cfb9251745d4",
+      "width": 916,
+      "height": 1920,
+      "sourceName": "009038C01DB99231BFD6FA2557807425.jpg",
+      "anchors": {
+        "head": [
+          478,
+          380
+        ],
+        "neck": [
+          481,
+          552
+        ],
+        "eyeLeft": [
+          352,
+          300,
+          429,
+          372
+        ],
+        "eyeRight": [
+          512,
+          318,
+          604,
+          391
+        ],
+        "mouth": [
+          435,
+          425,
+          471,
+          452
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": true,
+        "mouth": true
+      },
+      "manualNote": "front face; snow and scene retained"
+    },
+    {
+      "id": "scene_05",
+      "assetPath": "user_oc_background/scene_05.jpg",
+      "sha256": "9a1cd5f1d8b148791d4adfc36f4f4e345b761fc0f397c210ecb6553b2635ec8d",
+      "width": 1062,
+      "height": 1062,
+      "sourceName": "1E761B29B93DFB13B137A943135C6294.jpg",
+      "anchors": {
+        "head": [
+          412,
+          253
+        ],
+        "neck": [
+          358,
+          421
+        ],
+        "eyeLeft": [
+          387,
+          181,
+          442,
+          226
+        ],
+        "eyeRight": [
+          447,
+          185,
+          480,
+          220
+        ],
+        "mouth": [
+          500,
+          268,
+          534,
+          303
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": false,
+        "mouth": false
+      },
+      "manualNote": "profile; opposite eye and unclear mouth disabled"
+    },
+    {
+      "id": "scene_06",
+      "assetPath": "user_oc_background/scene_06.jpg",
+      "sha256": "a17cc271a123e1e0a0e3a9da79b15487fb8e5113fc142e74e1f5c4106413c8a1",
+      "width": 720,
+      "height": 1520,
+      "sourceName": "96F8DE09376AA0E761ED76873A5DC900.jpg",
+      "anchors": {
+        "head": [
+          315,
+          439
+        ],
+        "neck": [
+          302,
+          611
+        ],
+        "eyeLeft": [
+          230,
+          398,
+          283,
+          447
+        ],
+        "eyeRight": [
+          360,
+          399,
+          415,
+          452
+        ],
+        "mouth": [
+          296,
+          508,
+          332,
+          531
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": true,
+        "mouth": true
+      },
+      "manualNote": "front face; shelf and hand remain in source"
+    },
+    {
+      "id": "scene_07",
+      "assetPath": "user_oc_background/scene_07.jpg",
+      "sha256": "f3c29e0131ccbadbc0c1b472e9e4fc15ea01d09b51da54f11ff3dcee68375f6c",
+      "width": 620,
+      "height": 1033,
+      "sourceName": "974FD9D2EE860BE999775C777C15A6C0.jpg",
+      "anchors": {
+        "head": [
+          343,
+          302
+        ],
+        "neck": [
+          343,
+          368
+        ],
+        "eyeLeft": [
+          309,
+          288,
+          330,
+          306
+        ],
+        "eyeRight": [
+          348,
+          278,
+          376,
+          296
+        ],
+        "mouth": [
+          332,
+          321,
+          355,
+          337
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": true,
+        "mouth": true
+      },
+      "manualNote": "small face; throne and objects retained"
+    },
+    {
+      "id": "scene_08",
+      "assetPath": "user_oc_background/scene_08.jpg",
+      "sha256": "5c48cc989eb550e004447efb9dc68617065f45ad8efefdca21a47b98fbe945f7",
+      "width": 1080,
+      "height": 1078,
+      "sourceName": "98E2734C877A5384E69777E9A01C4294.jpg",
+      "anchors": {
+        "head": [
+          444,
+          338
+        ],
+        "neck": [
+          431,
+          581
+        ],
+        "eyeLeft": [
+          419,
+          239,
+          503,
+          283
+        ],
+        "eyeRight": [
+          510,
+          243,
+          538,
+          284
+        ],
+        "mouth": [
+          554,
+          330,
+          595,
+          361
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": false,
+        "mouth": false
+      },
+      "manualNote": "profile; drink obscures mouth"
+    },
+    {
+      "id": "scene_09",
+      "assetPath": "user_oc_background/scene_09.jpg",
+      "sha256": "9dfa5870131047ba451cf86b086b7333419ba71724587e7fc2a8f66d876e0a00",
+      "width": 1080,
+      "height": 1526,
+      "sourceName": "B6D54A869515FF34C3B7AA92E5F0CAE5.jpg",
+      "anchors": {
+        "head": [
+          568,
+          533
+        ],
+        "neck": [
+          571,
+          680
+        ],
+        "eyeLeft": [
+          455,
+          469,
+          545,
+          530
+        ],
+        "eyeRight": [
+          609,
+          466,
+          663,
+          512
+        ],
+        "mouth": [
+          573,
+          588,
+          607,
+          612
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": true,
+        "mouth": true
+      },
+      "manualNote": "front face; arms and background retained"
+    },
+    {
+      "id": "scene_10",
+      "assetPath": "user_oc_background/scene_10.jpg",
+      "sha256": "77fa0c4d4736130e1af0c08eb4806a4ec93a92ae9cf217c16a23ac5fee8ac12c",
+      "width": 1080,
+      "height": 1080,
+      "sourceName": "BF38BCF689D8DAD31C4E972E1888A9C1.jpg",
+      "anchors": {
+        "head": [
+          537,
+          529
+        ],
+        "neck": [
+          546,
+          901
+        ],
+        "eyeLeft": [
+          259,
+          391,
+          451,
+          489
+        ],
+        "eyeRight": [
+          610,
+          338,
+          815,
+          425
+        ],
+        "mouth": [
+          469,
+          706,
+          658,
+          758
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": true,
+        "mouth": true
+      },
+      "manualNote": "front closeup; scene retained"
+    },
+    {
+      "id": "scene_11",
+      "assetPath": "user_oc_background/scene_11.jpg",
+      "sha256": "65c3de4317edbe5385e460a3702304040d738fa0913dfa77c2594aff1f357880",
+      "width": 1080,
+      "height": 1080,
+      "sourceName": "CC573C28A880CE6C7874948929089E4C.jpg",
+      "anchors": {
+        "head": [
+          398,
+          559
+        ],
+        "neck": [
+          475,
+          850
+        ],
+        "eyeLeft": [
+          328,
+          419,
+          531,
+          502
+        ],
+        "eyeRight": [
+          227,
+          435,
+          287,
+          480
+        ],
+        "mouth": [
+          292,
+          625,
+          343,
+          654
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": false,
+        "mouth": true
+      },
+      "manualNote": "profile; other person and sword retained"
+    },
+    {
+      "id": "scene_12",
+      "assetPath": "user_oc_background/scene_12.jpg",
+      "sha256": "dee2dd0c965f95fb58441922b2fefd83ea3cffb7c3991e0a77b4d06360f1b2d2",
+      "width": 500,
+      "height": 500,
+      "sourceName": "E7067BBBE683C677AAFCF04A67778258.jpg",
+      "anchors": {
+        "head": [
+          249,
+          248
+        ],
+        "neck": [
+          256,
+          424
+        ],
+        "eyeLeft": [
+          173,
+          174,
+          225,
+          204
+        ],
+        "eyeRight": [
+          295,
+          203,
+          363,
+          236
+        ],
+        "mouth": [
+          187,
+          306,
+          277,
+          354
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": true,
+        "mouth": true
+      },
+      "manualNote": "front face; cord remains in source"
+    },
+    {
+      "id": "scene_13",
+      "assetPath": "user_oc_background/scene_13.jpg",
+      "sha256": "3d8c4f8ca5bfb28df18ec32264dbd692f2f8be003a3da7be930021837db5e900",
+      "width": 926,
+      "height": 1920,
+      "sourceName": "FCA4675234DD3822450AE3AAFD88C079.jpg",
+      "anchors": {
+        "head": [
+          504,
+          861
+        ],
+        "neck": [
+          513,
+          1225
+        ],
+        "eyeLeft": [
+          245,
+          680,
+          406,
+          830
+        ],
+        "eyeRight": [
+          551,
+          699,
+          762,
+          843
+        ],
+        "mouth": [
+          412,
+          981,
+          529,
+          1020
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": true,
+        "mouth": true
+      },
+      "manualNote": "front face; mask and ornaments retained"
+    },
+    {
+      "id": "scene_14",
+      "assetPath": "user_oc_background/scene_14.jpg",
+      "sha256": "a75352b063c567dd21aa8262f5207570cbe0133c6b73bc2998246b14747f5afd",
+      "width": 702,
+      "height": 1480,
+      "sourceName": "FDE2680DBE1FAC321B7989C48C8C031F.jpg",
+      "anchors": {
+        "head": [
+          218,
+          220
+        ],
+        "neck": [
+          215,
+          309
+        ],
+        "eyeLeft": [
+          181,
+          182,
+          211,
+          211
+        ],
+        "eyeRight": [
+          237,
+          210,
+          266,
+          237
+        ],
+        "mouth": [
+          201,
+          244,
+          223,
+          260
+        ]
+      },
+      "featureVisibility": {
+        "eyeLeft": true,
+        "eyeRight": true,
+        "mouth": true
+      },
+      "manualNote": "front face; tree branches and dress retained"
+    }
+  ]
+}

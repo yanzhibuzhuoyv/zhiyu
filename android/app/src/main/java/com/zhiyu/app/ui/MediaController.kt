@@ -104,7 +104,7 @@ val LocalMediaController = staticCompositionLocalOf<MediaController?> { null }
     fun save(mode: String, description: String, gender: String, hair: String) = operation {
         repository.update(it, mode, description, gender, hair)
     }
-    fun importReference(uri: Uri, separateSubject: Boolean = true) {
+    fun importReference(uri: Uri, separateSubject: Boolean = false) {
         if (!separateSubject) { operation { repository.import(it, reader.read(uri)) }; return }
         if (busy) return
         val id = conversationId ?: return

@@ -13,6 +13,9 @@ import java.io.ByteArrayOutputStream
 class OcCreatorStore(context: Context) {
     private val root = File(context.applicationContext.filesDir, "oc_identity_v1")
     fun read(chatId: String): OcIdentitySnapshot? = synchronized(lock) { readUnlocked(chatId) }
+    /** A short local publication check; never hold this lock across model or image requests. */
+    internal fun <T> withCurrentSnapshot(chatId:String,block:(OcIdentitySnapshot?)->T):T =
+        synchronized(lock){block(readUnlocked(chatId))}
     fun beginPublication(chatId: String, expectedRevision: Int, expectedVersion: Int, identity: OcIdentity,
         pngSha: String, attempt: String): OcPendingPublication = synchronized(lock) {
         val before = readUnlocked(chatId)

@@ -34,6 +34,7 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
                 .filter { it.sha256 !in recentSha }.map { assets.details(it.id) }
                 .filter { LocalDayStockRules.available(it.attachment, it.tags.toSet(), day,
                     now().atZone(java.time.ZoneId.of(LocalDailyRules.TIMEZONE)).toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),version) }
+                .filter { stockEligible(id, it, daily) }
         }
         val chosen = available.shuffled(Random(day.hashCode() xor recent.size)).sortedByDescending { item ->
             LocalDailyRules.mediaAffinity(item.attachment.kind, item.tags.toSet(), daily.current)
@@ -55,18 +56,43 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     /** Keep the snapshot check and append under the same lock as changing an OC. */
     fun <T> commit(id: String, plan: LocalMediaPlan, raw: String, save: (LocalMediaReply) -> T): T =
         visual.withCurrentProfile(id) { current ->
+            LocalDailyRepository(appContext).use { daily ->
+                daily.withCurrentScene(id, current.visualVersion, now()) { scene ->
+                    save(currentReply(id, plan, raw, current, scene))
+                }
+            }
+        }
+
+    private fun currentReply(id: String, plan: LocalMediaPlan, raw: String, current: VisualProfile,
+        scene: LocalDailyScene): LocalMediaReply {
             val reply = plan.parse(raw)
             val selected = reply.attachments.mapNotNull { asset ->
                 try { assets.download(asset.id,asset.sha256); assets.details(asset.id) }
                 catch (_: IllegalArgumentException) { null }
-            }
+            }.filter { stockEligible(id, it, scene) }
             val people = selected.filter { "contains_person" in it.tags }.map { it.attachment.id }.toSet()
             val dayStock = selected.filter { "daily_stock" in it.tags }.map { it.attachment.id }.toSet()
             val version = current.visualVersion
-            val day = LocalDailyRules.scene(id, version, now()).dayId
+            val day = LocalDailyRules.dayId(now())
             val kept = reply.copy(attachments = reply.attachments.filter { asset -> selected.any { it.attachment.id == asset.id } })
             val readyReply = if (current.mode == "none" || current.referenceId == null)
                 kept.copy(attachments = kept.attachments.filter { it.id !in people }) else kept
-            save(LocalMediaFreshness.accept(readyReply, version, day, people, dayStock))
-        }
+            return LocalMediaFreshness.accept(readyReply, version, day, people, dayStock)
+    }
+
+    /** Legacy reviewed stock keeps its existing behavior; new remote stock proves its actual scene ownership. */
+    private fun stockEligible(chat: String, item: LocalMediaDetails, scene: LocalDailyScene): Boolean {
+        val tags = item.tags.toSet()
+        if ("daily_stock" !in tags) return true
+        if ("local_placeholder" in tags) return false
+        if ("remote_generated" !in tags) return true
+        val asset = item.attachment
+        if (item.purpose != "library" || asset.kind != "image" || asset.dayId != scene.dayId || asset.visualVersion != scene.visualVersion ||
+            "composite_reviewed" !in tags || "decoded_final" !in tags) return false
+        if (item.tags.singleOrNull { it.startsWith("remote_chat_") } != "remote_chat_${chat.take(24)}" ||
+            item.tags.singleOrNull { it.startsWith("trajectory_") } != "trajectory_${LocalDailyRules.revision(scene).take(24)}") return false
+        val marker = item.tags.singleOrNull { it.startsWith("slot_") } ?: return false
+        val slot = scene.slots.singleOrNull { "slot_${it.time.replace(":", "")}" == marker } ?: return false
+        return tags.containsAll(slot.tags)
+    }
 }

@@ -16,6 +16,7 @@ interface LocalDailyShareGateway {
     suspend fun scene(id: String, now: Instant): LocalDailyScene
     suspend fun picture(id: String, event: LocalDailyShareEvent, usedSha: Set<String>): MediaAttachment?
     suspend fun send(id: String, event: LocalDailyShareEvent, attachment: MediaAttachment): Message
+    suspend fun send(id:String,event:LocalDailyShareEvent,attachment:MediaAttachment,contactRevision:Int):Message=send(id,event,attachment)
 }
 
 class LocalDailyShareService(context: Context, private val credentials: CredentialStore,
@@ -25,6 +26,7 @@ class LocalDailyShareService(context: Context, private val credentials: Credenti
     private val enabled: (String) -> Boolean = ProactiveWorkStore(context)::enabled,
     private val permission: () -> Boolean = { ProactiveNotifications.allowed(context) },
     private val now: () -> Instant = Instant::now,
+    private val contactPause:ContactPauseStore=ContactPauseStore(context),
 ) : ProactiveService {
     override suspend fun preferences(id: String) = preferencesService.preferences(id).let { it.copy(enabled = it.enabled && enabled(id)) }
     override suspend fun savePreferences(id: String, preferences: ProactivePreferences) = preferencesService.savePreferences(id, preferences)
@@ -32,11 +34,12 @@ class LocalDailyShareService(context: Context, private val credentials: Credenti
         MediaRules.path(id)
         require(UUID.fromString(requestId).toString() == requestId) { "日常分享请求标识无效" }
         gate(id)?.let { return@withContext it }
+        val contact=contactPause.read(id)
         // Recovery precedes date/expiry/visual checks: this message was already committed,
         // and the same pending worker still needs to claim its notification exactly once.
         val remembered = state.aliasEvent(id, requestId) ?: state.event(id, requestId)
         remembered?.let { event -> gateway.result(id, event.requestId)?.let { message ->
-            return@withContext completed(id, requestId, event, message)
+            return@withContext completed(id, requestId, event, message,contact)
         } }
         if (remembered != null && !now().isBefore(remembered.expires)) state.finish(id, remembered)
         val instant = now()
@@ -50,12 +53,12 @@ class LocalDailyShareService(context: Context, private val credentials: Credenti
             if (remembered != null && event.requestId != remembered.requestId) continue
             if (event.requestId in state.finished(id, day)) continue
             gateway.result(id, event.requestId)?.let { message ->
-                return@withContext completed(id, requestId, event, message)
+                return@withContext completed(id, requestId, event, message,contact)
             }
             if (!now().isBefore(event.expires)) { state.finish(id, event); continue }
             if (!LocalDailySharePolicy.ready(event, now())) continue
             val current = refresh(id, event) ?: continue
-            return@withContext attempt(id, requestId, current)
+            return@withContext attempt(id, requestId, current,contact)
         }
         idle(state.plan(id, day) ?: plan, id, "not_due")
     } }
@@ -85,7 +88,7 @@ class LocalDailyShareService(context: Context, private val credentials: Credenti
         return state.refresh(id, event.copy(sceneId = scene.sceneId, revision = LocalDailyRules.revision(scene), visualVersion = scene.visualVersion))
     }
 
-    private suspend fun attempt(id: String, requestId: String, event: LocalDailyShareEvent): ProactiveCheck {
+    private suspend fun attempt(id: String, requestId: String, event: LocalDailyShareEvent,contact:ContactPauseState): ProactiveCheck {
         gate(id)?.let { return it }
         val usedSha = state.usedSha(id)
         val image = gateway.picture(id, event, usedSha)
@@ -98,13 +101,16 @@ class LocalDailyShareService(context: Context, private val credentials: Credenti
             return ProactiveCheck(false, null, now().plusSeconds(900).toString(), "await_image")
         }
         state.rememberRequest(id, requestId, event) // Durable before the paid request or local append.
-        val message = gateway.send(id, event, image)
+        ContactDeliveryGate.reason(contactPause,id,contact)?.let {return ContactDeliveryGate.blocked(it,now())}
+        val message = try {gateway.send(id, event, image,contact.revision)}
+            catch(_:ContactDeliveryBlockedException){return ContactDeliveryGate.blocked("contact_state_changed",now())}
         require(message.mediaAttachments.any { it == image }) { "日常分享回复缺少选定图片" }
-        return completed(id, requestId, event, message)
+        return completed(id, requestId, event, message,contact)
     }
 
     private suspend fun gate(id: String): ProactiveCheck? {
         val reason = when {
+            contactPause.read(id).paused -> "user_paused"
             !enabled(id) || !preferencesService.preferences(id).enabled -> "disabled"
             !permission() -> "permission"
             else -> return null
@@ -115,12 +121,16 @@ class LocalDailyShareService(context: Context, private val credentials: Credenti
         try { MediaRules.check(image) } catch (_: IllegalArgumentException) { return false }
         return image.kind == "image" && image.dayId == event.dayId && image.visualVersion == event.visualVersion && image.sha256 !in usedSha
     }
-    private fun completed(id: String, requestId: String, event: LocalDailyShareEvent, message: Message): ProactiveCheck {
+    private fun completed(id: String, requestId: String, event: LocalDailyShareEvent, message: Message,contact:ContactPauseState): ProactiveCheck {
+        val contactReason = ContactDeliveryGate.reason(contactPause,id,contact,message)
+        if (contactReason != null && contactReason != "contact_stale") return ContactDeliveryGate.blocked(contactReason,now())
         require(message.role == "assistant" && message.origin == "daily_share") { "日常分享回复归属无效" }
         val image = message.mediaAttachments.singleOrNull { it.kind == "image" } ?: error("日常分享回复缺少唯一的日常图片")
         require(matches(image, event, emptySet())) { "日常分享回复图片与活动不一致" }
         state.rememberRequest(id, requestId, event)
         state.finish(id, event, image.sha256)
+        // The validated cached message was already committed. Consume its event and image without reviving delivery.
+        if (contactReason == "contact_stale") return ContactDeliveryGate.blocked(contactReason,now())
         val plan = requireNotNull(state.plan(id, event.dayId))
         return ProactiveCheck(true, message, LocalDailySharePolicy.nextDue(plan, now(), state.finished(id, event.dayId)).toString(), "sent")
     }
@@ -141,4 +151,6 @@ class RepositoryDailyShareGateway(private val context: Context, private val cred
         withContext(Dispatchers.IO) { media.prepare(id, event, usedSha) }
     override suspend fun send(id: String, event: LocalDailyShareEvent, attachment: MediaAttachment) =
         repository.sendDailyShare(id, event.requestId, event, attachment)
+    override suspend fun send(id:String,event:LocalDailyShareEvent,attachment:MediaAttachment,contactRevision:Int)=
+        repository.sendDailyShare(id,event.requestId,event,attachment,contactRevision)
 }

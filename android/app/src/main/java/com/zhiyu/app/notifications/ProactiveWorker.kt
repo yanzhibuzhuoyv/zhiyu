@@ -6,6 +6,8 @@ import androidx.work.WorkerParameters
 import com.zhiyu.app.data.LocalProactiveService
 import com.zhiyu.app.data.ProactiveWorkStore
 import com.zhiyu.app.data.appCredentialStore
+import com.zhiyu.app.data.ContactPauseStore
+import com.zhiyu.app.data.ContactDeliveryGate
 import com.zhiyu.app.domain.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -24,8 +26,14 @@ class ProactiveWorker(context: Context, parameters: WorkerParameters) : Coroutin
                 return@withContext Result.success()
             }
             val service = LocalProactiveService(applicationContext, credentials)
-            val engine = ProactiveDelivery(service, state, { ProactiveNotifications.allowed(applicationContext) }, ProactiveForeground::isVisible) { message ->
-                ProactiveNotifications.post(applicationContext, id, message, credentials.readBinding()?.profile?.name)
+            val pauses=ContactPauseStore(applicationContext)
+            val contact=pauses.read(id)
+            val engine = ProactiveDelivery(service, state, { ProactiveNotifications.allowed(applicationContext)&&
+                ContactDeliveryGate.reason(pauses,id,contact)==null }, ProactiveForeground::isVisible) { message ->
+                try {pauses.withDeliveryAllowed(id,contact.revision) {
+                    if(ContactDeliveryGate.reason(pauses,id,contact,message)==null)
+                        ProactiveNotifications.post(applicationContext, id, message, credentials.readBinding()?.profile?.name)
+                }}catch(_:ContactDeliveryBlockedException){ /* A new user command cancels this notification. */ }
             }
             when (engine.run(id)) {
                 ProactiveWorkOutcome.COMPLETE -> { ProactiveScheduler.next(applicationContext, id, continueChain = continueChain); Result.success() }

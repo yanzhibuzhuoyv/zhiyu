@@ -15,7 +15,8 @@ import java.util.UUID
 class LocalProactiveService(context: Context, private val store: CredentialStore,
     private val gateway: LocalProactiveGateway = RepositoryProactiveGateway(LocalChatRepository(context, store,
         careContext = NativeCareContext(context)::prompt)),
-    preferencesName: String = "local_proactive", private val now: () -> Instant = Instant::now,
+    preferencesName: String = "local_proactive", private val contactPause:ContactPauseStore=ContactPauseStore(context),
+    private val now: () -> Instant = Instant::now,
 ) : ProactiveService {
     private val prefs = context.applicationContext.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
     override suspend fun preferences(id: String): ProactivePreferences = withContext(Dispatchers.IO) {
@@ -38,12 +39,14 @@ class LocalProactiveService(context: Context, private val store: CredentialStore
         val preferences = preferences(id)
         val instant = now()
         if (!preferences.enabled) return@withLock ProactiveCheck(false, null, instant.plusSeconds(86400).toString(), "disabled")
+        val contact=withContext(Dispatchers.IO){contactPause.read(id)}
+        ContactDeliveryGate.reason(contactPause,id,contact)?.let {return@withLock ContactDeliveryGate.blocked(it,instant)}
         val binding = withContext(Dispatchers.IO) { store.readBinding() } ?: throw ApiFailure(401, "请先选定恋人")
         val style = binding.profile?.style ?: "gentle"
         val stats = contactStats(gateway.history(id), instant, preferences.timeZone)
-        gateway.result(id, requestId)?.let { return@withLock completed(id, it, instant, preferences, style, stats) }
+        gateway.result(id, requestId)?.let { return@withLock completed(id, it, instant, preferences, style, stats,contact) }
         eventAlias(id, requestId)?.let { eventRequest ->
-            gateway.result(id, eventRequest)?.let { return@withLock completed(id, it, instant, preferences, style, stats) }
+            gateway.result(id, eventRequest)?.let { return@withLock completed(id, it, instant, preferences, style, stats,contact) }
         }
         val decision = LocalContactPolicy.decide(instant, preferences, style, stats)
         val night = LocalNightEventPolicy.plan(id, style, instant, preferences.timeZone)
@@ -51,9 +54,10 @@ class LocalProactiveService(context: Context, private val store: CredentialStore
             LocalNightEventPolicy.nextDue(night, instant, decision.nextDue).toString(), decision.reason)
         val event = night?.takeIf { LocalNightEventPolicy.ready(it, instant) && gateway.result(id, it.requestId) == null }
         if (event != null) rememberEventAlias(id, requestId, event.requestId)
-        val message = gateway.send(id, event?.requestId ?: requestId, event)
+        val message = try {gateway.send(id, event?.requestId ?: requestId, event,contact.revision)}
+            catch(_:ContactDeliveryBlockedException){return@withLock ContactDeliveryGate.blocked("contact_state_changed",instant)}
         completed(id, message, instant, preferences, style,
-            stats.copy(todayCount = stats.todayCount + 1, unanswered = stats.unanswered + 1, lastContact = Instant.parse(message.createdAt)))
+            stats.copy(todayCount = stats.todayCount + 1, unanswered = stats.unanswered + 1, lastContact = Instant.parse(message.createdAt)),contact)
     }
     private fun eventAlias(id: String, requestId: String): String? {
         val aliases = JSONArray(prefs.getString("event_requests_$id", "[]"))
@@ -83,7 +87,8 @@ class LocalProactiveService(context: Context, private val store: CredentialStore
             contacts.lastOrNull()?.createdAt?.let(Instant::parse))
     }
     private fun completed(id: String, message: Message, instant: Instant, preferences: ProactivePreferences,
-        style: String, stats: LocalContactStats): ProactiveCheck {
+        style: String, stats: LocalContactStats,contact:ContactPauseState): ProactiveCheck {
+        ContactDeliveryGate.reason(contactPause,id,contact,message)?.let {return ContactDeliveryGate.blocked(it,instant)}
         val decision = LocalContactPolicy.decide(instant, preferences, style, stats)
         val night = LocalNightEventPolicy.plan(id, style, instant, preferences.timeZone)
         val due = LocalNightEventPolicy.nextDue(night, instant, decision.nextDue)

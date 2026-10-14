@@ -40,6 +40,8 @@ class LocalDailyShareServiceNativeTest {
         var sendFailure = false
         var commitThenFail = false
         var onPicture: () -> Unit = {}
+        var onSend: () -> Unit = {}
+        val pauses=ContactPauseStore(context,"contact_$name",{clock.toEpochMilli()})
         var sceneCalls = 0
         var pictureCalls = 0
         var sends = 0
@@ -72,6 +74,7 @@ class LocalDailyShareServiceNativeTest {
             override suspend fun send(id: String, event: LocalDailyShareEvent, attachment: MediaAttachment): Message {
                 results[event.requestId]?.let { return it }
                 sends++; requests.add(event.requestId)
+                onSend()
                 if (sendFailure) throw IOException("synthetic offline before commit")
                 val message = Message("synthetic-share-${event.requestId}", "assistant", "合成日常原话", emptyList(), clock.toString(), listOf(attachment), "daily_share")
                 results[event.requestId] = message
@@ -80,10 +83,65 @@ class LocalDailyShareServiceNativeTest {
             }
         }
         fun state() = LocalDailyShareStore(context, name)
-        fun service() = LocalDailyShareService(context, credentials, gateway, state(), preferences, { optedIn }, { allowed }, { clock })
+        fun service() = LocalDailyShareService(context, credentials, gateway, state(), preferences, { optedIn }, { allowed }, { clock },pauses)
         fun request() = UUID.randomUUID().toString()
         fun prepare() { state().savePlan(chat, LocalDailySharePlan(event.dayId, 1, listOf(event))) }
-        override fun close() { context.deleteSharedPreferences(name) }
+        override fun close() { context.deleteSharedPreferences(name);context.deleteSharedPreferences("contact_$name") }
+    }
+
+    @Test fun pausedDailyShareDoesNotLoadTheSceneOrCallTheGateway()=runBlocking {
+        Fixture().use {f->f.pauses.apply(f.chat,ContactPauseCommand.PAUSE,"user_pause")
+            val result=f.service().check(f.chat,f.request())
+            assertFalse(result.emitted);assertEquals("user_paused",result.reason)
+            assertEquals(0,f.sceneCalls+f.pictureCalls+f.sends)}
+    }
+    @Test fun pauseDuringDailyCaptionAndResumeDoNotReplayThatPendingMessage()=runBlocking {
+        Fixture().use {f->f.prepare();val request=f.request()
+            f.onSend={f.pauses.apply(f.chat,ContactPauseCommand.PAUSE,"user_pause")}
+            assertFalse(f.service().check(f.chat,request).emitted)
+            f.clock=f.clock.plusSeconds(2);f.pauses.apply(f.chat,ContactPauseCommand.RESUME,"user_resume")
+            assertFalse(f.service().check(f.chat,request).emitted);assertEquals(1,f.sends)}
+    }
+
+    @Test fun resumedContactConsumesOldCommittedEventWithoutEmittingAndNewRequestCanShareNextEvent() = runBlocking {
+        Fixture().use { f ->
+            val secondSlot = LocalDailySlot("10:00", "合成第二段日常", listOf("object", "morning"))
+            f.extraSlots = listOf(secondSlot)
+            val first = f.event
+            val second = first.copy(requestId = f.request(), slot = secondSlot,
+                due = first.due.plusSeconds(3600), expires = first.expires.plusSeconds(3600))
+            f.state().savePlan(f.chat, LocalDailySharePlan(first.dayId, 2, listOf(first, second)))
+            val oldRequest = f.request()
+            val oldImageSha = f.image.sha256
+            f.commitThenFail = true
+            try { f.service().check(f.chat, oldRequest); fail("Synthetic post-commit crash was swallowed") }
+            catch (_: IOException) { }
+            assertNotNull(f.results[first.requestId])
+            assertTrue(f.state().finished(f.chat, first.dayId).isEmpty())
+            f.clock = f.clock.plusSeconds(1)
+            f.pauses.apply(f.chat, ContactPauseCommand.PAUSE, "user_pause")
+            f.clock = f.clock.plusSeconds(1)
+            f.pauses.apply(f.chat, ContactPauseCommand.RESUME, "user_resume")
+            f.commitThenFail = false
+
+            val old = f.service().check(f.chat, oldRequest)
+            assertFalse(old.emitted)
+            assertNull(old.message)
+            assertEquals("contact_stale", old.reason)
+            assertEquals(setOf(first.requestId), f.state().finished(f.chat, first.dayId))
+            assertEquals(setOf(oldImageSha), f.state().usedSha(f.chat))
+            assertEquals(1, f.sends)
+
+            f.clock = second.due.plusSeconds(1)
+            f.image = f.image.copy(id = "c".repeat(32), url = MediaRules.path("c".repeat(32)), sha256 = "d".repeat(64))
+            val next = f.service().check(f.chat, f.request())
+            assertTrue(next.emitted)
+            assertEquals(f.results[second.requestId], next.message)
+            assertEquals(listOf(first.requestId, second.requestId), f.requests)
+            assertEquals(setOf(first.requestId, second.requestId), f.state().finished(f.chat, first.dayId))
+            assertEquals(setOf(oldImageSha), f.receivedSha.last())
+            assertEquals(2, f.sends)
+        }
     }
 
     @Test fun disabledOptInOrDeniedPermissionNeverReadsBindingOrRequestsMediaOrModel() = runBlocking {

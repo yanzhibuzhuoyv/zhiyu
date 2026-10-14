@@ -13,8 +13,8 @@ android {
         minSdk = 26
         targetSdk = 36
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
-        versionCode = 13
-        versionName = "0.2.7"
+        versionCode = 14
+        versionName = "0.2.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"https://local.zhiyu.invalid\"")
         buildConfigField("boolean", "USE_USB_BACKEND", "false")
@@ -84,6 +84,31 @@ val preparePlanarTestAssets=tasks.register("preparePlanarTestAssets") {
     }}
 }
 tasks.matching {it.name=="preDebugAndroidTestBuild"}.configureEach {dependsOn(preparePlanarTestAssets)}
+val preparePlanarBackgroundTestAssets=tasks.register("preparePlanarBackgroundTestAssets") {
+    val manifest=rootProject.file("../artifacts/planar-background-gallery-inputs-r1.json")
+    val target=layout.buildDirectory.dir("generated/planarTestAssets")
+    inputs.file(manifest)
+    doLast {
+        val data=groovy.json.JsonSlurper().parseText(manifest.readText()) as Map<*,*>
+        val cases=data["cases"] as List<*>
+        require(cases.size==14){"Background gallery must have 14 inputs"}
+        val pictureRoot=rootProject.file("../../../图片2").canonicalFile.toPath()
+        val tempRoot=file(System.getProperty("java.io.tmpdir")).canonicalFile.toPath()
+        val attachments=setOf("codex-clipboard-184c7da9-36a4-47f6-bda7-a59bae22e66b.jpg",
+            "codex-clipboard-8330e860-8839-4759-9b06-04ea9aed754e.jpg","codex-clipboard-636e4cb6-4312-4d77-94ce-7d96ad43c8b9.jpg")
+        cases.forEach {raw ->
+            val entry=raw as Map<*,*>;val source=file(entry["sourcePath"] as String).canonicalFile
+            require(source.toPath().startsWith(pictureRoot)||(source.parentFile.toPath()==tempRoot&&source.name in attachments)){"Unexpected test image path"}
+            val asset=entry["assetPath"] as String
+            require(Regex("user_oc_background/scene_[0-9]{2}\\.jpg").matches(asset))
+            val bytes=source.readBytes();require(bytes.size in 3..8*1024*1024&&bytes[0]==(-1).toByte()&&bytes[1]==(-40).toByte())
+            val sha=MessageDigest.getInstance("SHA-256").digest(bytes).joinToString(""){"%02x".format(it)}
+            require(sha==entry["sha256"]){"Background test image changed"}
+            target.get().file(asset).asFile.apply {parentFile.mkdirs();writeBytes(bytes)}
+        }
+    }
+}
+tasks.matching {it.name=="preDebugAndroidTestBuild"}.configureEach {dependsOn(preparePlanarBackgroundTestAssets)}
 val verifyQwenJni = tasks.register("verifyQwenJni") {
     val source = rootProject.file("../artifacts/android-qwen-jni/r2/jniLibs")
     val checks = mapOf(

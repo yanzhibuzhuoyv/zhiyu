@@ -50,6 +50,7 @@ class PlanarDraft(
     subjectBrush: List<PlanarBrushStroke> = emptyList(),
     val suggestionsConfirmed: Boolean = false,
     val subjectMask: String? = null,
+    val featureVisibility: PlanarFeatureVisibility = PlanarFeatureVisibility(),
 ) {
     val parts: List<PlanarPart> = immutable(parts)
     val subjectBrush: List<PlanarBrushStroke> = immutable(subjectBrush)
@@ -58,7 +59,8 @@ class PlanarDraft(
         subjectBrush: List<PlanarBrushStroke> = this.subjectBrush,
         suggestionsConfirmed: Boolean = this.suggestionsConfirmed,
         subjectMask: String? = this.subjectMask,
-    ) = PlanarDraft(anchors, parts, subjectBrush, suggestionsConfirmed, subjectMask)
+        featureVisibility: PlanarFeatureVisibility = this.featureVisibility,
+    ) = PlanarDraft(anchors, parts, subjectBrush, suggestionsConfirmed, subjectMask, featureVisibility)
 
     fun validate(width: Int, height: Int) {
         require(width in 1..MAX_SIDE && height in 1..MAX_SIDE) { "图片最长边不得超过1536像素" }

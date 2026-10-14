@@ -27,7 +27,11 @@ class LocalSceneStockWorker(context: Context, params: WorkerParameters): Corouti
             }
             val result = LocalSceneStock(applicationContext).prepare(chat,day,version)
             if (result.prepared > 0) com.zhiyu.app.notifications.LocalDailyShareScheduler.pictureAvailable(applicationContext, chat)
-            if (result.reason == "yield") Result.retry() else Result.success()
+            if (result.reason in setOf("yield","correction_pending")) {
+                LocalSceneStockScheduler.enqueue(applicationContext,chat,
+                    version?:LocalVisualRepository(applicationContext).profile(chat).visualVersion,day,continueChain=true)
+            }
+            Result.success()
         }
         catch(error:CancellationException) { throw error }
         catch(_:IllegalArgumentException) { Result.failure() }
@@ -35,13 +39,15 @@ class LocalSceneStockWorker(context: Context, params: WorkerParameters): Corouti
     }
 }
 object LocalSceneStockScheduler {
-    fun enqueue(context: Context, chat: String, version: Int, day: String = LocalDailyRules.dayId(Instant.now())) {
+    fun enqueue(context: Context, chat: String, version: Int, day: String = LocalDailyRules.dayId(Instant.now()),continueChain:Boolean=false) {
         MediaRules.path(chat); require(version>=0 && Regex("\\d{4}-\\d{2}-\\d{2}").matches(day))
         java.time.LocalDate.parse(day)
         val work=OneTimeWorkRequestBuilder<LocalSceneStockWorker>().setInputData(workDataOf("chat" to chat,"day" to day,"version" to version))
+            .setInitialDelay(if(continueChain)30 else 0,java.util.concurrent.TimeUnit.SECONDS)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL,30,java.util.concurrent.TimeUnit.SECONDS).build()
         // Every run covers the whole window. Future job callbacks must not start parallel stock renderers.
-        WorkManager.getInstance(context).enqueueUniqueWork("zhiyu_stock_${chat}_$version",ExistingWorkPolicy.KEEP,work)
+        WorkManager.getInstance(context).enqueueUniqueWork("zhiyu_stock_${chat}_$version",
+            if(continueChain)ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.KEEP,work)
     }
 }

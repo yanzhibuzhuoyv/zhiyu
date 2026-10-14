@@ -15,13 +15,14 @@ import java.time.ZoneId
 
 /** OC state and pending masks live only in this app's private phone storage. */
 class LocalVisualRepository(context: Context,
-    private val imageClient: AgnesImageClient = AgnesImageClient(),
-    private val imageKey: () -> String? = { AgnesCredentialStore(context).read() },
+    private val imageClient: AgnesImageClient? = null,
+    private val imageKey: () -> String? = { null },
     private val jobs: LocalImageJobStore = LocalImageJobStore(context),
     private val beforeProfileCommit: () -> Unit = {}) {
     private val prefs = context.applicationContext.getSharedPreferences("local_visual_profiles", Context.MODE_PRIVATE)
     private val assets = LocalMediaStore(context)
     private val processor = LocalPortraitProcessor(context)
+    private val remoteKeys=RemoteImageCredentialStore(context)
     private fun chat(id: String): String { MediaRules.path(id); return "profile_$id" }
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { synchronized(LocalMediaStore.lock) { block() } }
     suspend fun profile(id: String): VisualProfile = io { readProfile(id) }
@@ -91,16 +92,22 @@ class LocalVisualRepository(context: Context,
             }
             throw ApiFailure(409, "这个请求已有记录，请查看当前外观；未确认的请求不会再次扣费", "generation_reserved")
         }
-        val key = withContext(Dispatchers.IO) { imageKey() }
-            ?: throw ApiFailure(503, "请先设置 Agnes 图像服务 Key，生成机会已保留", "generation_unconfigured")
+        val configuration=if(imageClient==null)withContext(Dispatchers.IO){remoteKeys.configuration()}else null
+        val key = (if(imageClient==null)configuration?.key else withContext(Dispatchers.IO) { imageKey() })
+            ?: throw ApiFailure(503, "请先设置图像服务 Key，生成机会已保留", "generation_unconfigured")
+        val imageModel=configuration?.model
         val job = LocalGenerationJob(normalizedId, id, "oc", before.visualVersion,
             LocalDate.now(ZoneId.of("Asia/Shanghai")).toString(), hash, "reserved")
         withContext(Dispatchers.IO) { jobs.reserve(job); jobs.finish(normalizedId, "running") }
         try {
-            val image = imageClient.generate(key, prompt)
+            val image = imageClient?.generate(key, prompt) ?: RemoteImageClient(model=checkNotNull(imageModel)).generate(key,prompt)
             return io {
                 val now = readProfile(id)
                 val asset = assets.ingest("image", image.bytes, "描述生成的 OC", before.visualVersion + 1, purpose = "portrait")
+                if(if(imageClient==null)remoteKeys.configuration()!=configuration else imageKey()!=key) {
+                    jobs.finish(normalizedId,"stale",asset.id)
+                    throw ApiFailure(409,"图像服务已更新，候选图已保留，当前外观没有改变","generation_stale")
+                }
                 if (now.visualVersion != before.visualVersion) {
                     jobs.finish(normalizedId, "stale", asset.id)
                     throw ApiFailure(409, "生成期间外观已经更新，已保存这张候选图并保留当前外观", "generation_stale")
@@ -191,10 +198,10 @@ class LocalVisualRepository(context: Context,
         val stored = prefs.getString(chat(id), null)
         val result = if (stored == null) VisualProfile("none", "", "unspecified", "unspecified", 0, null, null,
             GenerationQuota(false, 0, 0, 2)) else JSONObject(stored).visualProfile()
-        return result.copy(generation = LocalGenerationRules.quota(jobs.list(id), imageKey() != null))
+        return result.copy(generation = LocalGenerationRules.quota(jobs.list(id), generationConfigured()))
     }
     private fun writeProfile(id: String, profile: VisualProfile): VisualProfile {
-        val quota = LocalGenerationRules.quota(jobs.list(id), imageKey() != null)
+        val quota = LocalGenerationRules.quota(jobs.list(id), generationConfigured())
         val value = JSONObject().put("mode", profile.mode).put("description", profile.description).put("gender", profile.gender)
             .put("hair", profile.hair).put("visual_version", profile.visualVersion).put("reference_id", profile.referenceId)
             .put("reference_url", profile.referenceUrl).put("generation", JSONObject().put("configured", quota.configured)
@@ -202,6 +209,7 @@ class LocalVisualRepository(context: Context,
         save(chat(id), value)
         return profile.copy(generation = quota)
     }
+    private fun generationConfigured()=if(imageClient==null)remoteKeys.configuration()!=null else imageKey()!=null
     private fun savePreview(id: String, preview: PortraitPreview, expires: Long, automaticFailure: String? = null) {
         val value = JSONObject().put("chat", id).put("expires", expires).put("confirmed", false)
             .put("id", preview.id).put("original_id", preview.originalId).put("subject_id", preview.subjectId)

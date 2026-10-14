@@ -168,10 +168,24 @@ class LocalChatRepository(
         null
     }
     override suspend fun discardPhotoDraft(id: String) = withContext(Dispatchers.IO) { photos.clearDraftIf(id) }
-    override suspend fun sendMessage(id: String, content: String): Pair<Message, Message> = send(id, content, null)
-    override suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment): Pair<Message, Message> = send(id, content, attachment)
+    private val contactPause=ContactPauseStore(appContext)
+    private suspend fun <T> contactAware(id:String,content:String,action:suspend()->T):T {
+        val command=ContactPauseIntent.parse(content)
+        if(command!=null)withContext(Dispatchers.IO) {
+            connection();val selected=binding();database.conversation(owner(selected),id)
+            contactPause.apply(id,command,java.util.UUID.randomUUID().toString())
+            if(command==ContactPauseCommand.RESUME) {
+                try {com.zhiyu.app.notifications.ProactiveScheduler.recover(appContext)}
+                catch(failure:Exception){if(failure is CancellationException)throw failure
+                    android.util.Log.w("ZhiYuContact","Contact schedule recovery deferred")}
+            }
+        }
+        return action()
+    }
+    override suspend fun sendMessage(id: String, content: String): Pair<Message, Message> = contactAware(id,content){send(id, content, null)}
+    override suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment): Pair<Message, Message> = contactAware(id,content){send(id, content, attachment)}
     override suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment,
-        onSubmitted: (Message) -> Unit): Pair<Message, Message> = send(id, content, attachment, onSubmitted)
+        onSubmitted: (Message) -> Unit): Pair<Message, Message> = contactAware(id,content){send(id, content, attachment, onSubmitted)}
     private suspend fun send(id: String, content: String, photo: MediaAttachment?,
         onSubmitted: (Message) -> Unit = {}): Pair<Message, Message> = serial.withLock {
         lastCalendarNotice = null
@@ -199,7 +213,8 @@ class LocalChatRepository(
         val calendarPlan = prepareCalendar(text)
         val pictureContext = withContext(Dispatchers.IO) { photoHistory.build(boundedRecent, saved.providerId, saved.model,
             user.id, payload, analysis) }
-        val system = LocalCompanionPrompt.build(conversation.profile, recalled, sources, careContext(), retrieval.status, boundedRecent.size) + "\n" + plan.prompt +
+        val system = LocalCompanionPrompt.build(conversation.profile, recalled, sources, careContext(), retrieval.status, boundedRecent.size,
+            interactionToken = "$id:${user.id}") + "\n" + plan.prompt +
             pictureContext.evidence.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty() +
             calendarPlan.prompt.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty()
         val context = listOf(DirectChatMessage("system", system)) + pictureContext.messages
@@ -231,18 +246,20 @@ class LocalChatRepository(
     }
     suspend fun proactivePolicyHistory(id: String): List<Message> = withContext(Dispatchers.IO) { database.proactivePolicyHistory(currentOwner(), id) }
     suspend fun sendDailyShare(id: String, requestId: String, event: LocalDailyShareEvent,
-        attachment: MediaAttachment): Message = withTimeout(180_000) { coroutineScope {
+        attachment: MediaAttachment,expectedContactRevision:Int?=null): Message = withTimeout(180_000) { coroutineScope {
+        val contactRevision=captureContactRevision(id,expectedContactRevision)
         val scope = this
         val foregroundWatcher = launch {
             ProactiveForeground.changes.first { it }
             scope.cancel(CancellationException("用户回到前台，取消后台日常分享"))
         }
-        try { serial.withLock { generateDailyShare(id, requestId, event, attachment) } }
+        try { serial.withLock { generateDailyShare(id, requestId, event, attachment,contactRevision) } }
         finally { foregroundWatcher.cancel() }
     } }
 
     private suspend fun generateDailyShare(id: String, requestId: String, event: LocalDailyShareEvent,
-        attachment: MediaAttachment): Message {
+        attachment: MediaAttachment,contactRevision:Int): Message {
+        verifyContactRevision(id,contactRevision)
         require(requestId.length == 36 && requestPattern.matches(requestId) && event.requestId == requestId) { "日常分享请求标识无效" }
         val saved = withContext(Dispatchers.IO) { connection() }
         val selectedBinding = withContext(Dispatchers.IO) { binding() }
@@ -273,36 +290,40 @@ class LocalChatRepository(
         val raw = provider.complete(saved.providerId, saved.apiKey, saved.model, context, outputBudget())
         currentCoroutineContext().ensureActive()
         val assistant = commitDailyShare(owner, id, requestId, event, attachment, LocalDailyShareCaption.clean(raw),
-            saved, selectedBinding, conversation.profile, profile)
+            saved, selectedBinding, conversation.profile, profile,contactRevision)
         scheduleSemantic()
         return assistant
     }
 
     private suspend fun commitDailyShare(owner: String, id: String, requestId: String, event: LocalDailyShareEvent,
         attachment: MediaAttachment, content: String, saved: SavedConnection, selectedBinding: CompanionBinding,
-        expectedPersonality: CompanionProfile?, expectedVisual: VisualProfile): Message = withContext(Dispatchers.IO) {
+        expectedPersonality: CompanionProfile?, expectedVisual: VisualProfile,contactRevision:Int): Message = withContext(Dispatchers.IO) {
             val active = currentCoroutineContext()
             dailyVisual.withCurrentProfile(id) { current ->
                 require(current == expectedVisual) { "恋人形象已更新" }
                 dailyShares.validateAndCommit(id, event, attachment) { image ->
+                  contactPause.withDeliveryAllowed(id,contactRevision) {
                     checkStillConnected(saved)
                     check(store.readBinding() == selectedBinding && database.conversation(owner, id).profile == expectedPersonality) { "恋人设定已更新" }
                     active.ensureActive()
                     database.append(owner, id, "assistant", content, "daily_share", attachments = listOf(image), requestId = requestId)
+                  }
                 }
             }
         }
-    suspend fun sendProactive(id: String, requestId: String, nightEvent: LocalNightEvent? = null): Message = withTimeout(180000) { coroutineScope {
+    suspend fun sendProactive(id: String, requestId: String, nightEvent: LocalNightEvent? = null,expectedContactRevision:Int?=null): Message = withTimeout(180000) { coroutineScope {
+        val contactRevision=captureContactRevision(id,expectedContactRevision)
         val scope = this
         val foregroundWatcher = launch {
             ProactiveForeground.changes.first { it }
             scope.cancel(CancellationException("用户回到前台，取消后台主动生成"))
         }
-        try { serial.withLock { generateProactive(id, requestId, nightEvent) } }
+        try { serial.withLock { generateProactive(id, requestId, nightEvent,contactRevision) } }
         finally { foregroundWatcher.cancel() }
     } }
-    private suspend fun generateProactive(id: String, requestId: String, nightEvent: LocalNightEvent?): Message {
+    private suspend fun generateProactive(id: String, requestId: String, nightEvent: LocalNightEvent?,contactRevision:Int): Message {
         lastCalendarNotice = null
+        verifyContactRevision(id,contactRevision)
         require(requestPattern.matches(requestId)) { "主动消息请求标识无效" }
         val saved = withContext(Dispatchers.IO) { connection() }
         val owner = withContext(Dispatchers.IO) { currentOwner() }
@@ -325,13 +346,23 @@ class LocalChatRepository(
         val calendarReply = CompanionCalendarProtocol.parse(raw, calendarPlan)
         val assistant = withContext(Dispatchers.IO) {
             media.commit(id, plan, calendarReply.content) { reply ->
-                checkStillConnected(saved)
-                database.append(owner, id, "assistant", reply.content, "proactive", attachments = reply.attachments, requestId = requestId)
+                contactPause.withDeliveryAllowed(id,contactRevision) {
+                    checkStillConnected(saved)
+                    database.append(owner, id, "assistant", reply.content, "proactive", attachments = reply.attachments, requestId = requestId)
+                }
             }
         }
         commitCalendar(assistant, calendarReply)
         scheduleSemantic()
         return assistant
+    }
+    private suspend fun captureContactRevision(id:String,expected:Int?):Int=withContext(Dispatchers.IO) {
+        val state=contactPause.read(id)
+        val revision=expected?:state.revision
+        contactPause.withDeliveryAllowed(id,revision){revision}
+    }
+    private suspend fun verifyContactRevision(id:String,revision:Int)=withContext(Dispatchers.IO) {
+        contactPause.withDeliveryAllowed(id,revision){Unit}
     }
     private suspend fun prepareCalendar(text: String): CompanionCalendarPlan = withContext(Dispatchers.IO) {
         try { calendar.promptPlan(text) }

@@ -6,6 +6,9 @@ import androidx.work.WorkerParameters
 import com.zhiyu.app.data.LocalDailyShareService
 import com.zhiyu.app.data.LocalDailyShareWorkStore
 import com.zhiyu.app.data.appCredentialStore
+import com.zhiyu.app.data.ContactPauseStore
+import com.zhiyu.app.data.ContactDeliveryGate
+import com.zhiyu.app.domain.ContactDeliveryBlockedException
 import com.zhiyu.app.domain.ProactiveDelivery
 import com.zhiyu.app.domain.ProactiveWorkOutcome
 import kotlinx.coroutines.CancellationException
@@ -26,9 +29,14 @@ class LocalDailyShareWorker(context: Context, parameters: WorkerParameters) : Co
             }
             val credentials = appCredentialStore(applicationContext)
             val service = LocalDailyShareService(applicationContext, credentials)
+            val pauses=ContactPauseStore(applicationContext)
+            val contact=pauses.read(id)
             val delivery = ProactiveDelivery(service, state,
-                { ProactiveNotifications.allowed(applicationContext) }, ProactiveForeground::isVisible) { message ->
-                ProactiveNotifications.post(applicationContext, id, message, credentials.readBinding()?.profile?.name)
+                { ProactiveNotifications.allowed(applicationContext)&&ContactDeliveryGate.reason(pauses,id,contact)==null }, ProactiveForeground::isVisible) { message ->
+                try {pauses.withDeliveryAllowed(id,contact.revision) {
+                    if(ContactDeliveryGate.reason(pauses,id,contact,message)==null)
+                        ProactiveNotifications.post(applicationContext, id, message, credentials.readBinding()?.profile?.name)
+                }}catch(_:ContactDeliveryBlockedException){ /* A new user command cancels this notification. */ }
             }
             when (delivery.run(id)) {
                 ProactiveWorkOutcome.RETRY -> Result.retry()

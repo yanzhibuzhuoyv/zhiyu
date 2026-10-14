@@ -23,6 +23,7 @@ import kotlin.math.roundToInt
     private var epoch=0L
     private var job:Job?=null
     private var history:PlanarEditHistory<PlanarDraft>?=null
+    private var fixedBackground=false
     var active by mutableStateOf<PlanarDocument?>(null);private set
     var source by mutableStateOf<Bitmap?>(null);private set
     var draft by mutableStateOf<PlanarDraft?>(null);private set
@@ -33,14 +34,17 @@ import kotlin.math.roundToInt
     val canUndo get()=history?.canUndo==true
     val canRedo get()=history?.canRedo==true
     val bindingRevision get()=epoch
-    fun forBinding(binding:String?):PlanarDocument? = if(binding!=null&&binding==key)active else null
+    val previewDocument:PlanarDocument? get()=if(fixedBackground)active else null
+    fun forBinding(binding:String?):PlanarDocument? = if(binding!=null&&binding==key)previewDocument else null
+    private fun adopt(document:PlanarDocument?) {fixedBackground=document?.let(PlanarCallReadiness::fixedBackground)==true;active=document}
     fun connect(binding:String?) {
         if(binding==key)return
-        epoch++;job?.cancel();key=binding;store=null;active=null;source?.recycle();source=null;draft=null;history=null;busy=false;dirty=false;error=null
+        epoch++;job?.cancel();key=binding;store=null;adopt(null);source?.recycle();source=null;draft=null;history=null;busy=false;dirty=false;error=null
         if(binding==null)return
         val namespace=MessageDigest.getInstance("SHA-256").digest(binding.toByteArray()).joinToString(""){"%02x".format(it)}
         val target=PlanarPackageStore(File(app.filesDir,"planar-v1/$namespace"),contractJson);store=target
-        task {active=withContext(Dispatchers.IO){target.loadActive()}}
+        task {adopt(withContext(Dispatchers.IO){target.loadActive()})
+            if(active!=null&&!fixedBackground)notice="旧角色包仍可编辑，请确认后保存，通话会保留静止背景。"}
     }
     fun open(loadSource:suspend()->Bitmap?) {
         if(source!=null||busy||key==null)return
@@ -99,7 +103,7 @@ import kotlin.math.roundToInt
             try {
                 val document=withContext(Dispatchers.Default){PlanarPhotoBuilder().build(owned,current.copy(suggestionsConfirmed=true),name,reader.contract)}
                 val saved=withContext(Dispatchers.IO){val ctx=currentCoroutineContext();target.save(document){ctx.ensureActive()}}
-                active=saved;dirty=false;notice="形象已保存，下次通话会使用这个角色。"
+                adopt(saved);dirty=false;notice="形象已保存，下次通话会使用这个角色。"
             } finally {owned.recycle()}
         }
     }

@@ -24,9 +24,8 @@ private data class VisualDraft(val description: String, val gender: String, val 
     var gender by remember(profile?.gender) { mutableStateOf(profile?.gender ?: "unspecified") }
     var hair by remember(profile?.hair) { mutableStateOf(profile?.hair ?: "unspecified") }
     var sampleId by remember { mutableStateOf<String?>(null) }
-    var separateSubject by remember { mutableStateOf(true) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { controller.importReference(it, separateSubject) }
+        uri?.let { controller.importReference(it, false) }
     }
     CompositionLocalProvider(LocalMediaController provides controller) {
         AlertDialog(onDismissRequest = { if (!controller.busy) { controller.acknowledgeSetup(); close() } },
@@ -35,7 +34,6 @@ private data class VisualDraft(val description: String, val gender: String, val 
                 VisualBody(controller, VisualDraft(description, gender, hair), ocCreator,
                     change = { description = it.description; gender = it.gender; hair = it.hair },
                     sampleId = sampleId, chooseSample = { sampleId = it },
-                    separateSubject = separateSubject, changeSeparation = { separateSubject = it },
                     importReference = { picker.launch(arrayOf("image/png", "image/jpeg", "image/webp", "image/gif")) })
             },
             confirmButton = { TextButton(onClick = { controller.acknowledgeSetup(); close() }, enabled = !controller.busy) { Text("完成") } },
@@ -45,11 +43,10 @@ private data class VisualDraft(val description: String, val gender: String, val 
 
 @Composable private fun VisualBody(controller: MediaController, draft: VisualDraft, ocCreator: OcCreatorController?, change: (VisualDraft) -> Unit,
     sampleId: String?, chooseSample: (String?) -> Unit, importReference: () -> Unit,
-    separateSubject: Boolean, changeSeparation: (Boolean) -> Unit,
 ) {
     val profile = controller.profile
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        ocCreator?.let { OcCreatorPanel(it, enabled = !controller.busy) }
+        Text("导入后可在聊天菜单的动态形象中调整人物动作。",style=MaterialTheme.typography.bodySmall)
         Text("可以导入你自己的角色参考图，也可以先不设外观。有人物的素材会按这位 OC 匹配。")
         if (controller.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (profile != null && controller.error != null) TextButton(onClick = controller::reload, enabled = !controller.busy) { Text("重新读取外观资料") }
@@ -59,9 +56,8 @@ private data class VisualDraft(val description: String, val gender: String, val 
             profile.referenceId?.let { MediaImage(it) }
             VisualTemplates(controller, sampleId, chooseSample)
             VisualFields(controller, profile, draft, change)
-            Row { Checkbox(separateSubject, changeSeparation, enabled = !controller.busy); Text("导入时分离人物背景") }
+            Text("原图背景会完整保留。动态形象只调整人物动作，不删除场景。",style=MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = importReference, enabled = !controller.busy, modifier = Modifier.testTag("oc_import")) { Text("导入自己的 OC 图片") }
-            SubjectPreview(controller)
             VisualGeneration(controller, profile, draft.description)
             GeneratedCandidates(controller)
         }
@@ -119,7 +115,7 @@ private data class VisualDraft(val description: String, val gender: String, val 
 @Composable private fun VisualGeneration(controller: MediaController, profile: VisualProfile, description: String) {
     val pending = controller.pendingDescription
     Text("描述生成机会：剩余 ${profile.generation.remaining} / ${profile.generation.limit} 次", style = MaterialTheme.typography.bodySmall)
-    if (!profile.generation.configured) Text("请在图像服务中设置 Agnes Key，生成机会会保留。", style = MaterialTheme.typography.bodySmall)
+    if (!profile.generation.configured) Text("请在图像服务中设置 Key，生成机会会保留。", style = MaterialTheme.typography.bodySmall)
     FilledTonalButton(onClick = { controller.generate(pending ?: description) },
         enabled = !controller.busy && (pending != null || profile.generation.configured && profile.generation.remaining > 0 && description.isNotBlank()),
         modifier = Modifier.testTag("oc_generate")) { Text(if (pending != null) "查询上次生成结果" else "按描述生成外观") }

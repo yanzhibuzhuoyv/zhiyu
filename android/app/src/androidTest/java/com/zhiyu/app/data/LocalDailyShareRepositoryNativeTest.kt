@@ -14,6 +14,30 @@ import java.util.UUID
 class LocalDailyShareRepositoryNativeTest {
     private val profile = CompanionProfile(mode = "custom", name = "测试恋人", instructions = "说话简短，喜欢分享日常")
 
+    @Test fun originalDispatchRevisionCannotBeReplacedAfterPauseAndResume()=runBlocking {
+        withRepository {f,repo,client,_->
+            val picture=f.image();val pause=ContactPauseStore(f.context)
+            val revision=pause.read(f.chat).revision
+            pause.apply(f.chat,ContactPauseCommand.PAUSE,"user_pause")
+            pause.apply(f.chat,ContactPauseCommand.RESUME,"user_resume")
+            assertTrue(failure {repo.sendProactive(f.chat,UUID.randomUUID().toString(),expectedContactRevision=revision)} is ContactDeliveryBlockedException)
+            assertTrue(failure {repo.sendDailyShare(f.chat,f.event.requestId,f.event,picture,revision)} is ContactDeliveryBlockedException)
+            assertTrue(client.requests.isEmpty());assertTrue(repo.messages(f.chat).isEmpty())
+        }
+    }
+
+    @Test fun explicitPauseWhileCaptionIsRunningPreventsDatabaseAppend()=runBlocking {
+        withRepository {f,repo,client,_->
+            val picture=f.image();client.gate=CompletableDeferred()
+            val task=async {failure {repo.sendDailyShare(f.chat,f.event.requestId,f.event,picture)}}
+            withTimeout(10_000){client.started.await()}
+            ContactPauseStore(f.context).apply(f.chat,ContactPauseCommand.PAUSE,"user_pause")
+            client.gate!!.complete(Unit)
+            assertTrue(task.await() is ContactDeliveryBlockedException)
+            assertTrue(repo.messages(f.chat).isEmpty())
+        }
+    }
+
     @Test fun sendsOneRequiredActualImageAndPreservesCaptionAsAssistantOriginal() = runBlocking {
         withRepository { f, repo, client, _ ->
             val picture = f.image()

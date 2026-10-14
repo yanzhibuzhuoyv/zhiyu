@@ -13,11 +13,14 @@ import kotlinx.coroutines.sync.withLock
 data class LocalSceneStockResult(val prepared: Int = 0, val deferred: Boolean = false, val reason: String? = null)
 
 class LocalSceneStock(context: Context,
-    private val backgrounds: LocalSceneBackgroundSource = QwenSceneBackgroundSource(context),
+    backgrounds: LocalSceneBackgroundSource? = null,
     private val now: () -> Instant = Instant::now,
     private val resources: suspend () -> LocalScenePrefetchResources = LocalSceneResourceReader(context)::read,
 ) {
     private val app = context.applicationContext
+    private val remoteDefault=backgrounds==null
+    private val backgrounds=backgrounds?:QwenSceneBackgroundSource(context)
+    private val remotePhotos=com.zhiyu.app.data.remotescene.RemoteScenePhotos(app)
     private val visual = LocalVisualRepository(app)
     private val media = LocalMediaStore(app)
     private val characters = OcCreatorStore(app)
@@ -34,6 +37,7 @@ class LocalSceneStock(context: Context,
         if (expectedVersion != null && expectedVersion != profile.visualVersion) return LocalSceneStockResult()
         val plans = LocalDailyRepository(app).use { it.horizon(chat, profile.visualVersion, instant) }
         val snapshot = characters.read(chat)?.takeIf { it.identity.reference?.id == profile.referenceId && it.identity.reference?.visualVersion == profile.visualVersion }
+        if(remoteDefault)return remotePhotos.prepare(chat,LocalScenePrefetchRules.targets(plans,instant),profile,snapshot)
         val pictureIdentity = snapshot?.let { OcCallCharacterRules.resolve(it.identity, it.identity.reference) }
         val native = backgrounds.hasInstalledPack()
         val pending = LocalScenePrefetchRules.targets(plans, instant).filterNot { hasStock(it, native) }

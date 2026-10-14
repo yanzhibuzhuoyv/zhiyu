@@ -49,11 +49,13 @@ import com.zhiyu.app.ui.screens.*
                 snapshot.identity.reference?.visualVersion ?: 0) })
     }
     val planar=remember(appContext,ocScope){PlanarWorkshopController(appContext,ocScope)}
-    val originalPhoto=ocCreator.callIdentity?.photoSource
+    val currentCallIdentity=ocCreator.callIdentity?.takeIf {it.reference?.id==media.profile?.referenceId&&
+        it.reference?.visualVersion==media.profile?.visualVersion}
+    val originalPhoto=currentCallIdentity?.photoSource
     val planarBinding=if(state.connected&&state.selectedId!=null&&originalPhoto!=null)"${state.selectedId}:${originalPhoto.sha256}"else null
     LaunchedEffect(planarBinding) {planar.connect(planarBinding)}
     LaunchedEffect(planarOpen,planar.busy,planarBinding) {
-        if(planarOpen&&!planar.busy&&planar.source==null&&planar.error==null)planar.open {ocCreator.callIdentity?.let {ocCreator.source(it)}}
+        if(planarOpen&&!planar.busy&&planar.source==null&&planar.error==null)planar.open {currentCallIdentity?.let {ocCreator.source(it)}}
     }
     DisposableEffect(planar){onDispose {planar.dispose()}}
     LaunchedEffect(state.selectedId, state.connected, media.profile?.referenceId, media.profile?.visualVersion) {
@@ -105,7 +107,7 @@ import com.zhiyu.app.ui.screens.*
                             DropdownMenuItem(text={Text("动态形象")},leadingIcon={Icon(Icons.Outlined.FaceRetouchingNatural,null)},
                                 onClick={menuOpen=false;planarOpen=true},
                                 modifier=Modifier.testTag("planar_menu"))
-                            DropdownMenuItem(text = { Text("本机照片") }, leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
+                            DropdownMenuItem(text = { Text("照片生成服务") }, leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
                                 onClick = { menuOpen = false; imageServiceOpen = true })
                             DropdownMenuItem(text = { Text("恋人的声音") }, leadingIcon = { Icon(Icons.Outlined.RecordVoiceOver,null) },
                                 onClick = { menuOpen=false; voiceSettingsOpen=true })
@@ -181,22 +183,16 @@ import com.zhiyu.app.ui.screens.*
         onConfirm = { value -> typography.save(value) { typographyOpen = false } }, onDismiss = { typographyOpen = false },
     )
     if (careOpen && state.connected) CareSettingsDialog(care) { careOpen = false }
-    if (imageServiceOpen && state.connected) QwenModelDialog(onSaved = media::reload, onDismiss = { imageServiceOpen = false })
+    if (imageServiceOpen && state.connected) Image2ServiceDialog(onSaved = media::reload, onDismiss = { imageServiceOpen = false })
     if (voiceSettingsOpen && state.connected) VoiceSettingsDialog(voice) { voiceSettingsOpen=false }
     if(planarOpen&&state.connected)PlanarWorkshopDialog(planar,companionName){planarOpen=false}
     if (callOpen && state.connected) {
-        val cycle by rememberInfiniteTransition(label="character_idle").animateFloat(0f,1f,
-            infiniteRepeatable(tween(5000,easing=LinearEasing)),label="character_motion")
         TurnCallDialog(voice,companionName,state.messages.lastOrNull { it.role=="assistant" },state.isBusy,state.error,
             viewModel::sendVoiceText,onDismiss={callOpen=false},character={ speaking,mouth ->
-                val character = ocCreator.callIdentity?.takeIf { identity ->
-                    identity.reference?.id == media.profile?.referenceId &&
-                        identity.reference?.visualVersion == media.profile?.visualVersion
-                }
+                val character = currentCallIdentity
                 val animatedCharacter=planar.forBinding(planarBinding)
                 if(animatedCharacter!=null)PlanarPreview(animatedCharacter,if(speaking)mouth.coerceIn(0f,1f)else 0f,true,Modifier.fillMaxSize())
-                else CharacterPreview(character,OcMotion(mouthOpen=if(speaking)mouth.coerceIn(0f,1f) else 0f,
-                    breath=kotlin.math.sin(cycle*6.28318f)*.06f,blink=if(cycle>.97f) .8f else 0f),
+                else CharacterPreview(character,OcMotion(),
                     ocCreator::source,modifier=Modifier.fillMaxSize())
             })
     }

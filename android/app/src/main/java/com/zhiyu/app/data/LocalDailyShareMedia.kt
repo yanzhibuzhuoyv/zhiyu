@@ -25,7 +25,7 @@ class LocalDailyShareMedia(context: Context, private val now: () -> Instant = In
             assets.list("image", dayId = event.dayId, limit = 1_000).asSequence()
                 .filter { it.sha256 !in usedSha }
                 .map { assets.details(it.id) }
-                .filter { eligible(it, event, profile) }
+                .filter { eligible(it, event, profile, chat) }
                 .firstOrNull { details ->
                     try { assets.download(details.attachment.id, details.attachment.sha256); true }
                     catch (_: IllegalArgumentException) { rejectedImage(); false }
@@ -37,7 +37,7 @@ class LocalDailyShareMedia(context: Context, private val now: () -> Instant = In
         save: (MediaAttachment) -> T): T {
         return withEvent(chat, event) { profile ->
             val actual = assets.details(attachment.id)
-            require(actual.attachment == MediaRules.check(attachment) && eligible(actual, event, profile)) {
+            require(actual.attachment == MediaRules.check(attachment) && eligible(actual, event, profile, chat)) {
                 "日常图片或恋人形象已更新"
             }
             assets.download(attachment.id, attachment.sha256)
@@ -76,7 +76,7 @@ class LocalDailyShareMedia(context: Context, private val now: () -> Instant = In
             event.expires <= event.due.plusSeconds(45 * 60L)
     }
 
-    private fun eligible(item: LocalMediaDetails, event: LocalDailyShareEvent, profile: VisualProfile): Boolean {
+    private fun eligible(item: LocalMediaDetails, event: LocalDailyShareEvent, profile: VisualProfile, chat:String): Boolean {
         val asset = item.attachment
         val tags = item.tags.toSet()
         if (item.purpose != "library" || asset.kind != "image" || asset.dayId != event.dayId ||
@@ -85,7 +85,10 @@ class LocalDailyShareMedia(context: Context, private val now: () -> Instant = In
         if (item.tags.singleOrNull { it.startsWith("slot_") } != "slot_${event.slot.time.replace(":", "")}" ||
             item.tags.singleOrNull { it.startsWith("trajectory_") } != "trajectory_${event.revision.take(24)}") return false
         if (!tags.containsAll(event.slot.tags)) return false
-        if ("qwen_generated" in tags) { if ("composite_reviewed" !in tags) return false }
+        if ("remote_generated" in tags) {
+            if("composite_reviewed" !in tags || item.tags.singleOrNull {it.startsWith("remote_chat_")}!="remote_chat_${chat.take(24)}")return false
+        }
+        else if ("qwen_generated" in tags) { if ("composite_reviewed" !in tags) return false }
         else if ("legacy_background" !in tags) return false
         if ("contains_person" in tags) {
             if (profile.mode == "none" || profile.visualVersion <= 0 || profile.referenceId == null) return false

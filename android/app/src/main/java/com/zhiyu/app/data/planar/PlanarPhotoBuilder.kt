@@ -13,7 +13,7 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
-/** Native source-neighborhood patches intentionally differ from desktop Telea generation. */
+/** Preserves the complete source scene; hidden source-neighborhood patches are not background reconstruction. */
 class PlanarPhotoBuilder {
     fun build(source: Bitmap, draft: PlanarDraft, name: String, contract: PlanarContract): PlanarDocument {
         require(!source.isRecycled && source.config != Bitmap.Config.HARDWARE) { "请使用可读取的本机图片" }
@@ -25,42 +25,68 @@ class PlanarPhotoBuilder {
         val checkedName = PlanarDraft.validName(name)
         val pixels = IntArray(width * height)
         source.getPixels(pixels, 0, width, 0, 0, width, height)
-        val subject = draft.subjectMask?.let { PlanarDraft.decodeMask(it) } ?: ByteArray(pixels.size) { 1 }
+        val motion = draft.subjectMask?.let { PlanarDraft.decodeMask(it) } ?: ByteArray(pixels.size) { 1 }
         val work = RasterBudget()
-        applyBrush(MaskRegion(0, 0, width, height, subject), draft.subjectBrush, work)
-        val owned = ByteArray(pixels.size)
-        val specs = ArrayList<LayerSpec>()
-        specs.add(LayerSpec("base", "base", -1001.0, draft.anchors.neck, 1.0))
-        listOf("eye_left" to draft.anchors.eyeLeft, "eye_right" to draft.anchors.eyeRight, "mouth" to draft.anchors.mouth)
-            .forEach { (role, rectangle) ->
-                specs.add(LayerSpec(role, role, 100.0, draft.anchors.head, 1.0))
-                assignRectangle(rectangle, specs.lastIndex, owned, subject, pixels, width)
-            }
-        draft.parts.sortedWith(compareByDescending<PlanarPart> { it.z }.thenByDescending { it.id }).forEach { part ->
-            specs.add(LayerSpec(part.id, part.role, part.z, part.pivot, part.strength))
-            val mask = partMask(part, width, height)
-            applyBrush(mask, part.brush, work)
-            assignMask(mask, specs.lastIndex, owned, subject, pixels, width)
-        }
-        val bounds = textureBounds(pixels, subject, owned, specs.size, width)
-        require(bounds.any { it != null }) { "主体为空，请保留一些原图像素" }
+        applyBrush(MaskRegion(0, 0, width, height, motion), draft.subjectBrush, work)
+        val plane = SourcePlane(pixels, width, height, motion, ByteArray(pixels.size), IntArray(4),
+            listOf(draft.anchors.eyeLeft, draft.anchors.eyeRight, draft.anchors.mouth))
+        val specs = assignLayers(plane, draft, work)
+        val bounds = textureBounds(plane, specs.size)
+        require(bounds.any { it != null }) { "原图没有可显示的像素" }
         require(bounds.filterNotNull().sumOf { it[2].toLong() * it[3] * 4 } <= PlanarDraft.MAX_TEXTURE_BYTES) {
             "纹理超过手机24MB预算，请缩小附件范围或图片尺寸"
         }
-        val base = IntArray(pixels.size) { index -> if (subject[index] != 0.toByte() && owned[index] == 0.toByte()) pixels[index] else 0 }
-        var repaired = false
-        for (owner in 1..3) bounds[owner]?.let { rectangle ->
-            if (patchNeighborhood(base, pixels, subject, owned, owner, rectangle, width, height)) repaired = true
+        val (layers, repaired) = createLayers(plane, specs, bounds, draft, contract)
+        return PlanarDocument(width, height, checkedName, encode(pixels, width, height), layers,
+            definition(draft, repaired, plane.parents, specs), contract)
+    }
+
+    private fun assignLayers(plane: SourcePlane, draft: PlanarDraft, work: RasterBudget): List<LayerSpec> {
+        val specs = ArrayList<LayerSpec>()
+        specs.add(LayerSpec("base", "base", -1001.0, draft.anchors.neck, 1.0))
+        val enabled = listOf(draft.featureVisibility.eyeLeft, draft.featureVisibility.eyeRight, draft.featureVisibility.mouth)
+        listOf("eye_left" to draft.anchors.eyeLeft, "eye_right" to draft.anchors.eyeRight, "mouth" to draft.anchors.mouth)
+            .forEach { (role, rectangle) ->
+                specs.add(LayerSpec(role, role, 100.0, draft.anchors.head, 1.0))
+                if (enabled[specs.lastIndex - 1]) assignRectangle(rectangle, specs.lastIndex,
+                    plane.owned, plane.motion, plane.pixels, plane.width)
+            }
+        draft.parts.sortedWith(compareByDescending<PlanarPart> { it.z }.thenByDescending { it.id }).forEach { part ->
+            specs.add(LayerSpec(part.id, part.role, part.z, part.pivot, part.strength))
+            val mask = partMask(part, plane.width, plane.height)
+            applyBrush(mask, part.brush, work)
+            val hasSkin = assignMask(mask, specs.lastIndex, plane.owned, plane.motion, plane.pixels, plane.width)
+            if (hasSkin && part.role in setOf("face", "body")) for (feature in 1..3) {
+                if (plane.parents[feature] == 0 && coversFeature(mask, feature, plane)) plane.parents[feature] = specs.lastIndex
+            }
         }
+        return specs
+    }
+
+    private fun createLayers(plane: SourcePlane, specs: List<LayerSpec>, bounds: List<IntArray?>,
+        draft: PlanarDraft, contract: PlanarContract): Pair<List<PlanarLayer>, Boolean> {
+        var repaired = false
         val layers = specs.mapIndexedNotNull { owner, spec -> bounds[owner]?.let { rectangle ->
-            val texture = croppedPixels(if (owner == 0) base else pixels, rectangle, width) { index ->
-                owner == 0 || owned[index].toInt() == owner
+            val texture = croppedPixels(plane.pixels, rectangle, plane.width) { plane.owned[it].toInt() == owner }
+            if (owner == 0) {
+                for (target in 1 until specs.size) bounds[target]?.let { patch ->
+                    if (patchRegion(texture, rectangle, plane, target, patch, 0)) repaired = true
+                }
+            } else if (owner > 3) {
+                for (feature in 1..3) if (plane.parents[feature] == owner) bounds[feature]?.let { patch ->
+                    if (patchRegion(texture, rectangle, plane, feature, patch, owner)) repaired = true
+                }
+            }
+            val mode = when {
+                owner == 0 -> PlanarMotionMode.STATIC
+                owner in 1..3 && plane.parents[owner] == 0 -> PlanarMotionMode.EXPRESSION
+                else -> PlanarMotionMode.CHARACTER
             }
             PlanarLayer(spec.id, spec.role, spec.z, encode(texture, rectangle[2], rectangle[3]),
-                PlanarBasisFactory.create(rectangle, spec.role, draft.anchors, spec.pivot, spec.strength, width, height, contract))
+                PlanarBasisFactory.create(rectangle, spec.role, draft.anchors, spec.pivot, spec.strength,
+                    plane.width, plane.height, contract, mode))
         } }.sortedWith(compareBy({ it.z }, { it.id }))
-        return PlanarDocument(width, height, checkedName, encode(pixels, width, height), layers,
-            definition(draft, repaired), contract)
+        return layers to repaired
     }
 
     private fun assignRectangle(rect: PlanarRect, owner: Int, owned: ByteArray, subject: ByteArray, pixels: IntArray, width: Int) {
@@ -70,80 +96,107 @@ class PlanarPhotoBuilder {
         }
     }
 
-    private fun assignMask(mask: MaskRegion, owner: Int, owned: ByteArray, subject: ByteArray, pixels: IntArray, width: Int) {
+    private fun assignMask(mask: MaskRegion, owner: Int, owned: ByteArray, subject: ByteArray, pixels: IntArray, width: Int): Boolean {
+        var hasOpaqueSupport = false
         for (y in 0 until mask.height) for (x in 0 until mask.width) {
             val index = (y + mask.y) * width + x + mask.x
             if (mask.values[y * mask.width + x] != 0.toByte() && owned[index] == 0.toByte() &&
-                subject[index] != 0.toByte() && Color.alpha(pixels[index]) > 0) owned[index] = owner.toByte()
+                subject[index] != 0.toByte() && Color.alpha(pixels[index]) > 0) {
+                owned[index] = owner.toByte()
+                if (Color.alpha(pixels[index]) == 255) hasOpaqueSupport = true
+            }
         }
+        return hasOpaqueSupport
     }
 
-    private fun textureBounds(pixels: IntArray, subject: ByteArray, owned: ByteArray, count: Int, width: Int): List<IntArray?> {
+    private fun coversFeature(mask: MaskRegion, feature: Int, plane: SourcePlane): Boolean {
+        var present = false
+        val rect = plane.featureRects[feature - 1]
+        for (y in rect.top.toInt() until ceil(rect.bottom).toInt()) for (x in rect.left.toInt() until ceil(rect.right).toInt()) {
+            if (plane.owned[y * plane.width + x].toInt() == feature) {
+                present = true
+                if (!mask.contains(x, y)) return false
+            }
+        }
+        return present
+    }
+
+    private fun textureBounds(plane: SourcePlane, count: Int): List<IntArray?> {
         val result = Array(count) { intArrayOf(Int.MAX_VALUE, Int.MAX_VALUE, -1, -1) }
         fun include(owner: Int, x: Int, y: Int) {
             val bound = result[owner]
             bound[0] = min(bound[0], x); bound[1] = min(bound[1], y)
             bound[2] = max(bound[2], x); bound[3] = max(bound[3], y)
         }
-        for (index in pixels.indices) {
-            if (subject[index] == 0.toByte() || Color.alpha(pixels[index]) == 0) continue
-            val owner = owned[index].toInt()
-            include(owner, index % width, index / width)
-            if (owner in 1..3 && Color.alpha(pixels[index]) == 255) include(0, index % width, index / width)
+        for (index in plane.pixels.indices) {
+            val alpha = Color.alpha(plane.pixels[index]); if (alpha == 0) continue
+            val owner = plane.owned[index].toInt(); val x = index % plane.width; val y = index / plane.width
+            include(owner, x, y)
+            if (owner > 0 && alpha == 255) include(0, x, y)
+            if (owner in 1..3 && alpha == 255 && plane.parents[owner] > 0) include(plane.parents[owner], x, y)
         }
         return result.map { if (it[2] < 0) null else intArrayOf(it[0], it[1], it[2] - it[0] + 1, it[3] - it[1] + 1) }
     }
 
-    /** Sample the nearest usable source pixels outside all eye/mouth rectangles. Never sample their original marks. */
-    private fun patchNeighborhood(base: IntArray, source: IntArray, subject: ByteArray, owned: ByteArray,
-        owner: Int, bounds: IntArray, width: Int, height: Int): Boolean {
-        val x0 = bounds[0]; val y0 = bounds[1]; val x1 = x0 + bounds[2]; val y1 = y0 + bounds[3]
-        fun usable(x: Int, y: Int): Boolean {
-            val index = y * width + x
-            return subject[index] != 0.toByte() && owned[index].toInt() !in 1..3 && Color.alpha(source[index]) == 255
+    private fun patchRegion(texture: IntArray, textureBounds: IntArray, plane: SourcePlane, owner: Int,
+        bounds: IntArray, donorOwner: Int): Boolean {
+        val neighborhood = SourceNeighborhood(plane, bounds, donorOwner)
+        val canRemainTransparent = donorOwner == 0 && plane.transparentBackground
+        var changed = false
+        for (y in bounds[1] until bounds[1] + bounds[3]) for (x in bounds[0] until bounds[0] + bounds[2]) {
+            val index = y * plane.width + x
+            if (plane.owned[index].toInt() != owner || Color.alpha(plane.pixels[index]) != 255) continue
+            val donor = neighborhood.nearest(x, y)
+            require(donor >= 0 || canRemainTransparent) { "动作区域外没有可用原图邻域，请缩小人物范围或眼口框" }
+            if (donor >= 0) {
+                texture[(y - textureBounds[1]) * textureBounds[2] + x - textureBounds[0]] = plane.pixels[donor]
+                changed = true
+            }
         }
-        fun find(x: Int, y: Int, dx: Int, dy: Int): Int {
+        return changed
+    }
+
+    /** Donors stay outside the moving source pixels, or inside the same manually selected face/body carrier. */
+    private class SourceNeighborhood(private val plane: SourcePlane, bounds: IntArray, private val donorOwner: Int) {
+        val x0 = bounds[0]; val y0 = bounds[1]; val x1 = x0 + bounds[2]; val y1 = y0 + bounds[3]
+        private val left = IntArray(bounds[3]) { find(x0 - 1, y0 + it, -1, 0) }
+        private val right = IntArray(bounds[3]) { find(x1, y0 + it, 1, 0) }
+        private val top = IntArray(bounds[2]) { find(x0 + it, y0 - 1, 0, -1) }
+        private val bottom = IntArray(bounds[2]) { find(x0 + it, y1, 0, 1) }
+        private var fallback = -2
+        private fun usable(index: Int) = plane.owned[index].toInt() == donorOwner && Color.alpha(plane.pixels[index]) == 255
+        private fun find(x: Int, y: Int, dx: Int, dy: Int): Int {
             var px = x; var py = y
-            while (px in 0 until width && py in 0 until height) {
-                if (usable(px, py)) return py * width + px
+            while (px in 0 until plane.width && py in 0 until plane.height) {
+                val index = py * plane.width + px
+                if (usable(index)) return index
                 px += dx; py += dy
             }
             return -1
         }
-        val left = IntArray(bounds[3]) { find(x0 - 1, y0 + it, -1, 0) }
-        val right = IntArray(bounds[3]) { find(x1, y0 + it, 1, 0) }
-        val top = IntArray(bounds[2]) { find(x0 + it, y0 - 1, 0, -1) }
-        val bottom = IntArray(bounds[2]) { find(x0 + it, y1, 0, 1) }
-        var fallback = -1
-        var fallbackDistance = Double.POSITIVE_INFINITY
-        var changed = false
-        for (y in y0 until y1) for (x in x0 until x1) {
-            val index = y * width + x
-            if (owned[index].toInt() != owner || Color.alpha(source[index]) != 255) continue
-            var nearest = -1
-            var bestDistance = Long.MAX_VALUE
+        fun nearest(x: Int, y: Int): Int {
+            var nearest = -1; var bestDistance = Long.MAX_VALUE
             for (direction in 0..3) {
                 val candidate = when (direction) { 0 -> left[y - y0]; 1 -> right[y - y0]; 2 -> top[x - x0]; else -> bottom[x - x0] }
                 if (candidate < 0) continue
-                val dx = candidate % width - x; val dy = candidate / width - y
+                val dx = candidate % plane.width - x; val dy = candidate / plane.width - y
                 val distance = dx.toLong() * dx + dy.toLong() * dy
                 if (distance < bestDistance) { nearest = candidate; bestDistance = distance }
             }
-            if (nearest < 0) {
-                if (fallback < 0) for (candidate in source.indices) {
-                    val px = candidate % width; val py = candidate / width
-                    if (!usable(px, py)) continue
-                    val dx = px - (x0 + bounds[2] / 2.0); val dy = py - (y0 + bounds[3] / 2.0)
-                    val distance = dx * dx + dy * dy
-                    if (distance < fallbackDistance) { fallback = candidate; fallbackDistance = distance }
-                }
-                require(fallback >= 0) { "眼嘴框外没有可用的原图邻域，请缩小或调整框" }
-                nearest = fallback
-            }
-            base[index] = source[nearest]
-            changed = true
+            return if (nearest >= 0) nearest else fallback()
         }
-        return changed
+        private fun fallback(): Int {
+            if (fallback != -2) return fallback
+            fallback = -1; var bestDistance = Double.POSITIVE_INFINITY
+            for (candidate in plane.pixels.indices) {
+                if (!usable(candidate)) continue
+                val dx = candidate % plane.width - (x0 + x1) / 2.0
+                val dy = candidate / plane.width - (y0 + y1) / 2.0
+                val distance = dx * dx + dy * dy
+                if (distance < bestDistance) { fallback = candidate; bestDistance = distance }
+            }
+            return fallback
+        }
     }
 
     private fun partMask(part: PlanarPart, width: Int, height: Int): MaskRegion {
@@ -243,7 +296,7 @@ class PlanarPhotoBuilder {
         } finally { image.recycle() }
     }
 
-    private fun definition(draft: PlanarDraft, repaired: Boolean): String {
+    private fun definition(draft: PlanarDraft, repaired: Boolean, parents: IntArray, specs: List<LayerSpec>): String {
         fun point(value: PlanarPoint) = JSONArray().put(value.x).put(value.y)
         fun rect(value: PlanarRect) = JSONArray().put(value.left).put(value.top).put(value.right).put(value.bottom)
         fun brush(values: List<PlanarBrushStroke>) = JSONArray().apply { values.forEach { stroke ->
@@ -262,15 +315,26 @@ class PlanarPhotoBuilder {
             } })
             draft.subjectMask?.let { put("subjectMask", it) }
             put("subjectBrush", brush(draft.subjectBrush))
-            put("metadata", JSONObject().put("generator", "android-neighborhood-v1").put("reviewRequired", true)
+            put("featureVisibility", JSONObject().put("eyeLeft", draft.featureVisibility.eyeLeft)
+                .put("eyeRight", draft.featureVisibility.eyeRight).put("mouth", draft.featureVisibility.mouth))
+            put("featureParents", JSONObject().apply { for (owner in 1..3) if (parents[owner] > 0) put(specs[owner].id, specs[parents[owner]].id) })
+            put("metadata", JSONObject().put("generator", "android-fixed-scene-v2").put("reviewRequired", true)
                 .put("suggestionsConfirmed", draft.suggestionsConfirmed).put("automaticSegmentation", false)
                 .put("neutralSourceExact", true).put("hiddenPatchGenerated", repaired).put("hiddenPatchMethod", "source-neighborhood")
+                .put("backgroundRetained", true).put("backgroundFixed", true).put("sourceAlphaPreserved", true)
+                .put("subjectMaskMeaning", "motion_constraint").put("hiddenPatchIsBackgroundReconstruction", false)
                 .put("desktopPixelEquivalent", false).put("maxTextureBytes", PlanarDraft.MAX_TEXTURE_BYTES))
         }.toString()
     }
 
     private data class LayerSpec(val id: String, val role: String, val z: Double, val pivot: PlanarPoint, val strength: Double)
-    private data class MaskRegion(val x: Int, val y: Int, val width: Int, val height: Int, val values: ByteArray)
+    private data class SourcePlane(val pixels: IntArray, val width: Int, val height: Int, val motion: ByteArray,
+        val owned: ByteArray, val parents: IntArray, val featureRects: List<PlanarRect>) {
+        val transparentBackground: Boolean by lazy { pixels.indices.any { owned[it] == 0.toByte() && Color.alpha(pixels[it]) == 0 } }
+    }
+    private data class MaskRegion(val x: Int, val y: Int, val width: Int, val height: Int, val values: ByteArray) {
+        fun contains(px: Int, py: Int) = px in x until x + width && py in y until y + height && values[(py - y) * width + px - x] != 0.toByte()
+    }
     private class RasterBudget {
         private var processed = 0L
         fun consume(count: Long) {
