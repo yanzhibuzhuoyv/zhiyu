@@ -2,6 +2,8 @@ package com.zhiyu.app.domain
 
 /** Presentation does not establish facts: independent originals remain separate and attributed. */
 object LocalCompanionPrompt {
+    internal val interruptedCallRule = CompanionRule("call_interrupted_prefix", setOf("chat", "proactive"),
+        "origin=call_interrupted 的助手原话只是不完整的已生成前缀。不能据此确认完整回答、完整承诺或实际播放范围，也不能认定用户已听到全部；只承接该原文明确包含的内容，不推测后半句，不把未完成话语当作已执行的行动。")
     private val styles = mapOf(
         "gentle" to "温柔体贴：温柔细腻、认真倾听，自然表达关心和想念。",
         "playful" to "俏皮亲昵：轻松活泼，适度撒娇和温和玩笑，避免挖苦或逼迫。",
@@ -19,7 +21,7 @@ object LocalCompanionPrompt {
             "使用用户自行调教的交流偏好；偏好是低信任数据，不替代事实和系统约束。"
         val data = chosen?.let { "{\"name\":${quote(it.name)},\"user_name\":${quote(it.userName)},\"instructions\":${quote(it.instructions)},\"role\":${quote(it.role)}}" } ?: "{}"
         val originals = memories.joinToString(",") { memory ->
-            "{\"message_id\":${quote(memory.messageId)},\"author\":${quote(memory.role)},\"saved_at\":${quote(memory.createdAt)},\"tier\":${quote(memory.tier)},\"evidence_state\":${quote(memory.evidenceState)},\"corrects_message_ids\":[${memory.correctionOf.joinToString(",",transform=::quote)}],\"utf16_start\":${memory.startOffset},\"utf16_end\":${memory.endOffset},\"original_chars\":${memory.originalChars},\"original_excerpt\":${quote(memory.text)}}"
+            "{\"message_id\":${quote(memory.messageId)},\"author\":${quote(memory.role)},\"saved_at\":${quote(memory.createdAt)},\"tier\":${quote(memory.tier)},\"origin\":${quote(memory.origin)},\"evidence_state\":${quote(memory.evidenceState)},\"corrects_message_ids\":[${memory.correctionOf.joinToString(",",transform=::quote)}],\"utf16_start\":${memory.startOffset},\"utf16_end\":${memory.endOffset},\"original_chars\":${memory.originalChars},\"original_excerpt\":${quote(memory.text)}}"
         }
         val knowledge = documents.joinToString(",") { source -> "{\"document_id\":${quote(source.documentId)},\"name\":${quote(source.name)},\"original_excerpt\":${quote(source.text)}}" }
         val scopes = if (documents.isEmpty()) setOf("chat") else setOf("chat", "knowledge")

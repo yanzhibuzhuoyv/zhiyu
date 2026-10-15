@@ -13,8 +13,8 @@ android {
         minSdk = 26
         targetSdk = 36
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
-        versionCode = 16
-        versionName = "0.2.10"
+        versionCode = 17
+        versionName = "0.2.11"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"https://local.zhiyu.invalid\"")
         buildConfigField("boolean", "USE_USB_BACKEND", "false")

@@ -6,7 +6,7 @@ import java.time.Instant
 data class LocalMemoryOriginal(
     val owner: String, val conversationId: String, val messageId: String, val role: String,
     val createdAt: String, val sha256: String, val revision: Int, val text: String,
-    val indexState: String = "active", val manualTier: String? = null,
+    val indexState: String = "active", val manualTier: String? = null, val origin: String = "reply",
 ) {
     init {
         require(listOf(owner, conversationId, messageId).all { it.isNotBlank() && it.length <= 256 })

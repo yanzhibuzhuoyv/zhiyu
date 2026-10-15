@@ -44,6 +44,7 @@ import com.zhiyu.app.ui.screens.*
     var callOpen by remember { mutableStateOf(false) }
     var planarOpen by rememberSaveable { mutableStateOf(false) }
     val voice = rememberVoiceController()
+    val duplex=rememberDuplexVoiceController()
     val photos = rememberChatPhotoController(state.draftImage, viewModel::draftImage)
     val media = rememberMediaController(state.selectedId, state.connected)
     val ocScope = rememberCoroutineScope()
@@ -106,7 +107,7 @@ import com.zhiyu.app.ui.screens.*
     val companionName = state.profile?.name?.takeIf { it.isNotBlank() } ?: providerName
     LaunchedEffect(state.connected, state.restoring) {
         if (!state.connected) { menuOpen = false; libraryOpen = false; revalidate = false; styleOpen = false; appearanceOpen = false; visualOpen = false; careOpen = false; typographyOpen = false; mediaLibraryOpen = false }
-        if (!state.connected) { callOpen=false; voiceSettingsOpen=false; imageServiceOpen=false; scenePhotosOpen=false; expansionOpen=false; voice.stop() }
+        if (!state.connected) { callOpen=false; voiceSettingsOpen=false; imageServiceOpen=false; scenePhotosOpen=false; expansionOpen=false; voice.stop();duplex.stop() }
         if (!state.connected&&!state.restoring)planarOpen=false
         if (!state.restoring && !state.connected && !state.canRestoreConnection) ProactiveScheduler.cancel(appContext)
     }
@@ -216,9 +217,9 @@ import com.zhiyu.app.ui.screens.*
     if(expansionOpen&&state.connected)OcExpansionDialog(expansion){expansionOpen=false}
     if (voiceSettingsOpen && state.connected) VoiceSettingsDialog(voice) { voiceSettingsOpen=false }
     if(planarOpen&&state.connected)PlanarWorkshopDialog(planar,companionName){planarOpen=false}
-    if (callOpen && state.connected) {
-        TurnCallDialog(voice,companionName,state.messages.lastOrNull { it.role=="assistant" },state.isBusy,state.error,
-            viewModel::sendVoiceText,onDismiss={callOpen=false},character={ speaking,mouth ->
+    if (callOpen && state.connected && state.selectedId!=null) {
+        DuplexCallDialog(duplex,checkNotNull(state.selectedId),companionName,
+            viewModel::sendCallText,onDismiss={callOpen=false},streamText=viewModel::streamCallText,character={ speaking,mouth ->
                 val character = currentCallIdentity
                 val animatedCharacter=planar.forBinding(planarBinding)
                 if(animatedCharacter!=null)PlanarPreview(animatedCharacter,if(speaking)mouth.coerceIn(0f,1f)else 0f,true,Modifier.fillMaxSize())

@@ -119,16 +119,16 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
         return conversation(owner, id)
     }
     fun append(owner: String, id: String, role: String, content: String, origin: String = "reply", sources: List<Source> = emptyList(),
-               attachments: List<MediaAttachment> = emptyList(), requestId: String? = null): Message {
-        if (attachments.isEmpty()) return appendChecked(owner,id,role,content,origin,sources,attachments,requestId)
+               attachments: List<MediaAttachment> = emptyList(), requestId: String? = null, commitGuard: () -> Unit = {}): Message {
+        if (attachments.isEmpty()) return appendChecked(owner,id,role,content,origin,sources,attachments,requestId,commitGuard)
         return synchronized(LocalMediaStore.lock) {
             require(attachments.size <= 4)
             attachments.forEach { asset -> MediaRules.check(asset); media.download(asset.id,asset.sha256) }
-            appendChecked(owner,id,role,content,origin,sources,attachments,requestId)
+            appendChecked(owner,id,role,content,origin,sources,attachments,requestId,commitGuard)
         }
     }
     private fun appendChecked(owner: String, id: String, role: String, content: String, origin: String,
-        sources: List<Source>, attachments: List<MediaAttachment>, requestId: String?): Message = transaction { db ->
+        sources: List<Source>, attachments: List<MediaAttachment>, requestId: String?, commitGuard: () -> Unit): Message = transaction(commitGuard) { db ->
         require(role in setOf("user", "assistant") && (content.isNotBlank() ||
             role == "user" && attachments.size == 1 && attachments.first().kind == "image")) { "聊天原文无效" }
         require(attachments.size <= 4); attachments.forEach { MediaRules.check(it) }
@@ -147,9 +147,12 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
         }
         val encoded = LocalMemoryCodec.encode(content)
         val message = Message(identifier(), role, content, sources, Instant.now().toString(), attachments, origin)
-        db.insertOrThrow("messages", null, values("id" to message.id, "owner" to owner, "conversation_id" to id, "role" to role,
+        val row = values("id" to message.id, "owner" to owner, "conversation_id" to id, "role" to role,
             "payload" to encoded.compressed, "raw_bytes" to encoded.utf8Bytes, "sha256" to encoded.sha256,
-            "created_at" to message.createdAt, "origin" to origin, "sources" to sourceJson(sources), "attachments" to mediaJson(attachments)))
+            "created_at" to message.createdAt, "origin" to origin, "sources" to sourceJson(sources), "attachments" to mediaJson(attachments))
+        // Writer acquisition and lossless encoding may block after the caller's outer check.
+        commitGuard()
+        db.insertOrThrow("messages", null, row)
         indexMessage(db, owner, message.id, content)
         requestId?.let { db.insertOrThrow("proactive_requests", null, values("request_id" to it, "owner" to owner, "conversation_id" to id, "message_id" to message.id)) }
         db.update("conversations", values("updated_at" to message.createdAt), "owner=? AND id=?", arrayOf(owner, id))
@@ -208,17 +211,18 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
         }
     }
     fun recognitionOriginal(owner: String, id: String, messageId: String): LocalMemoryOriginal? = readableDatabase.rawQuery(
-        "SELECT role,created_at,sha256,revision,index_state,manual_tier,raw_bytes FROM messages WHERE owner=? AND conversation_id=? AND id=?", arrayOf(owner,id,messageId)).use {
+        "SELECT role,created_at,sha256,revision,index_state,manual_tier,raw_bytes,origin FROM messages WHERE owner=? AND conversation_id=? AND id=?", arrayOf(owner,id,messageId)).use {
         if (!it.moveToFirst()) null else LocalMemoryOriginal(owner,id,messageId,it.getString(0),it.getString(1),it.getString(2),it.getInt(3),
-            LocalMemoryCodec.decode(payload(owner,id,messageId),it.getInt(6),it.getString(2)),it.getString(4),if (it.isNull(5)) null else it.getString(5))
+            LocalMemoryCodec.decode(payload(owner,id,messageId),it.getInt(6),it.getString(2)),it.getString(4),if (it.isNull(5)) null else it.getString(5),it.getString(7))
     }
     fun semanticRecall(owner: String, id: String, hit: LocalSemanticHit): LocalRecall = readableDatabase.rawQuery(
-        "SELECT raw_bytes,sha256 FROM messages WHERE owner=? AND conversation_id=? AND id=?", arrayOf(owner,id,hit.messageId)).use {
+        "SELECT raw_bytes,sha256,origin FROM messages WHERE owner=? AND conversation_id=? AND id=?", arrayOf(owner,id,hit.messageId)).use {
         check(it.moveToFirst() && it.getString(1) == hit.rawSha) { "语义来源原文校验不一致" }
         val end = minOf(hit.end,hit.start + 8192)
         val text = LocalMemoryCodec.decodeSpan(payload(owner,id,hit.messageId),it.getInt(0),it.getString(1),hit.start,end)
         val safeText = if (Character.isHighSurrogate(text.last())) text.dropLast(1) else text
-        LocalRecall(hit.messageId,hit.role,safeText,hit.createdAt,hit.tier,hit.score,hit.start,hit.start + safeText.length,hit.originalChars)
+        LocalRecall(hit.messageId,hit.role,safeText,hit.createdAt,hit.tier,hit.score,hit.start,hit.start + safeText.length,hit.originalChars,
+            origin = it.getString(2))
     }
     fun proactiveResult(owner: String, id: String, requestId: String): Message? = readableDatabase.rawQuery(
         "SELECT m.* FROM proactive_requests p JOIN messages m ON m.id=p.message_id WHERE p.owner=? AND p.conversation_id=? AND p.request_id=?",
@@ -266,12 +270,13 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
             }
             val width = candidate.endOffset - candidate.startOffset
             if (candidate.score <= 0 || width <= 0 || used + width > budget) return@mapNotNull null
-            val text = readableDatabase.rawQuery("SELECT raw_bytes,sha256 FROM messages WHERE owner=? AND conversation_id=? AND id=?", arrayOf(owner, id, candidate.messageId)).use {
+            val original = readableDatabase.rawQuery("SELECT raw_bytes,sha256,origin FROM messages WHERE owner=? AND conversation_id=? AND id=?", arrayOf(owner, id, candidate.messageId)).use {
                 check(it.moveToFirst()) { "原文索引来源丢失" }
-                LocalMemoryCodec.decodeSpan(payload(owner, id, candidate.messageId), it.getInt(0), it.getString(1), candidate.startOffset, candidate.endOffset)
+                val text = LocalMemoryCodec.decodeSpan(payload(owner, id, candidate.messageId), it.getInt(0), it.getString(1), candidate.startOffset, candidate.endOffset)
+                candidate.copy(text = text, origin = it.getString(2))
             }
-            used += text.length
-            candidate.copy(text = text)
+            used += original.text.length
+            original
         }
     }
     /** Diagnostics use exactly the production candidate query, without reading original payloads. */
@@ -432,10 +437,10 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
         null -> putNull(key); is String -> put(key, value); is Int -> put(key, value); is Long -> put(key, value); is ByteArray -> put(key, value)
         else -> throw IllegalArgumentException("本机数据类型无效")
     } } }
-    private fun <T> transaction(block: (SQLiteDatabase) -> T): T {
+    private fun <T> transaction(beforeCommit: () -> Unit = {}, block: (SQLiteDatabase) -> T): T {
         val db = writableDatabase
         db.beginTransaction()
-        return try { block(db).also { db.setTransactionSuccessful() } } finally { db.endTransaction() }
+        return try { block(db).also { beforeCommit(); db.setTransactionSuccessful() } } finally { db.endTransaction() }
     }
     private fun identifier() = UUID.randomUUID().toString().replace("-", "")
 }

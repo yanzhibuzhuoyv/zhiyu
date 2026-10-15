@@ -5,7 +5,7 @@ import java.util.Locale
 
 data class LocalRecall(val messageId: String, val role: String, val text: String, val createdAt: String, val tier: String, val score: Double,
     val startOffset: Int = 0, val endOffset: Int = text.length, val originalChars: Int = text.length,
-    val evidenceState:String = "original",val correctionOf:List<String> = emptyList())
+    val evidenceState:String = "original",val correctionOf:List<String> = emptyList(),val origin:String = "reply")
 data class LocalTextPart(val offset: Int, val text: String)
 
 /** Local lexical retrieval: Chinese bigrams and Unicode words, without an extra model request. */

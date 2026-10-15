@@ -15,7 +15,7 @@ object LocalRetrievalRules {
 /** IDs can be switched independently in an offline evaluation, never through user prompt data. */
 object LocalCompanionRules {
     fun render(scopes: Set<String>, disabledIds: Set<String> = emptySet()): String {
-        val rules = CompanionContractGenerated.rules
+        val rules = CompanionContractGenerated.rules + LocalCompanionPrompt.interruptedCallRule
         require(disabledIds.all { id -> rules.any { it.id == id } }) { "Unknown companion rule" }
         require(scopes.all { scope -> rules.any { scope in it.appliesTo } }) { "Unknown companion rule scope" }
         val chosen = rules.filter { it.id !in disabledIds && it.appliesTo.any(scopes::contains) }

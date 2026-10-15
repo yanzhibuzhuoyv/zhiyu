@@ -104,7 +104,7 @@ class LocalSemanticCorrections(private val archive:LocalChatDatabase) {
         val selected = LocalCorrectionSpanRules.select(source.text,node.start,node.end,supplied)
         // This score expresses the searched ancestor's relevance; graph closure does not measure a new cosine.
         val original = LocalRecall(source.messageId,source.role,selected.text,source.createdAt,node.tier,older.score,
-            selected.start,selected.end,source.text.length,"current_correction",listOf(older.messageId))
+            selected.start,selected.end,source.text.length,"current_correction",listOf(older.messageId),origin = source.origin)
         return Corrected(original,selected.requiresSupplement)
     }
 }

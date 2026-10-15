@@ -4,16 +4,13 @@ import com.zhiyu.app.domain.ApiFailure
 import com.zhiyu.app.domain.LocalMemoryCodec
 import com.zhiyu.app.domain.ChatPhotoPayload
 import com.zhiyu.app.domain.ChatPhotoRules
-import kotlinx.coroutines.suspendCancellableCoroutine
+import com.zhiyu.app.data.stream.DeepSeekSseDecoder
+import com.zhiyu.app.data.stream.StreamingDirectProviderTransport
+import com.zhiyu.app.data.stream.OfficialHttpsTransport
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
-import java.net.Proxy
-import java.net.SocketTimeoutException
-import java.net.URL
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicReference
-import javax.net.ssl.HttpsURLConnection
 
 data class DirectChatMessage(val role: String, val content: String, val photos: List<ChatPhotoPayload> = emptyList())
 fun interface DirectProviderTransport {
@@ -22,6 +19,30 @@ fun interface DirectProviderTransport {
 
 /** A single official HTTPS request; no relay, redirect, backend session or private reasoning is displayed. */
 open class DirectProviderClient(private val transport: DirectProviderTransport = OfficialHttpsTransport()) {
+    /** Emits provisional public answer text; only the returned complete answer may be committed. */
+    open suspend fun completeStreaming(providerId: String, key: String, model: String,
+        messages: List<DirectChatMessage>, maxTokens: Int = 8192, onDelta: suspend (String) -> Unit): String {
+        currentCoroutineContext().ensureActive()
+        // Existing subclasses commonly override complete only. Preserve that dispatch without accidental networking.
+        if (providerId != "deepseek" || transport !is StreamingDirectProviderTransport || javaClass != DirectProviderClient::class.java) {
+            val answer = complete(providerId, key, model, messages, maxTokens)
+            currentCoroutineContext().ensureActive()
+            onDelta(answer)
+            currentCoroutineContext().ensureActive()
+            return answer
+        }
+        val request = request(providerId, key, model, messages, maxTokens, stream = true)
+        val decoder = DeepSeekSseDecoder(onDelta)
+        val completed = StreamCompleted()
+        try {
+            transport.exchangeStreaming(request.first, key, request.second) { bytes ->
+                decoder.accept(bytes)
+                if (decoder.isDone) throw completed // Do not wait for server EOF after protocol completion.
+            }
+        } catch (signal: StreamCompleted) { if (signal !== completed) throw signal }
+        currentCoroutineContext().ensureActive()
+        return checkedText(decoder.finish())
+    }
     open suspend fun validate(providerId: String, key: String, model: String) {
         val result = call(providerId, key, model, listOf(DirectChatMessage("user", "只回复 OK")), 8)
         val message = result.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
@@ -47,6 +68,23 @@ open class DirectProviderClient(private val transport: DirectProviderTransport =
         return answer
     }
     private suspend fun call(providerId: String, key: String, model: String, messages: List<DirectChatMessage>, maxTokens: Int): JSONObject {
+        val request = request(providerId, key, model, messages, maxTokens, stream = false)
+        val response = transport.exchange(request.first, key, request.second)
+        try {
+            require(LocalMemoryCodec.bytes(response).size <= 2 * 1024 * 1024)
+            val result = JSONObject(response)
+            require(!result.has("error") && !result.has("error_code"))
+            require(result.getJSONArray("choices").length() > 0)
+            result.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
+            return result
+        } catch (_: org.json.JSONException) {
+            throw ApiFailure(502, "AI 公司返回的响应格式不正确", "provider_response_invalid")
+        } catch (_: IllegalArgumentException) {
+            throw ApiFailure(502, "AI 公司未能完成本次请求，请检查模型与配额", "provider_response_invalid")
+        }
+    }
+    private fun request(providerId: String, key: String, model: String, messages: List<DirectChatMessage>, maxTokens: Int,
+        stream: Boolean): Pair<String, String> {
         val endpoint = DirectProviderCatalog.endpoint(providerId)
         require(key.isNotBlank() && key.length <= 4096 && key.all { it.code in 33..126 }) { "请完整填写 API Key，不能含空格或控制字符" }
         require(model.isNotBlank() && model.length <= 256 && model.none { it.isISOControl() }) { "请填写有效的已开通模型 ID" }
@@ -72,21 +110,9 @@ open class DirectProviderClient(private val transport: DirectProviderTransport =
                 }
                 array.put(JSONObject().put("role", message.role).put("content", content))
             }
-        }).put("stream", false).put("max_tokens", maxTokens)
+        }).put("stream", stream).put("max_tokens", maxTokens)
         applyModelOptions(json, providerId, model)
-        val response = transport.exchange(endpoint, key, json.toString())
-        try {
-            require(LocalMemoryCodec.bytes(response).size <= 2 * 1024 * 1024)
-            val result = JSONObject(response)
-            require(!result.has("error") && !result.has("error_code"))
-            require(result.getJSONArray("choices").length() > 0)
-            result.getJSONArray("choices").getJSONObject(0).getJSONObject("message")
-            return result
-        } catch (_: org.json.JSONException) {
-            throw ApiFailure(502, "AI 公司返回的响应格式不正确", "provider_response_invalid")
-        } catch (_: IllegalArgumentException) {
-            throw ApiFailure(502, "AI 公司未能完成本次请求，请检查模型与配额", "provider_response_invalid")
-        }
+        return endpoint to json.toString()
     }
     private fun applyModelOptions(json: JSONObject, provider: String, model: String) {
         val disable = (provider == "deepseek" && model in setOf("deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro")) ||
@@ -110,69 +136,5 @@ open class DirectProviderClient(private val transport: DirectProviderTransport =
         catch (_: IllegalArgumentException) { throw ApiFailure(502, "AI 返回了无效的 Unicode 文本，未改写或保存原文", "provider_response_invalid") }
         return text
     }
-}
-
-private class OfficialHttpsTransport : DirectProviderTransport {
-    companion object {
-        private val executor = Executors.newFixedThreadPool(2) { task -> Thread(task, "zhiyu-official-ai").apply { isDaemon = true } }
-        private const val MAX_RESPONSE = 2 * 1024 * 1024
-    }
-    override suspend fun exchange(endpoint: String, key: String, json: String): String = suspendCancellableCoroutine { continuation ->
-        require(endpoint in DirectProviderCatalog.providers().map { DirectProviderCatalog.endpoint(it.id) }) { "AI 地址不受支持" }
-        val activeConnection = AtomicReference<HttpsURLConnection?>()
-        val task = executor.submit {
-            var connection: HttpsURLConnection? = null
-            try {
-                if (!continuation.isActive) return@submit
-                connection = URL(endpoint).openConnection(Proxy.NO_PROXY) as HttpsURLConnection
-                activeConnection.set(connection)
-                if (!continuation.isActive) return@submit
-                connection.instanceFollowRedirects = false
-                connection.connectTimeout = 15000
-                connection.readTimeout = 0 // A complete answer may be long; cancellation disconnects the socket.
-                connection.requestMethod = "POST"
-                connection.setRequestProperty("Authorization", "Bearer $key")
-                connection.setRequestProperty("Content-Type", "application/json")
-                connection.setRequestProperty("Accept", "application/json")
-                val bytes = json.toByteArray(Charsets.UTF_8)
-                connection.doOutput = true
-                connection.setFixedLengthStreamingMode(bytes.size)
-                connection.outputStream.use { it.write(bytes) }
-                val status = connection.responseCode
-                if (status != 200) throw upstreamFailure(status)
-                require(connection.contentLengthLong <= MAX_RESPONSE) { "AI 响应超过安全读取范围" }
-                val output = ByteArrayOutputStream()
-                connection.inputStream.use { input ->
-                    val buffer = ByteArray(8192)
-                    while (continuation.isActive) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        require(output.size() + count <= MAX_RESPONSE) { "AI 响应超过安全读取范围" }
-                        output.write(buffer, 0, count)
-                    }
-                }
-                if (continuation.isActive) continuation.resumeWith(Result.success(LocalMemoryCodec.utf8(output.toByteArray())))
-            } catch (error: Exception) {
-                val failure = when (error) {
-                    is ApiFailure -> error
-                    is SocketTimeoutException -> ApiFailure(504, "连接 AI 服务超时，请检查网络后重试", "provider_timeout")
-                    is java.nio.charset.CharacterCodingException -> ApiFailure(502, "AI 返回了无效的 UTF-8 响应", "provider_response_invalid")
-                    is IllegalArgumentException -> ApiFailure(502, "AI 响应超过安全读取范围", "provider_response_invalid")
-                    else -> ApiFailure(0, "无法连接 AI 公司，请检查网络后重试", "provider_connection_failed")
-                }
-                if (continuation.isActive) continuation.resumeWith(Result.failure(failure))
-            } finally { connection?.disconnect(); activeConnection.set(null) }
-        }
-        continuation.invokeOnCancellation { activeConnection.get()?.disconnect(); task.cancel(true) }
-    }
-    private fun upstreamFailure(status: Int): ApiFailure = when (status) {
-        401 -> ApiFailure(401, "API Key 无效或已失效，请确认 AI 公司与密钥对应", "provider_auth_failed")
-        403 -> ApiFailure(403, "该 Key 没有模型调用权限，请检查模型、地域及密钥类型", "provider_auth_failed")
-        402 -> ApiFailure(402, "AI 服务余额不足，请检查对应平台余额", "provider_balance_insufficient")
-        429 -> ApiFailure(429, "AI 服务限流或额度不足，请稍后重试", "provider_rate_limited")
-        400, 404, 422 -> ApiFailure(400, "AI 公司拒绝请求，请检查模型 ID、接入点与上下文长度", "provider_request_invalid")
-        408, 504 -> ApiFailure(504, "AI 服务响应超时，请稍后重试", "provider_timeout")
-        in 300..399 -> ApiFailure(502, "AI 公司返回了重定向，已停止连接，请稍后重试", "provider_redirect_rejected")
-        else -> ApiFailure(502, "AI 服务暂时不可用，请稍后重试", "provider_unavailable")
-    }
+    private class StreamCompleted : RuntimeException(null, null, false, false)
 }

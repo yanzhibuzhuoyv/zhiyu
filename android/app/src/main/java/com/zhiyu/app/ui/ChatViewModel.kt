@@ -7,17 +7,26 @@ import com.zhiyu.app.data.DocumentReader
 import com.zhiyu.app.domain.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class ChatViewModel(private val repository: ChatRepository, private val reader: DocumentReader) : ViewModel() {
     private val mutableState = MutableStateFlow(AppState())
     val state = mutableState.asStateFlow()
     private var connectionCleanup: Deferred<Unit>? = null
     private var profileEdited = false
+    private var operationEpoch = 0L
+    private var activeOperation: Long? = null
 
     init {
         viewModelScope.launch {
@@ -271,6 +280,74 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
     }
     fun send() = sendCurrent(null)
     fun sendVoiceText(value: String) = sendCurrent(ConnectionRules.message(value))
+    fun streamCallText(chatId: String, content: String): kotlinx.coroutines.flow.Flow<String> =
+        kotlinx.coroutines.flow.channelFlow { callText(chatId, content) { send(it) } }.buffer(0)
+    /** The caller owns cancellation for one final recognized utterance. */
+    suspend fun sendCallText(chatId: String, content: String): String = callText(chatId, content, null)
+    private suspend fun callText(chatId: String, content: String, onDelta: (suspend (String) -> Unit)?): String = withContext(Dispatchers.Main.immediate) {
+        val current = mutableState.value
+        check(current.connected && current.selectedId == chatId && current.selected?.id == chatId) { "这段通话已不在当前聊天中" }
+        val text = ConnectionRules.message(content)
+        val token = beginAction("AI 正在输入") ?: throw IllegalStateException("请等当前操作结束后再说")
+        mutableState.update { it.copy(pendingMessage = text, pendingImage = null) }
+        try {
+            connectionCleanup?.await()
+            val result = if (onDelta == null) repository.sendMessage(chatId, text)
+                else repository.sendCallMessage(chatId, text) { delta ->
+                    currentCoroutineContext().ensureActive()
+                    check(activeOperation == token && mutableState.value.selectedId == chatId) { "通话已结束" }
+                    onDelta(delta)
+                }
+            currentCoroutineContext().ensureActive()
+            check(result.first.role == "user" && result.first.content == text && result.second.role == "assistant") {
+                "这轮通话的回复不完整"
+            }
+            publishCallResult(chatId, token, result)
+            result.second.content
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            mutableState.update {
+                if (activeOperation != token || it.selectedId != chatId) it else {
+                    val expired = error is ApiFailure && error.isSessionExpired
+                    it.copy(error = if (expired) "连接已失效，请重新连接后再聊。" else "暂时没能接上这句话，请稍后再试。",
+                        connected = if (expired) false else it.connected, memory = if (expired) MemoryPanelState() else it.memory)
+                }
+            }
+            throw error
+        } finally {
+            finishAction(token)
+            refreshCallHistory(chatId, token)
+        }
+    }
+    private fun publishCallResult(id: String, token: Long, result: Pair<Message, Message>) {
+        mutableState.update {
+            if (activeOperation != token || it.selectedId != id) it else {
+                val combined = ((if (it.viewingOlder) emptyList() else it.messages) + result.first + result.second).distinctBy { row -> row.id }
+                val messages = combined.takeLast(100)
+                val older = it.viewingOlder || it.hasOlder || combined.size > messages.size
+                it.copy(messages = messages, hasOlder = older, nextBefore = if (older) messages.first().id else null,
+                    viewingOlder = false, notice = (repository as? com.zhiyu.app.data.LocalChatRepository)?.lastCalendarNotice)
+            }
+        }
+    }
+    /** An interrupted turn may already have saved originals; never roll them back or refresh another operation. */
+    private suspend fun refreshCallHistory(id: String, token: Long) = withContext(NonCancellable) {
+        if (operationEpoch != token || mutableState.value.selectedId != id) return@withContext
+        try {
+            val page = withTimeoutOrNull(2_000) { repository.history(id) }
+            check(page != null && page.messages.size <= 100 && (!page.hasMore || page.nextBefore != null))
+            mutableState.update {
+                if (operationEpoch != token || it.selectedId != id) it else it.copy(messages = page.messages,
+                    hasOlder = page.hasMore, nextBefore = page.nextBefore, viewingOlder = false,
+                    notice = (repository as? com.zhiyu.app.data.LocalChatRepository)?.lastCallNotice ?: it.notice)
+            }
+        } catch (_: Exception) {
+            mutableState.update {
+                if (operationEpoch != token || it.selectedId != id) it else
+                    it.copy(notice = "这轮对话暂时没能更新，重新打开聊天后再看看。")
+            }
+        }
+    }
     private fun sendCurrent(voiceText: String?) = action("AI 正在输入") {
         val originalDraft = mutableState.value.draft
         val image = if(voiceText!=null) null else mutableState.value.draftImage
@@ -327,30 +404,43 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         mutableState.update { it.copy(documents = it.documents.filterNot { d -> d.id == id }) }
     }
     fun disconnect() {
-        if (mutableState.value.isBusy) return
+        val token = beginAction("退出连接") ?: return
+        val old = mutableState.value
         viewModelScope.launch {
-            val old = mutableState.value
-            mutableState.update { it.copy(busy = "退出连接") }
             var error: String? = null
             try { repository.logout() } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
                 error = "退出未完成，请重试；恋人绑定和聊天会保留"
+            } finally { finishAction(token) }
+            if (operationEpoch == token) {
+                mutableState.value = AppState(restoring = false, binding = old.binding, profile = old.profile, serverUrl = old.serverUrl, providers = old.providers, providerId = old.providerId, model = old.model, error = error)
             }
-            mutableState.value = AppState(restoring = false, binding = old.binding, profile = old.profile, serverUrl = old.serverUrl, providers = old.providers, providerId = old.providerId, model = old.model, error = error)
         }
     }
+    private fun beginAction(label: String): Long? {
+        if (mutableState.value.isBusy || mutableState.value.restoring) return null
+        val token = ++operationEpoch
+        activeOperation = token
+        mutableState.update { it.copy(busy = label, error = null, notice = null) }
+        return token
+    }
+    private fun finishAction(token: Long) {
+        if (activeOperation != token) return
+        activeOperation = null
+        mutableState.update { it.copy(busy = null, pendingMessage = null, pendingImage = null) }
+    }
     private fun action(label: String, block: suspend () -> Unit) {
-        if (mutableState.value.isBusy || mutableState.value.restoring) return
+        val token = beginAction(label) ?: return
         viewModelScope.launch {
-            mutableState.update { it.copy(busy = label, error = null, notice = null) }
             try { connectionCleanup?.await(); block() } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 mutableState.update {
+                    if (activeOperation != token) return@update it
                     val expired = error is ApiFailure && error.isSessionExpired
                     it.copy(error = friendly(error), connected = if (expired) false else it.connected,
                         memory = if (expired) MemoryPanelState() else it.memory)
                 }
-            } finally { mutableState.update { it.copy(busy = null) } }
+            } finally { finishAction(token) }
         }
     }
     private fun friendly(error: Exception): String {

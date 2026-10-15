@@ -189,6 +189,8 @@ import java.time.ZoneId
                     }
                 }
             }
+            if (message.origin == "call_interrupted") Text("话说到一半", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             timestamp?.let { Text(it, Modifier.padding(horizontal = 6.dp, vertical = 4.dp).testTag("message_time_${message.id}"),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }

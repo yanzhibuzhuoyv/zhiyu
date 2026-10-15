@@ -64,6 +64,8 @@ interface ChatRepository {
     suspend fun messageMemory(id: String, messageId: String): MemoryEntry
     suspend fun changeMemory(id: String, messageId: String, change: MemoryChange): MemoryEntry
     suspend fun sendMessage(id: String, content: String): Pair<Message, Message>
+    suspend fun sendCallMessage(id: String, content: String, onDelta: suspend (String) -> Unit): Pair<Message, Message> =
+        sendMessage(id, content).also { onDelta(it.second.content) }
     suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment): Pair<Message, Message> =
         throw IllegalStateException("当前连接不支持发送图片")
     suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment,
