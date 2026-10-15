@@ -35,6 +35,7 @@ import com.zhiyu.app.ui.screens.*
     var typographyOpen by remember { mutableStateOf(false) }
     var mediaLibraryOpen by remember { mutableStateOf(false) }
     var imageServiceOpen by remember { mutableStateOf(false) }
+    var scenePhotosOpen by remember { mutableStateOf(false) }
     var voiceSettingsOpen by remember { mutableStateOf(false) }
     var callOpen by remember { mutableStateOf(false) }
     var planarOpen by remember { mutableStateOf(false) }
@@ -42,6 +43,11 @@ import com.zhiyu.app.ui.screens.*
     val photos = rememberChatPhotoController(state.draftImage, viewModel::draftImage)
     val media = rememberMediaController(state.selectedId, state.connected)
     val ocScope = rememberCoroutineScope()
+    val scenePhotos=remember(appContext,ocScope){ScenePhotoController(com.zhiyu.app.data.remotescene.ScenePhotoManager(appContext),ocScope)}
+    LaunchedEffect(scenePhotosOpen,state.connected,state.selectedId) {
+        scenePhotos.connect(if(scenePhotosOpen&&state.connected)state.selectedId else null)
+    }
+    DisposableEffect(scenePhotos){onDispose{scenePhotos.dispose()}}
     val ocCreator = remember(appContext, ocScope, media) {
         OcCreatorController(appContext, ocScope, media::publishCharacter,
             loadImage = { media.image(it.id, it.sha256) },refreshReference=media::currentReference,
@@ -83,7 +89,7 @@ import com.zhiyu.app.ui.screens.*
     val companionName = state.profile?.name?.takeIf { it.isNotBlank() } ?: providerName
     LaunchedEffect(state.connected, state.restoring) {
         if (!state.connected) { menuOpen = false; libraryOpen = false; revalidate = false; styleOpen = false; appearanceOpen = false; visualOpen = false; careOpen = false; typographyOpen = false; mediaLibraryOpen = false }
-        if (!state.connected) { callOpen=false; planarOpen=false; voiceSettingsOpen=false; imageServiceOpen=false; voice.stop() }
+        if (!state.connected) { callOpen=false; planarOpen=false; voiceSettingsOpen=false; imageServiceOpen=false; scenePhotosOpen=false; voice.stop() }
         if (!state.restoring && !state.connected && !state.canRestoreConnection) ProactiveScheduler.cancel(appContext)
     }
     LaunchedEffect(media.suggestSetup) { if (media.suggestSetup && state.connected) visualOpen = true }
@@ -109,6 +115,8 @@ import com.zhiyu.app.ui.screens.*
                                 modifier=Modifier.testTag("planar_menu"))
                             DropdownMenuItem(text = { Text("照片生成服务") }, leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
                                 onClick = { menuOpen = false; imageServiceOpen = true })
+                            DropdownMenuItem(text = { Text("候选照片") }, leadingIcon = { Icon(Icons.Outlined.Collections, null) },
+                                onClick = { menuOpen=false; scenePhotosOpen=true },modifier=Modifier.testTag("scene_photos_menu"))
                             DropdownMenuItem(text = { Text("恋人的声音") }, leadingIcon = { Icon(Icons.Outlined.RecordVoiceOver,null) },
                                 onClick = { menuOpen=false; voiceSettingsOpen=true })
                             DropdownMenuItem(text = { Text("图片与表情包") }, leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, null) },
@@ -184,6 +192,7 @@ import com.zhiyu.app.ui.screens.*
     )
     if (careOpen && state.connected) CareSettingsDialog(care) { careOpen = false }
     if (imageServiceOpen && state.connected) Image2ServiceDialog(onSaved = media::reload, onDismiss = { imageServiceOpen = false })
+    if(scenePhotosOpen&&state.connected)ScenePhotoDialog(scenePhotos){scenePhotosOpen=false}
     if (voiceSettingsOpen && state.connected) VoiceSettingsDialog(voice) { voiceSettingsOpen=false }
     if(planarOpen&&state.connected)PlanarWorkshopDialog(planar,companionName){planarOpen=false}
     if (callOpen && state.connected) {

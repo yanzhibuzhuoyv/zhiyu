@@ -61,16 +61,16 @@ class RemoteScenePhotosTest {
     }
     @Test fun noVisionPreservesPrivateCandidateWithoutDailyPublication() = runTest {
         val fake = Fake().apply { outcome = LifePhotoReviewStatus.UNAVAILABLE }
-        assertEquals("review_unavailable", run(fake).reason)
+        assertEquals("review_unavailable", run(fake, targets.take(1)).reason)
         assertEquals(1, fake.candidates.size); assertEquals(0, fake.publishes)
-        run(fake); assertEquals(1, fake.imageCalls)
+        run(fake, targets.take(1)); assertEquals(1, fake.imageCalls)
     }
     @Test fun unknownReservationNeverRepaysEvenAfterImageKeyAndModelChange() = runTest {
         val fake = Fake().apply { failure = ApiFailure(504, "secret provider body", "image_request_unknown") }
-        assertEquals("unknown", run(fake).reason)
+        assertEquals("unknown", run(fake, targets.take(1)).reason)
         fake.frozen = RemoteSceneBinding(chat, profile, fake.frozen.packageSha, fake.frozen.original,
             "another-synthetic-key", "gpt-image-2", fake.frozen.connection, fake.frozen.companion, bytes)
-        fake.failure = null; run(fake)
+        fake.failure = null; run(fake, targets.take(1))
         assertEquals(1, fake.imageCalls); assertEquals(1, fake.promptCalls); assertEquals(0, fake.publishes)
     }
     @Test fun authOrBalanceStopsWholeBatchWithOneReservation() = runTest {
@@ -82,9 +82,9 @@ class RemoteScenePhotosTest {
     }
     @Test fun cancelledPaidRequestBecomesUnknownAndNeverRetries() = runTest {
         val fake = Fake().apply { failure = CancellationException("cancel") }
-        try { run(fake); fail() } catch (_: CancellationException) { }
+        try { run(fake, targets.take(1)); fail() } catch (_: CancellationException) { }
         assertEquals("unknown", fake.jobs.values.single().job.state)
-        fake.failure = null; run(fake); assertEquals(1, fake.imageCalls)
+        fake.failure = null; run(fake, targets.take(1)); assertEquals(1, fake.imageCalls)
     }
     @Test fun changedBindingAfterMetadataBlocksImageNetworkAndMarksStale() = runTest {
         val fake = Fake(); fake.afterPrompt = { fake.current = false }
@@ -103,9 +103,9 @@ class RemoteScenePhotosTest {
     }
     @Test fun atMostOneCorrectionUsesNextWorkerAndThenBecomesTerminal() = runTest {
         val fake = Fake().apply { outcome = LifePhotoReviewStatus.REJECTED; correction = "The same OC with exactly one visible sword in the original crop." }
-        assertEquals("correction_pending", run(fake).reason); assertEquals(1, fake.imageCalls)
-        assertEquals("rejected", run(fake).reason); assertEquals(2, fake.imageCalls)
-        run(fake); assertEquals(2, fake.imageCalls); assertEquals(2, fake.jobs.size); assertEquals(0, fake.publishes)
+        assertEquals("correction_pending", run(fake, targets.take(1)).reason); assertEquals(1, fake.imageCalls)
+        assertEquals("rejected", run(fake, targets.take(1)).reason); assertEquals(2, fake.imageCalls)
+        run(fake, targets.take(1)); assertEquals(2, fake.imageCalls); assertEquals(2, fake.jobs.size); assertEquals(0, fake.publishes)
     }
     @Test fun opportunityIdsBindActualTrajectoryAndOriginalButNotCredentials() {
         val a = binding(); val one = targets.first()

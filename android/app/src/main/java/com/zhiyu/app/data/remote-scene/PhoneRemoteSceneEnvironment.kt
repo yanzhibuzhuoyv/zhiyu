@@ -26,6 +26,7 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
     private val prompts = LifePhotoPromptClient(credentials, stillCurrent = ::unchanged)
     private fun jobs() = LocalImageJobStore(app)
     override fun configured() = imageCredentials.configuration() != null
+    override fun hasCandidateCapacity()=candidates.hasCapacity()
 
     override suspend fun freeze(chat: String, target: LocalScenePrefetchTarget, profile: VisualProfile,
         snapshot: OcIdentitySnapshot?): RemoteSceneBinding? = withContext(Dispatchers.IO) {
@@ -88,6 +89,9 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
                     stockTags(chat, target).all { it in item.tags }
             }
     override fun job(requestId: String) = jobs().use { it.get(requestId) }
+    override fun retryFor(sourceId: String) = jobs().use { it.retryFor(sourceId) }
+    override fun retrySource(retryId: String) = jobs().use { it.retrySource(retryId) }
+    override fun reserveRetry(sourceId: String, newJob: LocalGenerationJob) { jobs().use { it.reserveRetry(sourceId, newJob) } }
     override fun reserve(job: LocalGenerationJob) { jobs().use { it.reserve(job) } }
     override fun finish(requestId: String, state: String) { jobs().use { it.finish(requestId, state) } }
     override fun candidate(requestId: String) = candidates.read(requestId)
@@ -106,24 +110,24 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
 
     override suspend fun publish(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget,
         candidate: RemoteSceneCandidate): Boolean = withContext(Dispatchers.IO) {
-        require(candidate.status == LifePhotoReviewStatus.APPROVED && candidate.chat == binding.chat &&
-            candidate.bindingSha == RemoteSceneRules.bindingSha(binding) && candidate.day == target.scene.dayId &&
-            candidate.originalId == binding.original.id && candidate.originalSha == binding.original.sha256 &&
-            candidate.visualVersion == binding.profile.visualVersion && candidate.packageSha == binding.packageSha &&
-            candidate.slot == target.slot.time && candidate.trajectory == LocalDailyRules.revision(target.scene) &&
-            candidate.requestId == RemoteSceneRules.requestId(binding, target, candidate.attempt)) { "生活照复核来源不一致" }
+        require(RemoteSceneRules.currentApproval(binding, candidate) &&
+            RemoteSceneRules.ledgerMatches(this@PhoneRemoteSceneEnvironment, binding, target, candidate)) { "生活照复核来源不一致" }
         val bytes = candidates.bytes(candidate)
         val coroutine = currentCoroutineContext(); coroutine.ensureActive()
-        visual.withCurrentProfile(binding.chat) { profile -> commitSnapshot(binding, target, profile, bytes, coroutine) }
+        visual.withCurrentProfile(binding.chat) { profile -> commitSnapshot(binding, target, profile, candidate, bytes, coroutine) }
     }
 
     private fun commitSnapshot(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget, profile: VisualProfile,
-        bytes: ByteArray, coroutine: CoroutineContext): Boolean = characters.withCurrentSnapshot(binding.chat) { snapshot ->
+        candidate: RemoteSceneCandidate, bytes: ByteArray, coroutine: CoroutineContext): Boolean = characters.withCurrentSnapshot(binding.chat) { snapshot ->
         LocalDailyRepository(app).use { daily -> daily.withCurrentScene(binding.chat, profile.visualVersion, Instant.now()) {
             coroutine.ensureActive()
             if (!current(binding, target, profile, snapshot, daily)) false else
                 pauses.withDeliveryAllowed(binding.chat, checkNotNull(binding.contactRevision)) {
-                    ingest(binding, target, profile, bytes)
+                    candidates.withCurrentCandidate(candidate) {
+                        coroutine.ensureActive()
+                        if (!RemoteSceneRules.ledgerMatches(this, binding, target, candidate)) false else
+                            alreadyPrepared(binding.chat, target, profile) || ingest(binding, target, profile, bytes)
+                    }
                 }
         } }
     }
