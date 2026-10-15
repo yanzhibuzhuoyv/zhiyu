@@ -62,7 +62,7 @@ class PlanarDraft(
         featureVisibility: PlanarFeatureVisibility = this.featureVisibility,
     ) = PlanarDraft(anchors, parts, subjectBrush, suggestionsConfirmed, subjectMask, featureVisibility)
 
-    fun validate(width: Int, height: Int) {
+    fun validate(width: Int, height: Int, allowIncompleteParts: Boolean = false) {
         require(width in 1..MAX_SIDE && height in 1..MAX_SIDE) { "图片最长边不得超过1536像素" }
         point(anchors.head, width, height)
         point(anchors.neck, width, height)
@@ -78,7 +78,7 @@ class PlanarDraft(
             require(part.z.isFinite() && part.z in -1000.0..90.0) { "附件层级超出范围" }
             require(part.strength.isFinite() && part.strength in 0.0..1.0) { "随动强度超出范围" }
             point(part.pivot, width, height)
-            if (part.baseMaskPng == null) require(part.polygon.size in 3..256) { "请先完成附件多边形" }
+            if (part.baseMaskPng == null) require(part.polygon.size in (if(allowIncompleteParts)0 else 3)..256) { "请先完成附件多边形" }
             else require(part.polygon.size <= 256) { "多边形最多256点" }
             part.polygon.forEach { point(it, width, height) }
             part.baseMaskPng?.let {

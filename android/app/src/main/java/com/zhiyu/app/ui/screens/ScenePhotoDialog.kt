@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -17,6 +16,7 @@ import com.zhiyu.app.ui.ScenePhotoAction
 import com.zhiyu.app.ui.ScenePhotoConfirmation
 import com.zhiyu.app.ui.ScenePhotoController
 import com.zhiyu.app.ui.scenePhotoStatus
+import com.zhiyu.app.ui.rememberPreviewPresentation
 import java.time.LocalDate
 
 @Composable fun ScenePhotoDialog(controller: ScenePhotoController, close: () -> Unit) {
@@ -35,7 +35,7 @@ import java.time.LocalDate
                 controller.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("scene_photo_error")) }
                 val bitmap = controller.preview
                 if (bitmap != null) {
-                    Image(bitmap.asImageBitmap(), "所选候选照片", contentScale = ContentScale.Fit,
+                    Image(rememberPreviewPresentation(bitmap), "所选候选照片", contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxWidth().height(180.dp).testTag("scene_photo_image"))
                     TextButton(controller::closePreview, enabled = !controller.busy) { Text("收起预览") }
                 }

@@ -11,7 +11,7 @@ object LocalGenerationRules {
     private val unresolved = setOf("reserved", "running", "unknown")
     fun validate(job: LocalGenerationJob): LocalGenerationJob {
         MediaRules.path(job.requestId); MediaRules.path(job.chatId)
-        require(job.kind in setOf("oc", "scene") && job.state in states && job.expectedVersion >= 0)
+        require(job.kind in setOf("oc", "scene", "expansion") && job.state in states && job.expectedVersion >= 0)
         require(Regex("[a-f0-9]{64}").matches(job.promptHash))
         require(Regex("\\d{4}-\\d{2}-\\d{2}").matches(job.dayId))
         try { LocalDate.parse(job.dayId) } catch (error: Exception) {
@@ -29,6 +29,6 @@ object LocalGenerationRules {
     fun canStart(jobs: List<LocalGenerationJob>, candidate: LocalGenerationJob): Boolean {
         validate(candidate); jobs.forEach(::validate)
         if (jobs.any { it.requestId == candidate.requestId }) return false
-        return candidate.kind == "scene" || quota(jobs.filter { it.chatId == candidate.chatId }, true).remaining > 0
+        return candidate.kind != "oc" || quota(jobs.filter { it.chatId == candidate.chatId }, true).remaining > 0
     }
 }

@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.zhiyu.app.data.*
 import com.zhiyu.app.domain.*
+import com.zhiyu.app.data.ocexpansion.OcFramingStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -23,6 +24,7 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
     private val characters = OcCreatorStore(app)
     private val pauses = ContactPauseStore(app)
     private val candidates = RemoteSceneCandidateStore(app)
+    private val framing = OcFramingStore(app)
     private val prompts = LifePhotoPromptClient(credentials, stillCurrent = ::unchanged)
     private fun jobs() = LocalImageJobStore(app)
     override fun configured() = imageCredentials.configuration() != null
@@ -35,17 +37,20 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
         val companion = credentials.readBinding() ?: return@withContext null
         val contact = pauses.read(chat); if (contact.paused) return@withContext null
         if (connection.providerId != companion.providerId || connection.model != companion.model) return@withContext null
-        val current = visual.profile(chat)
-        if (!sameProfile(current, profile)) return@withContext null
-        val saved = relevant(characters.read(chat), profile)
-        if (saved?.packageSha != snapshot?.packageSha) return@withContext null
-        val original = source(profile, snapshot) ?: return@withContext null
-        val binding = RemoteSceneBinding(chat, profile, snapshot?.packageSha, original, configuration.key,
-            configuration.model, connection, companion, media.download(original.id, original.sha256), contact.revision, target)
+        val binding = visual.withCurrentProfile(chat) { current ->
+            if (!sameProfile(current, profile)) return@withCurrentProfile null
+            val saved = relevant(characters.read(chat), profile)
+            if (saved?.packageSha != snapshot?.packageSha) return@withCurrentProfile null
+            val policy = framing.active(chat, profile)
+            val original = source(profile, snapshot, policy) ?: return@withCurrentProfile null
+            RemoteSceneBinding(chat, profile, snapshot?.packageSha, original, configuration.key,
+                configuration.model, connection, companion, media.download(original.id, original.sha256), contact.revision, target, policy)
+        } ?: return@withContext null
         if (unchanged(binding, target)) binding else null
     }
 
-    private fun source(profile: VisualProfile, snapshot: OcIdentitySnapshot?): OcAssetRef? {
+    private fun source(profile: VisualProfile, snapshot: OcIdentitySnapshot?, policy: OcFramingPolicy?): OcAssetRef? {
+        if (policy != null) return OcFramingRules.reference(policy)
         if (snapshot != null) return snapshot.identity.photoSource
         val id = profile.referenceId ?: return null
         val item = media.details(id)
@@ -66,7 +71,9 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
         if (!sameProfile(profile, binding.profile) || relevant(snapshot, profile)?.packageSha != binding.packageSha ||
             imageCredentials.configuration() != RemoteImageConfiguration(binding.imageKey, binding.imageModel) ||
             credentials.read() != binding.connection || credentials.readBinding() != binding.companion) return false
-        val original = source(profile, relevant(snapshot, profile)) ?: return false
+        val policy = framing.active(binding.chat, profile)
+        if (policy != binding.framingPolicy) return false
+        val original = source(profile, relevant(snapshot, profile), policy) ?: return false
         if (original != binding.original) return false
         val instant = Instant.now()
         if (!daily.matches(binding.chat, target.scene, instant)) return false
@@ -87,6 +94,7 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
             .map { media.details(it.id) }.any { item ->
                 item.attachment.dayId == target.scene.dayId && item.attachment.visualVersion == profile.visualVersion &&
                     stockTags(chat, target).all { it in item.tags }
+                    && OcFramingStockRules.permits(framing.active(chat,profile),item.tags.toSet(),"contains_person" in item.tags)
             }
     override fun job(requestId: String) = jobs().use { it.get(requestId) }
     override fun retryFor(sourceId: String) = jobs().use { it.retryFor(sourceId) }
@@ -133,7 +141,8 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
     }
     private fun ingest(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget, profile: VisualProfile, bytes: ByteArray): Boolean {
         val tags = target.slot.tags + stockTags(binding.chat, target) +
-            if (LocalDayStockRules.view(target.index) != "landscape") listOf("contains_person") else emptyList()
+            (if (LocalDayStockRules.view(target.index) != "landscape") listOf("contains_person") else emptyList()) +
+            (binding.framingPolicy?.let(OcFramingStockRules::tags) ?: emptyList())
         media.ingest("image", bytes, "云服务生成并视觉复核的生活照", profile.visualVersion, target.scene.dayId,
             "${target.slot.activity} · 虚构角色生活照（自动视觉复核可能出错）", tags.distinct())
         return true

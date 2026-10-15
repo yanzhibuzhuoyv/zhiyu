@@ -7,7 +7,8 @@ import com.zhiyu.app.domain.*
 class RemoteSceneBinding(val chat: String, val profile: VisualProfile, val packageSha: String?,
     val original: OcAssetRef, val imageKey: String, val imageModel: String,
     val connection: SavedConnection, val companion: CompanionBinding, originalBytes: ByteArray,
-    val contactRevision: Int? = null, val target: LocalScenePrefetchTarget? = null) {
+    val contactRevision: Int? = null, val target: LocalScenePrefetchTarget? = null,
+    val framingPolicy: OcFramingPolicy? = null) {
     private val pixels = originalBytes.copyOf()
     init {
         MediaRules.path(chat); MediaRules.path(original.id); ChatPhotoRules.digest(original.sha256)
@@ -16,6 +17,11 @@ class RemoteSceneBinding(val chat: String, val profile: VisualProfile, val packa
             connection.providerId == companion.providerId && connection.model == companion.model)
         require(packageSha == null || Regex("[a-f0-9]{64}").matches(packageSha))
         Image2Protocol.checkKey(imageKey); require(imageModel in Image2Protocol.MODELS)
+        framingPolicy?.let {
+            OcFramingRules.check(it)
+            require(it.visualVersion == profile.visualVersion && it.profileReferenceId == profile.referenceId &&
+                OcFramingRules.reference(it) == original) { "生活照取景参考已变化" }
+        }
     }
     val originalBytes: ByteArray get() = pixels.copyOf()
     override fun toString() = "RemoteSceneBinding(chat=$chat, visualVersion=${profile.visualVersion})"
@@ -72,14 +78,16 @@ internal object RemoteSceneRules {
         require(attempt in 0..1)
         return hash(listOf("remote-life-v1", binding.chat, binding.profile.visualVersion.toString(),
             binding.original.id, binding.original.sha256, binding.packageSha.orEmpty(),
-            LocalDailyRules.revision(target.scene), target.index.toString(), target.slot.time, attempt.toString())).take(32)
+            LocalDailyRules.revision(target.scene), target.index.toString(), target.slot.time, attempt.toString()) + policyScope(binding)).take(32)
     }
     fun bindingSha(binding: RemoteSceneBinding): String = hash(listOf(binding.chat, binding.profile.mode,
         binding.profile.description, binding.profile.gender, binding.profile.hair, binding.profile.visualVersion.toString(),
         binding.profile.referenceId.orEmpty(), binding.profile.referenceUrl.orEmpty(), binding.packageSha.orEmpty(),
         binding.original.id, binding.original.sha256, binding.original.visualVersion.toString(),
         binding.imageKey, binding.imageModel, binding.connection.serverUrl, binding.connection.providerId,
-        binding.connection.apiKey, binding.connection.model, binding.companion.toString(), binding.contactRevision?.toString().orEmpty()))
+        binding.connection.apiKey, binding.connection.model, binding.companion.toString(), binding.contactRevision?.toString().orEmpty()) + policyScope(binding))
+    private fun policyScope(binding: RemoteSceneBinding): List<String> =
+        binding.framingPolicy?.let { listOf("framing-v1", OcFramingRules.hash(it)) } ?: emptyList()
 
     fun normalAttempt(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget, id: String): Int? =
         (0..1).firstOrNull { requestId(binding, target, it) == id }

@@ -1,6 +1,7 @@
 package com.zhiyu.app.data.planar
 
 import android.graphics.Bitmap
+import android.os.SystemClock
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -68,7 +69,16 @@ class PlanarPreviewLifecycleNativeTest {
         compose.waitUntil(5_000) { count.get() > 0 || failure.get() != null }
         assertNull(failure.get())
         compose.waitForIdle()
-        Thread.sleep(100)
+        // GLSurfaceView's startup/resize draws and main-thread callbacks are outside Compose's
+        // idling clock. Require a bounded quiet window before checking that no idle loop exists;
+        // a genuine 33ms repeating loop cannot satisfy this condition.
+        var observed=count.get()
+        var quietSince=SystemClock.uptimeMillis()
+        compose.waitUntil(5_000) {
+            val latest=count.get()
+            if(latest!=observed){observed=latest;quietSince=SystemClock.uptimeMillis()}
+            SystemClock.uptimeMillis()-quietSince>=350
+        }
         val static = count.get()
         Thread.sleep(180)
         assertEquals("Static preview must not run an idle loop", static, count.get())

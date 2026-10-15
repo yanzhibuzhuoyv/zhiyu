@@ -65,7 +65,7 @@ fun PlanarPreview(
                 val source = document.sourcePng
                 BitmapFactory.decodeByteArray(source, 0, source.size)
             }
-            DisposableEffect(bitmap) { onDispose { bitmap?.recycle() } }
+            // Display lists can outlive composition. This bounded, display-only image is GC owned.
             if (bitmap != null) Image(bitmap.asImageBitmap(), document.name, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
             Text("动态预览暂时不可用，已保留原图。", Modifier.align(Alignment.BottomCenter))
         }

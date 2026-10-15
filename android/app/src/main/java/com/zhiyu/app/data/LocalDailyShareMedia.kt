@@ -2,6 +2,7 @@ package com.zhiyu.app.data
 
 import android.content.Context
 import com.zhiyu.app.domain.*
+import com.zhiyu.app.data.ocexpansion.OcFramingStore
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -12,6 +13,7 @@ class LocalDailyShareMedia(context: Context, private val now: () -> Instant = In
     private val app = context.applicationContext
     private val visual = LocalVisualRepository(app)
     private val assets = LocalMediaStore(app)
+    private val framing = OcFramingStore(app)
 
     fun scene(chat: String, at: Instant = now()): LocalDailyScene {
         return visual.withCurrentProfile(chat) { profile ->
@@ -82,6 +84,7 @@ class LocalDailyShareMedia(context: Context, private val now: () -> Instant = In
         if (item.purpose != "library" || asset.kind != "image" || asset.dayId != event.dayId ||
             asset.visualVersion != event.visualVersion || "daily_stock" !in tags || "decoded_final" !in tags ||
             "local_placeholder" in tags) return false
+        if (!OcFramingStockRules.permits(framing.active(chat, profile),tags,"contains_person" in tags)) return false
         if (item.tags.singleOrNull { it.startsWith("slot_") } != "slot_${event.slot.time.replace(":", "")}" ||
             item.tags.singleOrNull { it.startsWith("trajectory_") } != "trajectory_${event.revision.take(24)}") return false
         if (!tags.containsAll(event.slot.tags)) return false

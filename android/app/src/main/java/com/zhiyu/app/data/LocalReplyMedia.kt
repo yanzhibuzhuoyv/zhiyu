@@ -2,6 +2,7 @@ package com.zhiyu.app.data
 
 import android.content.Context
 import com.zhiyu.app.domain.*
+import com.zhiyu.app.data.ocexpansion.OcFramingStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -14,9 +15,11 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     private val appContext = context.applicationContext
     private val assets = LocalMediaStore(appContext)
     private val visual = LocalVisualRepository(appContext)
+    private val framing = OcFramingStore(appContext)
     suspend fun prepare(id: String, profile: CompanionProfile?, recent: List<Message>): LocalMediaPlan {
         withContext(Dispatchers.IO) { NativeSeedImporter(appContext).install() }
-        val version = visual.profile(id).visualVersion
+        val visualProfile = visual.profile(id)
+        val version = visualProfile.visualVersion
         val daily = withContext(Dispatchers.IO) { LocalDailyRepository(appContext).use { it.scene(id, version, now()) } }
         val day = daily.dayId
         val dailyPrompt = LocalDailyRepository(appContext).use { it.prompt(daily) }
@@ -34,7 +37,7 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
                 .filter { it.sha256 !in recentSha }.map { assets.details(it.id) }
                 .filter { LocalDayStockRules.available(it.attachment, it.tags.toSet(), day,
                     now().atZone(java.time.ZoneId.of(LocalDailyRules.TIMEZONE)).toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),version) }
-                .filter { stockEligible(id, it, daily) }
+                .filter { stockEligible(id, it, daily, visualProfile) }
         }
         val chosen = available.shuffled(Random(day.hashCode() xor recent.size)).sortedByDescending { item ->
             LocalDailyRules.mediaAffinity(item.attachment.kind, item.tags.toSet(), daily.current)
@@ -69,7 +72,7 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
             val selected = reply.attachments.mapNotNull { asset ->
                 try { assets.download(asset.id,asset.sha256); assets.details(asset.id) }
                 catch (_: IllegalArgumentException) { null }
-            }.filter { stockEligible(id, it, scene) }
+            }.filter { stockEligible(id, it, scene, current) }
             val people = selected.filter { "contains_person" in it.tags }.map { it.attachment.id }.toSet()
             val dayStock = selected.filter { "daily_stock" in it.tags }.map { it.attachment.id }.toSet()
             val version = current.visualVersion
@@ -81,8 +84,10 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     }
 
     /** Legacy reviewed stock keeps its existing behavior; new remote stock proves its actual scene ownership. */
-    private fun stockEligible(chat: String, item: LocalMediaDetails, scene: LocalDailyScene): Boolean {
+    private fun stockEligible(chat: String, item: LocalMediaDetails, scene: LocalDailyScene, profile: VisualProfile): Boolean {
+        if (item.purpose != "library") return false
         val tags = item.tags.toSet()
+        if (!OcFramingStockRules.permits(framing.active(chat, profile),tags,item.attachment.kind == "image" && "contains_person" in tags)) return false
         if ("daily_stock" !in tags) return true
         if ("local_placeholder" in tags) return false
         if ("remote_generated" !in tags) return true

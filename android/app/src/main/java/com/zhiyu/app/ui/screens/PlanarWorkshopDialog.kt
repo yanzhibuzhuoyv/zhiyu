@@ -32,6 +32,7 @@ internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
     var gesture by remember {mutableStateOf(false)}
     var pickerBinding by remember {mutableStateOf<Long?>(null)}
     var exportBinding by remember {mutableStateOf<Long?>(null)}
+    var discardConfirmation by remember {mutableStateOf(false)}
     val picker=rememberLauncherForActivityResult(PlanarDocumentPicker()){uri->
         val token=pickerBinding;pickerBinding=null;if(uri!=null&&token!=null)controller.import(uri,token)}
     val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")){uri->
@@ -105,6 +106,9 @@ internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
                     }
                     controller.error?.let {Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("planar_error"))}
                     controller.notice?.let {Text(it,style=MaterialTheme.typography.bodySmall)}
+                    Text("关闭会暂存当前标注；下次打开可继续。撤销记录仅保留在本次编辑中。",style=MaterialTheme.typography.bodySmall)
+                    TextButton({discardConfirmation=true},enabled=!controller.busy&&!gesture&&controller.dirty,
+                        modifier=Modifier.testTag("planar_discard")){Text("放弃未保存的修改")}
                     OutlinedButton({pickerBinding=controller.bindingRevision;picker.launch(arrayOf("application/zip","application/octet-stream"))},enabled=!controller.busy&&!gesture){Text("打开角色包")}
                     Text("角色包用于通话动画；日常照片使用恋人外观中确认的图片。",style=MaterialTheme.typography.bodySmall)
                     TextButton({exportBinding=controller.bindingRevision;export.launch("${name.take(40)}.zyrig.zip")},enabled=!controller.busy&&!controller.dirty&&controller.active!=null&&!gesture){Text("导出角色包")}
@@ -114,4 +118,8 @@ internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
             }
         }
     }
+    if(discardConfirmation)AlertDialog(onDismissRequest={discardConfirmation=false},title={Text("放弃这些修改？")},
+        text={Text("仅删除未保存的标注草稿，已保存的动态形象、恋人原图和背景都会保留。")},
+        confirmButton={TextButton({discardConfirmation=false;controller.discardDraft()},modifier=Modifier.testTag("planar_discard_confirm")){Text("放弃修改")}},
+        dismissButton={TextButton({discardConfirmation=false}){Text("继续编辑")}})
 }

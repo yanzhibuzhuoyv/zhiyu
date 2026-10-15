@@ -16,6 +16,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.zhiyu.app.domain.AppearanceTarget
 import com.zhiyu.app.domain.OcMotion
 import com.zhiyu.app.notifications.ProactiveScheduler
@@ -36,9 +39,10 @@ import com.zhiyu.app.ui.screens.*
     var mediaLibraryOpen by remember { mutableStateOf(false) }
     var imageServiceOpen by remember { mutableStateOf(false) }
     var scenePhotosOpen by remember { mutableStateOf(false) }
+    var expansionOpen by remember { mutableStateOf(false) }
     var voiceSettingsOpen by remember { mutableStateOf(false) }
     var callOpen by remember { mutableStateOf(false) }
-    var planarOpen by remember { mutableStateOf(false) }
+    var planarOpen by rememberSaveable { mutableStateOf(false) }
     val voice = rememberVoiceController()
     val photos = rememberChatPhotoController(state.draftImage, viewModel::draftImage)
     val media = rememberMediaController(state.selectedId, state.connected)
@@ -48,6 +52,12 @@ import com.zhiyu.app.ui.screens.*
         scenePhotos.connect(if(scenePhotosOpen&&state.connected)state.selectedId else null)
     }
     DisposableEffect(scenePhotos){onDispose{scenePhotos.dispose()}}
+    val expansion=remember(appContext,ocScope){OcExpansionController(com.zhiyu.app.data.ocexpansion.PhoneOcExpansionManager(appContext),ocScope)}
+    LaunchedEffect(expansionOpen,state.connected,state.selectedId,media.profile?.referenceId,media.profile?.visualVersion) {
+        expansion.connect(null)
+        expansion.connect(if(expansionOpen&&state.connected)state.selectedId else null)
+    }
+    DisposableEffect(expansion){onDispose{expansion.dispose()}}
     val ocCreator = remember(appContext, ocScope, media) {
         OcCreatorController(appContext, ocScope, media::publishCharacter,
             loadImage = { media.image(it.id, it.sha256) },refreshReference=media::currentReference,
@@ -59,11 +69,18 @@ import com.zhiyu.app.ui.screens.*
         it.reference?.visualVersion==media.profile?.visualVersion}
     val originalPhoto=currentCallIdentity?.photoSource
     val planarBinding=if(state.connected&&state.selectedId!=null&&originalPhoto!=null)"${state.selectedId}:${originalPhoto.sha256}"else null
-    LaunchedEffect(planarBinding) {planar.connect(planarBinding)}
+    val planarRecoveryBinding=planarBinding?.let {"$it:${currentCallIdentity?.reference?.id}:${media.profile?.visualVersion}:${currentCallIdentity?.revision}"}
+    LaunchedEffect(planarBinding,planarRecoveryBinding) {planar.connect(planarBinding,planarRecoveryBinding)}
     LaunchedEffect(planarOpen,planar.busy,planarBinding) {
         if(planarOpen&&!planar.busy&&planar.source==null&&planar.error==null)planar.open {currentCallIdentity?.let {ocCreator.source(it)}}
     }
     DisposableEffect(planar){onDispose {planar.dispose()}}
+    val planarLifecycle=LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(planar,planarLifecycle) {
+        val observer=LifecycleEventObserver{_,event->if(event==Lifecycle.Event.ON_STOP)planar.checkpoint()}
+        planarLifecycle.addObserver(observer)
+        onDispose{planarLifecycle.removeObserver(observer)}
+    }
     LaunchedEffect(state.selectedId, state.connected, media.profile?.referenceId, media.profile?.visualVersion) {
         val reference = try { if (state.connected) media.currentReference() else null }
         catch (failure: Exception) {
@@ -89,7 +106,8 @@ import com.zhiyu.app.ui.screens.*
     val companionName = state.profile?.name?.takeIf { it.isNotBlank() } ?: providerName
     LaunchedEffect(state.connected, state.restoring) {
         if (!state.connected) { menuOpen = false; libraryOpen = false; revalidate = false; styleOpen = false; appearanceOpen = false; visualOpen = false; careOpen = false; typographyOpen = false; mediaLibraryOpen = false }
-        if (!state.connected) { callOpen=false; planarOpen=false; voiceSettingsOpen=false; imageServiceOpen=false; scenePhotosOpen=false; voice.stop() }
+        if (!state.connected) { callOpen=false; voiceSettingsOpen=false; imageServiceOpen=false; scenePhotosOpen=false; expansionOpen=false; voice.stop() }
+        if (!state.connected&&!state.restoring)planarOpen=false
         if (!state.restoring && !state.connected && !state.canRestoreConnection) ProactiveScheduler.cancel(appContext)
     }
     LaunchedEffect(media.suggestSetup) { if (media.suggestSetup && state.connected) visualOpen = true }
@@ -117,6 +135,8 @@ import com.zhiyu.app.ui.screens.*
                                 onClick = { menuOpen = false; imageServiceOpen = true })
                             DropdownMenuItem(text = { Text("候选照片") }, leadingIcon = { Icon(Icons.Outlined.Collections, null) },
                                 onClick = { menuOpen=false; scenePhotosOpen=true },modifier=Modifier.testTag("scene_photos_menu"))
+                            DropdownMenuItem(text={Text("OC 取景与补全")},leadingIcon={Icon(Icons.Outlined.AutoAwesome,null)},
+                                onClick={menuOpen=false;expansionOpen=true},modifier=Modifier.testTag("oc_expansion_menu"))
                             DropdownMenuItem(text = { Text("恋人的声音") }, leadingIcon = { Icon(Icons.Outlined.RecordVoiceOver,null) },
                                 onClick = { menuOpen=false; voiceSettingsOpen=true })
                             DropdownMenuItem(text = { Text("图片与表情包") }, leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, null) },
@@ -193,6 +213,7 @@ import com.zhiyu.app.ui.screens.*
     if (careOpen && state.connected) CareSettingsDialog(care) { careOpen = false }
     if (imageServiceOpen && state.connected) Image2ServiceDialog(onSaved = media::reload, onDismiss = { imageServiceOpen = false })
     if(scenePhotosOpen&&state.connected)ScenePhotoDialog(scenePhotos){scenePhotosOpen=false}
+    if(expansionOpen&&state.connected)OcExpansionDialog(expansion){expansionOpen=false}
     if (voiceSettingsOpen && state.connected) VoiceSettingsDialog(voice) { voiceSettingsOpen=false }
     if(planarOpen&&state.connected)PlanarWorkshopDialog(planar,companionName){planarOpen=false}
     if (callOpen && state.connected) {

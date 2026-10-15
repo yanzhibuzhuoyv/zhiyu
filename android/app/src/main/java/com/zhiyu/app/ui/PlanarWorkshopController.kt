@@ -10,6 +10,7 @@ import com.zhiyu.app.data.ownedOcBitmap
 import com.zhiyu.app.domain.planar.*
 import kotlinx.coroutines.*
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import kotlin.math.roundToInt
 
@@ -19,7 +20,14 @@ import kotlin.math.roundToInt
     private val contractJson=app.assets.open("planar/contract.json").bufferedReader().use {it.readText()}
     private val reader=PlanarPackageReader(contractJson)
     private var store:PlanarPackageStore?=null
+    private var draftStore:PlanarDraftStore?=null
     private var key:String?=null
+    private var recoveryKey:String?=null
+    private var parentSha:String?=null
+    private var sourcePng:ByteArray?=null
+    private var checkpointJob:Deferred<Unit>?=null
+    private var journalRevision=0L
+    private var disposed=false
     private var epoch=0L
     private var job:Job?=null
     private var history:PlanarEditHistory<PlanarDraft>?=null
@@ -35,20 +43,48 @@ import kotlin.math.roundToInt
     val canRedo get()=history?.canRedo==true
     val bindingRevision get()=epoch
     val previewDocument:PlanarDocument? get()=if(fixedBackground)active else null
+    fun checkpoint() {persist(immediate=true)}
+    suspend fun awaitCheckpoint() {checkpointJob?.await()}
+    fun discardDraft() {
+        if(busy)return
+        val target=draftStore?:return
+        task {
+            journalRevision=PlanarDraftPersistence.clear(target);checkpointJob=null
+            source?.recycle();source=null;sourcePng=null;draft=null;history=null;dirty=false
+            notice="未保存的修改已放弃，已保存形象仍保留。"
+        }
+    }
     fun forBinding(binding:String?):PlanarDocument? = if(binding!=null&&binding==key)previewDocument else null
     private fun adopt(document:PlanarDocument?) {fixedBackground=document?.let(PlanarCallReadiness::fixedBackground)==true;active=document}
-    fun connect(binding:String?) {
-        if(binding==key)return
-        epoch++;job?.cancel();key=binding;store=null;adopt(null);source?.recycle();source=null;draft=null;history=null;busy=false;dirty=false;error=null
+    fun connect(binding:String?,recoveryBinding:String?=binding) {
+        if(disposed||(binding==key&&recoveryBinding==recoveryKey))return
+        checkpoint()
+        epoch++;job?.cancel();key=binding;recoveryKey=recoveryBinding;store=null;draftStore=null;parentSha=null
+        adopt(null);source?.recycle();source=null;sourcePng=null;draft=null;history=null;busy=false;dirty=false;error=null;notice=null
         if(binding==null)return
-        val namespace=MessageDigest.getInstance("SHA-256").digest(binding.toByteArray()).joinToString(""){"%02x".format(it)}
-        val target=PlanarPackageStore(File(app.filesDir,"planar-v1/$namespace"),contractJson);store=target
-        task {adopt(withContext(Dispatchers.IO){target.loadActive()})
+        require(!recoveryBinding.isNullOrBlank()){"形象恢复身份无效"}
+        // Android may expose /data/user/0 through /data/data. Resolve only the trusted app root,
+        // then append owned children so a symlink inside planar-v1 is still rejected by the draft store.
+        val root=File(app.filesDir.canonicalFile,"planar-v1/${sha(binding.toByteArray())}")
+        val target=PlanarPackageStore(root,contractJson);store=target;draftStore=PlanarDraftStore(root)
+        journalRevision=PlanarDraftPersistence.revision(draftStore!!)
+        task {val saved=withContext(Dispatchers.IO){target.loadActive() to target.activeIdentity()}
+            adopt(saved.first);parentSha=saved.second
             if(active!=null&&!fixedBackground)notice="旧角色包仍可编辑，请确认后保存，通话会保留静止背景。"}
     }
     fun open(loadSource:suspend()->Bitmap?) {
         if(source!=null||busy||key==null)return
         task {
+            val target=draftStore?:return@task
+            var restoreFailed=false
+            try {PlanarDraftPersistence.awaitPending(target)}
+            catch(failure:Exception){if(failure is CancellationException)throw failure
+                restoreFailed=true;error="最近一次暂存没有完成，正在尝试恢复上次保存的修改。"}
+            val saved=try {PlanarDraftPersistence.load(target,sha(checkNotNull(recoveryKey).toByteArray()),parentSha)}
+            catch(failure:Exception){if(failure is CancellationException)throw failure
+                restoreFailed=true;error="暂存修改无法恢复，已保存形象仍保留。请重新调整后保存。";null}
+            if(saved!=null&&restore(saved))return@task
+            if(saved!=null){restoreFailed=true;error="暂存修改无法恢复，已保存形象仍保留。请重新调整后保存。"}
             val document=active
             var owned=if(document!=null)ownedOcBitmap {checkNotNull(BitmapFactory.decodeByteArray(document.sourcePng,0,document.sourcePng.size))}
                 else checkNotNull(loadSource()){"请先导入或生成恋人的图片"}
@@ -58,8 +94,10 @@ import kotlin.math.roundToInt
                 val initial=if(document!=null)PlanarDraftCodec.decode(document.definitionJson,owned.width,owned.height)
                     else PlanarDraft.suggest(owned.width,owned.height)
                 val edits=PlanarEditHistory(initial,PlanarDraftCodec::measure)
+                sourcePng=withContext(Dispatchers.Default){png(owned)}
                 source=owned;history=edits;draft=initial;dirty=document==null;adopted=true
                 notice="建议位置可自行调整；确认后保存，用于通话。"
+                if(dirty&&!restoreFailed)persist()
             } finally {if(!adopted)owned.recycle()}
         }
     }
@@ -72,11 +110,11 @@ import kotlin.math.roundToInt
     }
     fun edit(next:PlanarDraft) {
         if(busy)return
-        try {if(history?.update(next)==true){draft=history!!.value;dirty=true;notice="修改未保存";error=null}}
+        try {if(history?.update(next)==true){draft=history!!.value;dirty=true;notice="修改会自动暂存，确认后保存用于通话";error=null;persist()}}
         catch(failure:IllegalArgumentException){error=failure.message?:"这次修改太大，请缩小范围"}
     }
-    fun undo(){if(!busy&&history?.undo()==true){draft=history!!.value;dirty=true;error=null}}
-    fun redo(){if(!busy&&history?.redo()==true){draft=history!!.value;dirty=true;error=null}}
+    fun undo(){if(!busy&&history?.undo()==true){draft=history!!.value;dirty=true;error=null;persist()}}
+    fun redo(){if(!busy&&history?.redo()==true){draft=history!!.value;dirty=true;error=null;persist()}}
     fun import(uri:Uri,expectedBinding:Long=epoch) {
         if(expectedBinding!=epoch){error="形象已更新，请重新选择角色包";return}
         if(busy||key==null)return
@@ -90,8 +128,8 @@ import kotlin.math.roundToInt
             try {
                 val initial=PlanarDraftCodec.decode(document.definitionJson,bitmap.width,bitmap.height)
                 val edits=PlanarEditHistory(initial,PlanarDraftCodec::measure)
-                source?.recycle();source=bitmap;draft=initial;history=edits;adopted=true
-                dirty=true;notice="已打开角色包，请确认后保存。"
+                source?.recycle();source=bitmap;sourcePng=document.sourcePng;draft=initial;history=edits;adopted=true
+                dirty=true;notice="已打开角色包，请确认后保存。";persist()
             } finally {if(!adopted)bitmap.recycle()}
         }
     }
@@ -103,7 +141,9 @@ import kotlin.math.roundToInt
             try {
                 val document=withContext(Dispatchers.Default){PlanarPhotoBuilder().build(owned,current.copy(suggestionsConfirmed=true),name,reader.contract)}
                 val saved=withContext(Dispatchers.IO){val ctx=currentCoroutineContext();target.save(document){ctx.ensureActive()}}
-                adopt(saved);dirty=false;notice="形象已保存，下次通话会使用这个角色。"
+                adopt(saved);parentSha=withContext(Dispatchers.IO){target.activeIdentity()};dirty=false
+                draftStore?.let {journalRevision=PlanarDraftPersistence.clear(it)};checkpointJob=null
+                notice="形象已保存，下次通话会使用这个角色。"
             } finally {owned.recycle()}
         }
     }
@@ -128,6 +168,36 @@ import kotlin.math.roundToInt
             finally {if(epoch==stamp)busy=false}
         }
     }
-    fun closeEditor(){if(!busy){source?.recycle();source=null;draft=null;history=null;dirty=false}}
-    fun dispose(){epoch++;job?.cancel();source?.recycle();source=null;active=null}
+    private fun persist(immediate:Boolean=false) {
+        if(disposed||!dirty)return
+        val target=draftStore?:return;val current=draft?:return;val photo=source?:return
+        val bytes=sourcePng?:return;val binding=recoveryKey?:return;val stamp=epoch
+        val pending=PlanarDraftPersistence.submit(target,journalRevision,sha(binding.toByteArray()),parentSha,photo.width,photo.height,bytes,current,immediate)
+        checkpointJob=pending
+        pending.invokeOnCompletion {failure->if(failure!=null&&failure !is CancellationException)scope.launch {
+            if(epoch==stamp&&!disposed)error="修改还在当前页面，暂存没有完成。请释放空间后重试，关闭前请保存。"
+        }}
+    }
+    private suspend fun restore(saved:PlanarDraftCheckpoint):Boolean {
+        var bitmap:Bitmap?=null
+        return try {
+            val initial=withContext(Dispatchers.Default){PlanarDraftCodec.decodeCheckpoint(saved.draftJson,saved.width,saved.height)}
+            val edits=PlanarEditHistory(initial,PlanarDraftCodec::measure)
+            bitmap=ownedOcBitmap {
+                val bounds=BitmapFactory.Options().apply {inJustDecodeBounds=true}
+                BitmapFactory.decodeByteArray(saved.sourcePng,0,saved.sourcePng.size,bounds)
+                require(bounds.outWidth==saved.width&&bounds.outHeight==saved.height){"草稿原图尺寸无效"}
+                checkNotNull(BitmapFactory.decodeByteArray(saved.sourcePng,0,saved.sourcePng.size))
+            }
+            source=bitmap;bitmap=null;sourcePng=saved.sourcePng;draft=initial;history=edits;dirty=true
+            notice="已恢复未保存的修改，请确认后保存；原图和背景保持原样。";true
+        }catch(failure:Exception){if(failure is CancellationException)throw failure;false}
+        finally {bitmap?.recycle()}
+    }
+    private fun png(bitmap:Bitmap):ByteArray=ByteArrayOutputStream().use {
+        check(bitmap.compress(Bitmap.CompressFormat.PNG,100,it)){"原图暂存失败"};it.toByteArray()
+    }
+    private fun sha(bytes:ByteArray)=MessageDigest.getInstance("SHA-256").digest(bytes).joinToString(""){"%02x".format(it)}
+    fun closeEditor(){if(!busy){checkpoint();source?.recycle();source=null;sourcePng=null;draft=null;history=null;dirty=false}}
+    fun dispose(){if(disposed)return;checkpoint();disposed=true;epoch++;job?.cancel();source?.recycle();source=null;sourcePng=null;draft=null;history=null;active=null}
 }

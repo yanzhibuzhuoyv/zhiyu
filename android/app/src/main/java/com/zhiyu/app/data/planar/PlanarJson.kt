@@ -6,9 +6,9 @@ object PlanarJson {
     private const val MAX_STRING = 12 * 1024 * 1024
     private const val MAX_ARRAY = 8192
     private const val MAX_NODES = 2_000_000
-    fun parse(text: String): Any? {
-        require(text.length <= MAX_TEXT) { "PLANAR_JSON_BUDGET" }
-        return Reader(text).parse()
+    fun parse(text: String, maxNodes:Int=MAX_NODES, maxArray:Int=MAX_ARRAY): Any? {
+        require(text.length <= MAX_TEXT&&maxNodes in 1..MAX_NODES&&maxArray in 1..MAX_ARRAY) { "PLANAR_JSON_BUDGET" }
+        return Reader(text,maxNodes,maxArray).parse()
     }
     fun encode(value: Any?): String = buildString { write(value, 0, EncodeBudget()) }.also {
         require(it.length <= MAX_TEXT) { "PLANAR_JSON_BUDGET" }
@@ -57,7 +57,7 @@ object PlanarJson {
         }
     }
 
-    private class Reader(private val text: String) {
+    private class Reader(private val text: String,private val maxNodes:Int,private val maxArray:Int) {
         private var index = 0
         private var nodes = 0
         fun parse(): Any? {
@@ -67,7 +67,7 @@ object PlanarJson {
         }
         private fun value(depth: Int): Any? {
             whitespace()
-            require(depth <= 16 && ++nodes <= MAX_NODES && index < text.length) { "PLANAR_JSON_STRUCTURE_BUDGET" }
+            require(depth <= 16 && ++nodes <= maxNodes && index < text.length) { "PLANAR_JSON_STRUCTURE_BUDGET" }
             return when (text[index]) {
                 '{' -> objectValue(depth + 1); '[' -> arrayValue(depth + 1); '"' -> string()
                 't' -> literal("true", true); 'f' -> literal("false", false); 'n' -> literal("null", null)
@@ -93,7 +93,7 @@ object PlanarJson {
             val result = mutableListOf<Any?>()
             if (consume(']')) return result
             while (true) {
-                require(result.size < MAX_ARRAY) { "PLANAR_JSON_ARRAY_BUDGET" }
+                require(result.size < maxArray) { "PLANAR_JSON_ARRAY_BUDGET" }
                 result.add(value(depth)); whitespace()
                 if (consume(']')) return result
                 require(consume(',')) { "PLANAR_JSON_COMMA" }

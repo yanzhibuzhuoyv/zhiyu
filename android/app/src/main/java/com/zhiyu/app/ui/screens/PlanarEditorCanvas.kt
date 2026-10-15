@@ -14,6 +14,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.*
 import com.zhiyu.app.domain.planar.*
+import com.zhiyu.app.ui.rememberPreviewPresentation
 import kotlin.math.*
 
 @Composable internal fun PlanarEditorCanvas(source:Bitmap,draft:PlanarDraft,selected:String,tool:String,radius:Double,
@@ -23,6 +24,7 @@ import kotlin.math.*
     val latest by rememberUpdatedState(draft)
     val onChange by rememberUpdatedState(change)
     val onGesture by rememberUpdatedState(gesture)
+    val displayed=rememberPlanarEditorImage(source)
     fun point(p:Offset):PlanarPoint {
         val scale=min(dimensions.width.toDouble()/source.width,dimensions.height.toDouble()/source.height)
         val left=(dimensions.width-source.width*scale)/2;val top=(dimensions.height-source.height*scale)/2
@@ -64,7 +66,7 @@ import kotlin.math.*
         drawRect(Color(0xfff5efdf))
         val scale=min(size.width/source.width,size.height/source.height);val w=source.width*scale;val h=source.height*scale
         val left=(size.width-w)/2;val top=(size.height-h)/2
-        drawImage(source.asImageBitmap(),dstOffset=IntOffset(left.roundToInt(),top.roundToInt()),dstSize=IntSize(w.roundToInt().coerceAtLeast(1),h.roundToInt().coerceAtLeast(1)))
+        drawImage(displayed,dstOffset=IntOffset(left.roundToInt(),top.roundToInt()),dstSize=IntSize(w.roundToInt().coerceAtLeast(1),h.roundToInt().coerceAtLeast(1)))
         if(original)return@Canvas
         fun offset(p:PlanarPoint)=Offset(left+p.x.toFloat()*scale,top+p.y.toFloat()*scale)
         fun box(r:PlanarRect,key:String){drawRect(if(selected==key)Color(0xffb66a65)else Color(0xff7e9275),
@@ -84,3 +86,6 @@ import kotlin.math.*
         trace.zipWithNext().forEach {(a,b)->drawLine(Color(0xffae6862),offset(a),offset(b),3f)}
     }
 }
+
+/** Render commands may retain their image after the controller releases the editable source. */
+@Composable internal fun rememberPlanarEditorImage(source:Bitmap):ImageBitmap=rememberPreviewPresentation(source,1536)

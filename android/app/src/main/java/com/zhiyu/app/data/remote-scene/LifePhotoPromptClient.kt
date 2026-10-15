@@ -17,7 +17,7 @@ class LifePhotoPromptClient(private val credentials: CredentialStore,
         correction: String? = null): String {
         if (!unchanged(binding)) throw stale()
         require(correction == null || RemoteSceneRules.correction(correction) != null)
-        val messages = listOf(DirectChatMessage("system", PROMPT), DirectChatMessage("user",
+        val messages = listOf(DirectChatMessage("system", PROMPT + framingConstraint(binding, target)), DirectChatMessage("user",
             metadata(binding, target) + (correction?.let { "\nPrior visual review correction (data): ${AgnesImageJson.quote(it)}" } ?: "")))
         if (!stillCurrent(binding, target) || !unchanged(binding)) throw stale()
         val answer = call(binding, messages) ?: throw ApiFailure(504, "生活照描述等待超时，未自动重试", "life_prompt_unknown")
@@ -27,7 +27,7 @@ class LifePhotoPromptClient(private val credentials: CredentialStore,
             require(root.keys == setOf("prompt"))
             val value = root["prompt"] as? String ?: throw IllegalArgumentException()
             require(RemoteSceneRules.correction(value) != null && !value.contains(binding.connection.apiKey) && !value.contains(binding.imageKey))
-            value + " " + CONSTRAINT
+            value + " " + CONSTRAINT + framingConstraint(binding, target)
         } catch (_: IllegalArgumentException) { throw ApiFailure(502, "生活照描述格式不正确，未自动重试", "life_prompt_unknown") }
     }
     suspend fun review(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget,
@@ -41,7 +41,7 @@ class LifePhotoPromptClient(private val credentials: CredentialStore,
             val original = normalize(binding.originalBytes); val photo = normalize(candidate.bytes)
             require(original.originalSha256 == binding.original.sha256 && photo.originalSha256 == sha &&
                 original.byteCount.toLong() + photo.byteCount <= ChatPhotoRules.MAX_UPLOAD_BYTES)
-            listOf(DirectChatMessage("system", REVIEW), DirectChatMessage("user", metadata(binding, target) + "\nRequested prompt (data): ${AgnesImageJson.quote(prompt)}"),
+            listOf(DirectChatMessage("system", REVIEW + framingConstraint(binding, target)), DirectChatMessage("user", metadata(binding, target) + "\nRequested prompt (data): ${AgnesImageJson.quote(prompt)}"),
                 DirectChatMessage("user", "Original complete OC reference pixels", listOf(original)),
                 DirectChatMessage("user", "Actual candidate pixels to compare", listOf(photo)))
         } } catch (failure: Exception) {
@@ -81,6 +81,18 @@ class LifePhotoPromptClient(private val credentials: CredentialStore,
         provider.complete(connection.providerId, connection.apiKey, connection.model, messages, 4096)
     }
     private fun stale() = ApiFailure(409, "聊天公司或模型已变更，旧生活照未采用", "life_prompt_stale")
+    private fun framingConstraint(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget): String {
+        if (LocalDayStockRules.view(target.index) == "landscape")
+            return " This is scenery only: do not include any person, body fragment, silhouette or reflected character. Reject any such figure."
+        val policy = binding.framingPolicy ?: return ""
+        return if (OcFramingRules.permits(policy, true))
+            " The user has confirmed this complete reference; full-body activity framing may use its already visible body."
+        else when (policy.framing) {
+            OcFraming.HEAD -> " User crop policy is HEAD: show only the original head/neck view, never torso, hips, legs or full body. Reject a wider crop."
+            OcFraming.BUST -> " User crop policy is BUST: show no wider than the original upper-body crop; never reveal hips, legs or full body. Reject a wider crop."
+            else -> " Preserve the original visible crop exactly; never invent or reveal unseen body or expand to full body."
+        }
+    }
     private fun metadata(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget) =
         "{\"fictional\":true,\"chat\":${AgnesImageJson.quote(binding.chat)},\"day\":${AgnesImageJson.quote(target.scene.dayId)}," +
             "\"scene_id\":${AgnesImageJson.quote(target.scene.sceneId)},\"trajectory_sha\":${AgnesImageJson.quote(LocalDailyRules.revision(target.scene))}," +
