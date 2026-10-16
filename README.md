@@ -11,6 +11,7 @@ zhiyu/
 ├── android/            手机端主产品（Kotlin + Jetpack Compose），唯一功能实现
 ├── backend/            Python 后端（FastAPI），已冻结为 legacy
 ├── native/qwen-edge/   端侧图像引擎原生层（C++ / JNI / stable-diffusion.cpp 分支）
+├── rig2d/              参数化 2D 形象引擎（Kotlin/JVM 契约库，被 android 端以 JAR 引用）
 ├── shared/             两端共享的行为契约（由脚本生成，构建时校验）
 ├── scripts/            评测、冒烟、量化、打包与联调脚本
 ├── qwen-image-edge/    上游实验工程：剪层与蒸馏的实验报告与工具
@@ -109,6 +110,35 @@ ABI 分包已启用（`splits.abi`），产物在 `android/app/build/outputs/apk
 | `rig2d-0.2.0-studio.jar`（本地） | 0.2.0 | 角色网格动画核心 |
 | `junit:junit` | 4.13.2 | JVM 单元测试 |
 | `androidx.test.ext:junit` | 1.3.0 | 仪器测试 |
+
+### 2.6 rig2d：Android 依赖的纯 JVM 契约库
+
+`android/app/libs/rig2d-0.2.0-studio.jar` 来自本仓库的 `rig2d/`。它是**纯 JVM 模块，不需要 Android SDK / NDK / 真机即可全绿跑测试**，与 Android 侧的对接方式见 `rig2d/docs/PORTING.md`。
+
+| 项 | 值 |
+|---|---|
+| Kotlin | 2.3.21（`kotlin("jvm")`） |
+| 目标字节码 | JVM 17（与 android 端 `VERSION_17` 对齐） |
+| 依赖 | `kotlinx-coroutines-core:1.10.2` |
+| 测试 | JUnit 4.13.2 + `kotlinx-coroutines-test`；JaCoCo 0.8.13 |
+| 产物 | `build/libs/rig2d-0.2.0-studio.jar` |
+
+```powershell
+cd rig2d
+.\gradlew.bat test jacocoTestReport jar    # 测试 + 覆盖率 + 打包 JAR
+.\gradlew.bat duplexFixture                # 合成 PCM/ASR/LLM/TTS 复演（不录麦克风）
+.\gradlew.bat partsFixture                 # 重放冻结的合成 12 翼素材
+python -m unittest discover -s probe/tests -v
+python -m unittest discover -s tools/tests -v
+```
+
+**注意两点**：
+
+1. `build.gradle.kts` **刻意不声明 java toolchain**。声明 toolchain 17 会让 Gradle 去下载 JDK，本机未配置 toolchain 仓库时会直接构建失败；因此改为用当前 JDK 编译、把 `jvmTarget` 固定为 17。所以用 **JDK 17 及以上**即可，不需要额外的 toolchain 配置。
+2. 打出的 JAR **只含可移植核心**：`tasks.jar` 排除了 `rig2d/voice/demo/**` 与 `rig2d/parts/demo/**`（含 Java ImageIO 的宿主专用驱动），JaCoCo 覆盖率统计也排除这两者。它**不含** Python、Web 工坊、分割模型或语音模型。
+3. `partsFixture` 依赖 `rig2d/artifacts/parts-fixture-2026-10-13-r1`（合成素材，约 2.5 MB）。该目录已入库；但**根 `.gitignore` 的 `artifacts/` 规则会忽略整个 `artifacts/`**，因此更新这些素材时需要用 `git add -f`。
+
+Android 侧另有 `verifyPlanarCore` 校验 `rig2d-0.2.0-studio.jar` 与 `assets/planar/contract.json` 的 SHA-256；改库后必须同步契约并重跑回归，不能只替换文件。
 
 ---
 

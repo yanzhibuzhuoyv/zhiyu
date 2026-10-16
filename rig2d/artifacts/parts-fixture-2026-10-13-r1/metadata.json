@@ -1,0 +1,390 @@
+{
+  "schema": "rig2d.synthetic-part-fixture.v1",
+  "claim": "SYNTHETIC_NOT_MODEL_NOT_REAL_OC",
+  "width": 256,
+  "height": 256,
+  "source": "source.argb",
+  "source_encoding": "little-endian-uint32-0xAARRGGBB",
+  "alpha_encoding": "straight",
+  "mask_encoding": "row-major-uint8-0-or-1",
+  "origin": "top-left",
+  "subject_mask": "subject.mask",
+  "protected_mask": "protected.mask",
+  "foreground_mask": "foreground.mask",
+  "preview": "preview.png",
+  "instances": [
+    {
+      "id": "wing_01",
+      "kind": "accessory",
+      "mask": "instances/wing_01.mask",
+      "confidence": 0.93
+    },
+    {
+      "id": "wing_02",
+      "kind": "accessory",
+      "mask": "instances/wing_02.mask",
+      "confidence": 0.92
+    },
+    {
+      "id": "wing_03",
+      "kind": "accessory",
+      "mask": "instances/wing_03.mask",
+      "confidence": 0.91
+    },
+    {
+      "id": "wing_04",
+      "kind": "accessory",
+      "mask": "instances/wing_04.mask",
+      "confidence": 0.9
+    },
+    {
+      "id": "wing_05",
+      "kind": "accessory",
+      "mask": "instances/wing_05.mask",
+      "confidence": 0.89
+    },
+    {
+      "id": "wing_06",
+      "kind": "accessory",
+      "mask": "instances/wing_06.mask",
+      "confidence": 0.88
+    },
+    {
+      "id": "wing_07",
+      "kind": "accessory",
+      "mask": "instances/wing_07.mask",
+      "confidence": 0.87
+    },
+    {
+      "id": "wing_08",
+      "kind": "accessory",
+      "mask": "instances/wing_08.mask",
+      "confidence": 0.86
+    },
+    {
+      "id": "wing_09",
+      "kind": "accessory",
+      "mask": "instances/wing_09.mask",
+      "confidence": 0.85
+    },
+    {
+      "id": "wing_10",
+      "kind": "accessory",
+      "mask": "instances/wing_10.mask",
+      "confidence": 0.84
+    },
+    {
+      "id": "wing_11",
+      "kind": "accessory",
+      "mask": "instances/wing_11.mask",
+      "confidence": 0.83
+    },
+    {
+      "id": "weapon_01",
+      "kind": "accessory",
+      "mask": "instances/weapon_01.mask",
+      "confidence": 0.91
+    },
+    {
+      "id": "back_hair",
+      "kind": "back_hair",
+      "mask": "instances/back_hair.mask",
+      "confidence": 0.91
+    },
+    {
+      "id": "face",
+      "kind": "face",
+      "mask": "instances/face.mask",
+      "confidence": 0.91
+    },
+    {
+      "id": "front_hair",
+      "kind": "front_hair",
+      "mask": "instances/front_hair.mask",
+      "confidence": 0.91
+    },
+    {
+      "id": "body",
+      "kind": "body",
+      "mask": "instances/body.mask",
+      "confidence": 0.91
+    }
+  ],
+  "ground_truth_instances": [
+    {
+      "id": "wing_01",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_01.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_02",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_02.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_03",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_03.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_04",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_04.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_05",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_05.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_06",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_06.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_07",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_07.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_08",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_08.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_09",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_09.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_10",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_10.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_11",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_11.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "wing_12",
+      "kind": "accessory",
+      "mask": "ground_truth/wing_12.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "weapon_01",
+      "kind": "accessory",
+      "mask": "ground_truth/weapon_01.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "back_hair",
+      "kind": "back_hair",
+      "mask": "ground_truth/back_hair.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "face",
+      "kind": "face",
+      "mask": "ground_truth/face.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "front_hair",
+      "kind": "front_hair",
+      "mask": "ground_truth/front_hair.mask",
+      "confidence": 1.0
+    },
+    {
+      "id": "body",
+      "kind": "body",
+      "mask": "ground_truth/body.mask",
+      "confidence": 1.0
+    }
+  ],
+  "omitted_candidate_ids": [
+    "wing_12"
+  ],
+  "provenance": {
+    "synthetic": true,
+    "model_inference": false,
+    "real_oc": false
+  },
+  "expected": {
+    "wing_count": 12,
+    "candidate_wing_count": 11,
+    "max_accessory_instances": 64,
+    "candidate_instance_count": 16,
+    "foreground_pixels": 18304,
+    "omitted_subject_pixels": 872,
+    "conflict_foreground_pixels": 2,
+    "unknown_foreground_pixels": 911,
+    "partial_alpha_pixels": 163
+  },
+  "files": {
+    "source.argb": {
+      "size": 262144,
+      "sha256": "c65c870b2570a83c74157b0a2edb9184c66db35a698539cadaccbf626ad8f63a"
+    },
+    "foreground.mask": {
+      "size": 65536,
+      "sha256": "dfe4ca8824d77dab305816ec500174e5db89f2f15037a7687485f4ddda3ae403"
+    },
+    "subject.mask": {
+      "size": 65536,
+      "sha256": "bfd7c9df3c5b1106bda13c6584789df1743a61f76fe3921e581d6d536808d559"
+    },
+    "protected.mask": {
+      "size": 65536,
+      "sha256": "3e72303cd0c156ef3ce5e5ab467632c083d57a25c5124584270a047edf0c2ef8"
+    },
+    "preview.png": {
+      "size": 3780,
+      "sha256": "7fe958e50ff2abc3eba28af7bc76c8420174e680925540f17d17d626d1af7387"
+    },
+    "ground_truth/wing_01.mask": {
+      "size": 65536,
+      "sha256": "2dd329f3d9cd31f7d66c399d4b577353fdabfda0a4c613fe70d1e41a12c145aa"
+    },
+    "ground_truth/wing_02.mask": {
+      "size": 65536,
+      "sha256": "e724473c9f80f592106830af64a23fafd5cbee967abe3e69571d5f060bc061a1"
+    },
+    "ground_truth/wing_03.mask": {
+      "size": 65536,
+      "sha256": "38e2818018b43d4949a911e16331e7da32b05768729fef75ef5e584446733e87"
+    },
+    "ground_truth/wing_04.mask": {
+      "size": 65536,
+      "sha256": "0b990a4aa35983fe9f2bdced6c564dde43692f80fc8ad991d7f3d7f6950b9429"
+    },
+    "ground_truth/wing_05.mask": {
+      "size": 65536,
+      "sha256": "ffad2543f007bb2c379576864b62058736e5492937717559b1cc7d4e70ab5e53"
+    },
+    "ground_truth/wing_06.mask": {
+      "size": 65536,
+      "sha256": "d24fe378c4deb258c87452e92ac1346f99ec08e724b597ef1ad38a24aacef749"
+    },
+    "ground_truth/wing_07.mask": {
+      "size": 65536,
+      "sha256": "26d0b65010fe8a0a9688db104cf21f6b0155cc5cd14349254b3b82ee3b7d25bf"
+    },
+    "ground_truth/wing_08.mask": {
+      "size": 65536,
+      "sha256": "5b96d43cefcc8967b2acaa181f155820a8e2a939c060a982bd33f9cbd86477d8"
+    },
+    "ground_truth/wing_09.mask": {
+      "size": 65536,
+      "sha256": "409a630e03698c430dcefa1cfe1f9978a06f8f48157b49fa230814de5e0ae0ea"
+    },
+    "ground_truth/wing_10.mask": {
+      "size": 65536,
+      "sha256": "81b3ff3fffc482d20745b44681c100e26dbebe3a2c0939e4086ebae3f6b93306"
+    },
+    "ground_truth/wing_11.mask": {
+      "size": 65536,
+      "sha256": "82dd2b380603454c9c9ee30cdcce92b72b5694e274a07385e8ccbfae6fd908d8"
+    },
+    "ground_truth/wing_12.mask": {
+      "size": 65536,
+      "sha256": "f5bfe9709bc77c0075f4764c1429d8237c5e5b82e8a3059c8cd769c64aa241c6"
+    },
+    "ground_truth/weapon_01.mask": {
+      "size": 65536,
+      "sha256": "7b2e9a3d8d2c674d91b245e8ad20ab98740f67d3c326be83e49620b87d538c78"
+    },
+    "ground_truth/back_hair.mask": {
+      "size": 65536,
+      "sha256": "f3be2077ca170bc5445e4031605b4476f1e94db6fbd440008081c3a090523f3e"
+    },
+    "ground_truth/face.mask": {
+      "size": 65536,
+      "sha256": "6fa2e84c1222396e4b7c574c1ced9efc35d42689916696b80cc12844c1c02e1d"
+    },
+    "ground_truth/front_hair.mask": {
+      "size": 65536,
+      "sha256": "bc1bf8c79a112ac483a0efb3b3dea9b0dcc4cff81fa04412be94a117cc5e6382"
+    },
+    "ground_truth/body.mask": {
+      "size": 65536,
+      "sha256": "0a5ce1385a7db7d032a1fd51159d933946316109327bcfbf6e8d4877809b4c5a"
+    },
+    "instances/wing_01.mask": {
+      "size": 65536,
+      "sha256": "3b7096a96a2ab017a7646db9aff28aeaf21c1467683154fb680a730b01d750ae"
+    },
+    "instances/wing_02.mask": {
+      "size": 65536,
+      "sha256": "be82366f47ea88f03481d70dc21ef4b63fc3af08bf389a7d79805507f53aca93"
+    },
+    "instances/wing_03.mask": {
+      "size": 65536,
+      "sha256": "99fb84051d77fbc6a361c3c64dbc885baaf739a3210421d97d9506394033b1cb"
+    },
+    "instances/wing_04.mask": {
+      "size": 65536,
+      "sha256": "2a519638876844e2d5d67316df7c99928853ccc6a8c79c79468235c3301ee0d4"
+    },
+    "instances/wing_05.mask": {
+      "size": 65536,
+      "sha256": "3dcb4d9d80e0e37de0e491b25fed488a8512ca43feb01e14aacb759f6ae9a3f6"
+    },
+    "instances/wing_06.mask": {
+      "size": 65536,
+      "sha256": "7e8d8e5d14d539ac3623246e08d8e184f2bd0e60719d501075636496bfbea2ab"
+    },
+    "instances/wing_07.mask": {
+      "size": 65536,
+      "sha256": "823610e5066eb1bf5e2370aadfd3f76b87398c528c0acba7d483dc2be18cad69"
+    },
+    "instances/wing_08.mask": {
+      "size": 65536,
+      "sha256": "c0eef8c60dbc9cb34183f2cca4ad248e967f97e48019f84f8378ed2e4a13ec0e"
+    },
+    "instances/wing_09.mask": {
+      "size": 65536,
+      "sha256": "bce0dfc586752f0840ab5c26e732a7ee980945ebdb8a3cc0757bbef9f3aceff4"
+    },
+    "instances/wing_10.mask": {
+      "size": 65536,
+      "sha256": "85dbb0ad792e6983fa85019531192642b60eb12cef51714893ff6755e6400d5c"
+    },
+    "instances/wing_11.mask": {
+      "size": 65536,
+      "sha256": "cddf4e9b26750ce36bfc96019bcbd4eec258326d26d332ddbff2b62019f1d9eb"
+    },
+    "instances/weapon_01.mask": {
+      "size": 65536,
+      "sha256": "9d6d25de6953057ba8360da73bb61decae641e334efda8245010dcc11401ac51"
+    },
+    "instances/back_hair.mask": {
+      "size": 65536,
+      "sha256": "f3be2077ca170bc5445e4031605b4476f1e94db6fbd440008081c3a090523f3e"
+    },
+    "instances/face.mask": {
+      "size": 65536,
+      "sha256": "6fa2e84c1222396e4b7c574c1ced9efc35d42689916696b80cc12844c1c02e1d"
+    },
+    "instances/front_hair.mask": {
+      "size": 65536,
+      "sha256": "8fa477d0981f16ec2c6cfcddff04ebf7817503b75a210707b8499fee83a96e31"
+    },
+    "instances/body.mask": {
+      "size": 65536,
+      "sha256": "0a5ce1385a7db7d032a1fd51159d933946316109327bcfbf6e8d4877809b4c5a"
+    }
+  }
+}
