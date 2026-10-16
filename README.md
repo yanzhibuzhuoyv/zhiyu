@@ -232,6 +232,8 @@ python native\qwen-edge\android-jni\build.py
 
 ## 六、构建验证记录
 
+### 6.1 实测数据
+
 下列命令是在**本仓库 GitHub 上的实际克隆**中执行通过的，不是纸面推导（2026-10-16 实测）：
 
 ```
@@ -255,6 +257,25 @@ python shared/generate_companion_contract.py --check
 ```
 
 > **Android 端未在此环境实测**：`app/build.gradle.kts` 的 `preBuild` 依赖仓库外的 `../artifacts/`（Qwen JNI、u2netp、BGE int8、sherpa 语音件、rig2d jar），本机虽已具备这些文件，但重新生成 JNI 需要完整 CMake/NDK 工具链，未在本轮验证。第 2.3 / 2.4 节描述的是构建脚本的**实际约束**（哈希与路径均取自源码），准备齐产物后即可按 2.2 节构建。
+
+### 6.2 推送与网络
+
+若 `git push` 报 `Failed to connect to github.com port 443`，但 `https://api.github.com` 可访问，
+说明是**针对 `github.com` 单一 IP 的阻断**（实测 DNS 解析到 `20.205.243.166` 时不通，
+而同域名的其他 IP 正常）。此时走本机代理即可：
+
+```powershell
+git -c http.proxy=http://127.0.0.1:63900 push origin master
+```
+
+端口取自 Windows「设置 → 网络和 Internet → 代理」中的本机代理端口。若要长期生效：
+
+```powershell
+git config --global http.proxy http://127.0.0.1:63900
+```
+
+Release 附件上传（`gh release upload`）走 `uploads.github.com`，受同一阻断影响；同样可设
+`HTTPS_PROXY=http://127.0.0.1:63900` 环境变量后再执行。
 
 ---
 
