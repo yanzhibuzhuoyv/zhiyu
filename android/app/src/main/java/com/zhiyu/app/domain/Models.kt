@@ -64,6 +64,19 @@ interface ChatRepository {
     suspend fun messageMemory(id: String, messageId: String): MemoryEntry
     suspend fun changeMemory(id: String, messageId: String, change: MemoryChange): MemoryEntry
     suspend fun sendMessage(id: String, content: String): Pair<Message, Message>
+    suspend fun sendMessage(id: String, content: String, onSubmitted: (Message) -> Unit): Pair<Message, Message> =
+        sendMessage(id, content).also { onSubmitted(it.first) }
+    suspend fun sendVoiceMessage(id: String, content: String, voiceDraftId: String,
+        onSubmitted: (Message) -> Unit): Pair<Message, Message> =
+        throw IllegalStateException("当前连接暂不支持语音消息")
+    suspend fun discardVoiceDraft(id: String): Unit = Unit
+    suspend fun sendQueuedMessage(id: String, content: String, requestId: String,
+        image: MediaAttachment? = null, voiceDraftId: String? = null,
+        onSubmitted: (Message) -> Unit = {}): Pair<Message, Message> = when {
+        voiceDraftId != null -> sendVoiceMessage(id, content, voiceDraftId, onSubmitted)
+        image != null -> sendPhotoMessage(id, content, image, onSubmitted)
+        else -> sendMessage(id, content, onSubmitted)
+    }
     suspend fun sendCallMessage(id: String, content: String, onDelta: suspend (String) -> Unit): Pair<Message, Message> =
         sendMessage(id, content).also { onDelta(it.second.content) }
     suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment): Pair<Message, Message> =

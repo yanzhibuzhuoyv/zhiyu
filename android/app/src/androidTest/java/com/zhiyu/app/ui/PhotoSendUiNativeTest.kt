@@ -33,6 +33,8 @@ class PhotoSendUiNativeTest {
     private lateinit var viewModel: ChatViewModel
     private lateinit var draft: ChatImageDraft
     private var failReply = false
+    private var sendCalls = 0
+    private var queuedRequestId: String? = null
     private val chat = Conversation("a".repeat(32), "合成聊天", "qwen-vl-max", true, "2026-10-11T00:00:00Z", "2026-10-11T00:00:00Z")
     private val binding = CompanionBinding("qwen", chat.model)
 
@@ -50,16 +52,29 @@ class PhotoSendUiNativeTest {
                 "conversations" -> listOf(chat)
                 "documents" -> emptyList<Document>()
                 "history" -> MessagePage(history.toList(), false, null)
-                "discardPhotoDraft" -> Unit
-                "sendPhotoMessage" -> {
-                    @Suppress("UNCHECKED_CAST") val continuation = args!!.last() as Continuation<Any?>
-                    @Suppress("UNCHECKED_CAST") val submitted = if (args.size == 5) args[3] as (Message) -> Unit else null
+                "discardPhotoDraft" -> { ChatPhotoStore(context).clearDraftIf(args!![0] as String); Unit }
+                "sendQueuedMessage", "sendPhotoMessage" -> {
+                    val values = checkNotNull(args)
+                    val queued = method.name == "sendQueuedMessage"
+                    assertEquals(chat.id, values[0])
+                    val content = values[1] as String
+                    val attachment = values[if (queued) 3 else 2] as MediaAttachment
+                    if (queued) {
+                        assertEquals(7, values.size)
+                        queuedRequestId = values[2] as String
+                        assertTrue(Regex("[a-f0-9]{32}").matches(checkNotNull(queuedRequestId)))
+                        assertNull(values[4])
+                    }
+                    @Suppress("UNCHECKED_CAST") val continuation = values.last() as Continuation<Any?>
+                    @Suppress("UNCHECKED_CAST") val submitted = if (queued) values[5] as (Message) -> Unit
+                        else if (values.size == 5) values[3] as (Message) -> Unit else null
+                    sendCalls++
                     scope.launch {
                         val result = runCatching {
-                            val user = Message("photo-user", "user", "", emptyList(), "2026-10-11T00:00:01Z", listOf(draft.attachment))
+                            val user = Message("photo-user", "user", content, emptyList(), "2026-10-11T00:00:01Z", listOf(attachment))
                             history.add(user); submitted?.invoke(user)
                             gate.await()
-                            if (failReply) throw ApiFailure(503, "合成回复暂时失败", "provider_unavailable")
+                            if (failReply) throw ApiFailure(503, "provider-payload synthetic-key 合成回复暂时失败", "provider_unavailable")
                             val answer = Message("photo-reply", "assistant", "看到啦。", emptyList(), "2026-10-11T00:00:02Z")
                             history.add(answer); user to answer
                         }
@@ -94,6 +109,9 @@ class PhotoSendUiNativeTest {
         assertTrue(viewModel.state.value.isBusy)
         assertNull(viewModel.state.value.draftImage)
         assertNull(viewModel.state.value.pendingImage)
+        assertEquals(listOf(draft.attachment), viewModel.state.value.messages.single().mediaAttachments)
+        assertEquals(queuedRequestId, viewModel.state.value.pendingOutgoing.single().id)
+        assertEquals(1, sendCalls)
         assertRenderedPhoto()
         compose.onNodeWithText("对方正在输入中").assertIsDisplayed()
         gate.complete(Unit)
@@ -109,7 +127,21 @@ class PhotoSendUiNativeTest {
         assertEquals(history.single(), viewModel.state.value.messages.single())
         assertNull(viewModel.state.value.draftImage)
         assertRenderedPhoto()
-        assertTrue(viewModel.state.value.error!!.contains("合成回复暂时失败"))
+        val retained = viewModel.state.value.pendingOutgoing.single()
+        assertEquals(OutgoingPhase.SUBMITTED_NO_REPLY, retained.phase)
+        assertEquals("photo-user", retained.submittedMessageId)
+        assertEquals(draft, retained.image)
+        assertTrue(retained.problem!!.contains("不用再发"))
+        val displayed = viewModel.state.value.error + "\n" + retained.problem
+        listOf("provider-payload", "synthetic-key", "合成回复暂时失败").forEach { privateText ->
+            assertFalse("Provider diagnostics must not reach the failed outgoing row", displayed.contains(privateText))
+        }
+        compose.onNodeWithTag("retry_outgoing_${retained.id}").assertDoesNotExist()
+        compose.runOnUiThread { viewModel.retryOutgoing(retained.id) }
+        compose.waitForIdle()
+        assertEquals("A submitted picture must not be posted again", 1, sendCalls)
+        assertEquals(history.single(), viewModel.state.value.messages.single())
+        assertNull(viewModel.state.value.draftImage)
     }
 
     @Test fun completedPickerImportDuringBusyStateIsImmediatelyUsableWithoutReopening() {

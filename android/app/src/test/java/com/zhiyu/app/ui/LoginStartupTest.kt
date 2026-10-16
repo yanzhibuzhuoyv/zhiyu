@@ -163,16 +163,18 @@ class LoginStartupTest {
         repository.offline = false
         model.loadProviders()
         advanceUntilIdle()
-        repository.sendFailure = ApiFailure(401, "服务商拒绝了 API Key", "provider_auth_failed")
+        repository.sendFailure = ApiFailure(401, "synthetic-provider-payload saved-key 服务商拒绝了 API Key", "provider_auth_failed")
         model.draft("晚上好")
         model.send()
         advanceUntilIdle()
         assertTrue(model.state.value.connected)
         assertEquals("original", model.state.value.selectedId)
-        assertEquals("晚上好", model.state.value.draft)
-        assertEquals("服务商拒绝了 API Key", model.state.value.error)
+        assertFailedOriginalIsRetainedWithoutPrivateDiagnostics(model.state.value)
+        assertEquals(repository.originalMessages, model.state.value.messages)
+        assertEquals("saved-key", model.state.value.apiKey)
         assertEquals(repository.binding, model.state.value.binding)
         assertEquals(0, repository.logins)
+        assertEquals(1, repository.sendCalls)
     }
 
     @Test fun unexpectedLocalFailureDoesNotTellPhoneUsersToCheckAComputerBackend() = runRecovery { model, repository ->
@@ -183,9 +185,11 @@ class LoginStartupTest {
         model.draft("晚上好")
         model.send()
         advanceUntilIdle()
-        assertEquals("暂时无法处理回复，请稍后重试", model.state.value.error)
+        assertFailedOriginalIsRetainedWithoutPrivateDiagnostics(model.state.value)
         assertTrue(model.state.value.connected)
-        assertEquals("晚上好", model.state.value.draft)
+        assertEquals(repository.originalMessages, model.state.value.messages)
+        assertEquals(repository.binding, model.state.value.binding)
+        assertEquals(1, repository.sendCalls)
     }
 
     @Test fun failedLogoutDoesNotClaimThatTheKeyWasAlreadyCleared() = runRecovery { model, repository ->
@@ -239,6 +243,21 @@ class LoginStartupTest {
         assertEquals("saved-key", model.state.value.apiKey)
         assertEquals(repository.binding, model.state.value.binding)
         assertEquals(0, repository.cleared)
+    }
+
+    private fun assertFailedOriginalIsRetainedWithoutPrivateDiagnostics(state: AppState) {
+        assertEquals("", state.draft)
+        val retained = state.pendingOutgoing.single()
+        assertEquals("晚上好", retained.content)
+        assertEquals(OutgoingPhase.FAILED, retained.phase)
+        assertNull(retained.submittedMessageId)
+        assertFalse(state.error.isNullOrBlank())
+        assertTrue(state.error!!.contains("重试"))
+        assertFalse(retained.problem.isNullOrBlank())
+        val displayed = state.error + "\n" + retained.problem
+        listOf("saved-key", "synthetic-provider-payload", "internal diagnostic", "电脑", "后端", "backend").forEach { privateText ->
+            assertFalse("Send failure must not expose $privateText", displayed.contains(privateText, ignoreCase = true))
+        }
     }
 
     private fun runRecovery(historyOffline: Boolean = false, block: suspend TestScope.(ChatViewModel, RecoveryRepository) -> Unit) = runTest {
@@ -297,6 +316,7 @@ private class RecoveryRepository : CatalogRepository() {
     var logins = 0
     var created = 0
     var sendFailure: Exception? = null
+    var sendCalls = 0
     var logoutFailure: Exception? = null
     var profileChanges = 0
     fun useCustomProfile() {
@@ -332,5 +352,8 @@ private class RecoveryRepository : CatalogRepository() {
         return chat
     }
     override suspend fun documents() = emptyList<Document>()
-    override suspend fun sendMessage(id: String, content: String): Pair<Message, Message> = throw sendFailure ?: error("Unused")
+    override suspend fun sendMessage(id: String, content: String): Pair<Message, Message> {
+        sendCalls++
+        throw sendFailure ?: error("Unused")
+    }
 }

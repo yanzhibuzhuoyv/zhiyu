@@ -1,4 +1,5 @@
 import java.security.MessageDigest
+import java.io.File
 
 plugins {
     id("com.android.application")
@@ -13,8 +14,8 @@ android {
         minSdk = 26
         targetSdk = 36
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
-        versionCode = 17
-        versionName = "0.2.11"
+        versionCode = 18
+        versionName = "0.2.12"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"https://local.zhiyu.invalid\"")
         buildConfigField("boolean", "USE_USB_BACKEND", "false")
@@ -151,6 +152,7 @@ val preparePortraitAssets = tasks.register("preparePortraitAssets") {
     val seed = rootProject.file("../artifacts/native-media-seed")
     inputs.file(source)
     inputs.dir(seed)
+    inputs.property("nativeMediaSeedPolicy", 2)
     outputs.dir(destination)
     doLast {
         val digest = MessageDigest.getInstance("SHA-256").digest(source.readBytes())
@@ -158,7 +160,25 @@ val preparePortraitAssets = tasks.register("preparePortraitAssets") {
         require(digest == "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8") { "Portrait model SHA256 mismatch" }
         destination.get().asFile.mkdirs()
         source.copyTo(destination.get().file("u2netp.onnx").asFile, overwrite = true)
-        seed.copyRecursively(destination.get().dir("media_seed").asFile, overwrite = true)
+        val generatedRoot = destination.get().asFile.canonicalFile
+        val seedTarget = destination.get().dir("media_seed").asFile.canonicalFile
+        val buildRoot = layout.buildDirectory.get().asFile.canonicalFile
+        require(generatedRoot.path.startsWith(buildRoot.path + File.separator) && seedTarget.parentFile == generatedRoot) {
+            "Generated media seed path must stay within this build directory"
+        }
+        val manifest = groovy.json.JsonSlurper().parseText(seed.resolve("manifest.json").readText()) as List<*>
+        val images = manifest.map { it as Map<*, *> }.filter { it["kind"] == "image" }
+        require(images.size == 2) { "Only the two retained image seeds may be packaged" }
+        project.delete(seedTarget)
+        check(seedTarget.mkdirs())
+        images.forEach { image ->
+            val name = image["file"] as String
+            require(Regex("[a-zA-Z0-9_.-]+\\.(png|jpg|gif|webp)").matches(name))
+            val input = seed.resolve(name).canonicalFile
+            require(input.parentFile == seed.canonicalFile)
+            input.copyTo(seedTarget.resolve(name), overwrite = false)
+        }
+        seedTarget.resolve("manifest.json").writeText(groovy.json.JsonOutput.toJson(images), Charsets.UTF_8)
     }
 }
 tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(preparePortraitAssets) }

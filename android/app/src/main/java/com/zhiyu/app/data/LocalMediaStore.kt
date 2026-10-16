@@ -37,7 +37,7 @@ class LocalMediaStore(context: Context) {
     fun ingest(kind: String, bytes: ByteArray, sourceLabel: String = "本地导入", visualVersion: Int = 0,
         dayId: String? = null, description: String = "", tags: List<String> = emptyList(),
         purpose: String = "library"): MediaAttachment = synchronized(lock) {
-        require(kind in setOf("image", "sticker") && purpose in setOf("library", "portrait", "chat", "scene_background")) { "素材分类无效" }
+        require(kind == "image" && purpose in setOf("library", "portrait", "chat", "scene_background")) { "表情包库已取消，仅支持图片素材" }
         require(visualVersion >= 0 && sourceLabel.length <= 200 && description.length <= 1000 &&
             tags.size <= 30 && tags.all { it.isNotBlank() && it.length <= 40 } &&
             (dayId == null || Regex("\\d{4}-\\d{2}-\\d{2}").matches(dayId))) { "素材标注无效" }
@@ -68,6 +68,7 @@ class LocalMediaStore(context: Context) {
     fun list(kind: String, visualVersion: Int? = null, limit: Int = 500, dayId: String? = null): List<MediaAttachment> = synchronized(lock) {
         require(kind in setOf("image", "sticker") && (visualVersion == null || visualVersion >= 0) && limit in 1..1000) { "素材查询条件无效" }
         require(dayId==null || Regex("\\d{4}-\\d{2}-\\d{2}").matches(dayId)) { "素材日期无效" }
+        if (kind == "sticker") return@synchronized emptyList()
         metadataFiles(kind).asSequence().sortedBy { it.name }.map { readRecord(it) }
             .filter { it.purpose == "library" && (visualVersion == null || it.attachment.visualVersion == visualVersion) &&
                 (dayId==null || it.attachment.dayId==null || it.attachment.dayId==dayId) }

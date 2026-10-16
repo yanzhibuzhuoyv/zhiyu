@@ -36,6 +36,9 @@ import androidx.compose.ui.unit.sp
 import com.zhiyu.app.domain.ChatDisplayRules
 import com.zhiyu.app.domain.ChatTypographySettings
 import com.zhiyu.app.domain.Message
+import com.zhiyu.app.domain.OutgoingDraft
+import com.zhiyu.app.domain.OutgoingPhase
+import com.zhiyu.app.domain.OutgoingQueueRules
 import com.zhiyu.app.ui.AppState
 import com.zhiyu.app.ui.ChatViewModel
 import com.zhiyu.app.ui.AppearanceImages
@@ -51,6 +54,7 @@ import java.time.ZoneId
     typography: ChatTypographySettings = LocalChatTypography.current,
     composerActions: @Composable RowScope.() -> Unit = {},
     composerPreview: @Composable () -> Unit = {},
+    composerPreparing: Boolean = false,
 ) {
     val list = rememberLazyListState()
     var viewportHeight by remember { mutableIntStateOf(0) }
@@ -61,13 +65,13 @@ import java.time.ZoneId
         ChatBackground(appearance)
         // Scaffold consumes its padding in the caller; only this screen consumes the IME.
         Column(Modifier.fillMaxSize().imePadding()) {
-            if (state.messages.isEmpty() && state.pendingMessage == null && state.pendingImage == null) {
+            if (state.messages.isEmpty() && state.pendingMessage == null && state.pendingImage == null && state.pendingOutgoing.isEmpty()) {
                 EmptyChat(Modifier.weight(1f), state.isBusy) { viewModel.draft("今天我想和你分享一件事。") }
             } else {
                 ChatTimeline(state, viewModel, list, companionName, appearance, typography,
                     Modifier.weight(1f).onSizeChanged { viewportHeight = it.height })
             }
-            ChatComposer(state, viewModel, typography, composerActions, composerPreview)
+            ChatComposer(state, viewModel, typography, composerActions, composerPreview, composerPreparing)
         }
     }
 }
@@ -101,8 +105,11 @@ import java.time.ZoneId
                         textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                ChatMessageBubble(message, companionName, appearance, typography)
+                ChatMessageBubble(message, companionName, appearance, typography, voiceContent = { MessageVoiceContent(it) })
             }
+        }
+        itemsIndexed(state.pendingOutgoing, key = { _, it -> "outgoing_${it.id}" }) { _, item ->
+            OutgoingBubble(item, state, viewModel, appearance, typography)
         }
         if (state.pendingMessage != null || state.pendingImage != null) {
             item(key = "pending_message") { PendingBubble(state, appearance, typography) }
@@ -127,13 +134,13 @@ import java.time.ZoneId
         color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
-@Composable private fun chatTextStyle(settings: ChatTypographySettings): TextStyle =
+@Composable internal fun chatTextStyle(settings: ChatTypographySettings): TextStyle =
     MaterialTheme.typography.bodyLarge.copy(fontSize = settings.fontSizeSp.sp,
         lineHeight = (settings.fontSizeSp * 1.55f).sp)
 
 @Composable private fun ChatComposer(
     state: AppState, viewModel: ChatViewModel, typography: ChatTypographySettings,
-    actions: @Composable RowScope.() -> Unit, preview: @Composable () -> Unit,
+    actions: @Composable RowScope.() -> Unit, preview: @Composable () -> Unit, preparing: Boolean,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)) {
         Column {
@@ -144,8 +151,9 @@ import java.time.ZoneId
                 OutlinedTextField(value = state.draft, onValueChange = viewModel::draft,
                     modifier = Modifier.weight(1f).heightIn(max = 180.dp).testTag("message_draft"),
                     placeholder = { Text("想和你说…") }, textStyle = chatTextStyle(typography),
-                    shape = MaterialTheme.shapes.medium, maxLines = 3, enabled = !state.isBusy)
-                FilledIconButton(onClick = viewModel::send, enabled = !state.isBusy && (state.draft.isNotBlank() || state.draftImage != null),
+                    shape = MaterialTheme.shapes.medium, maxLines = 3, enabled = state.connected && !state.restoring)
+                FilledIconButton(onClick = viewModel::send, enabled = state.connected && !state.restoring && !preparing &&
+                    state.pendingOutgoing.size < OutgoingQueueRules.CAPACITY && (state.draft.isNotBlank() || state.draftImage != null),
                     shape = MaterialTheme.shapes.medium, modifier = Modifier.size(56.dp)) {
                     Icon(Icons.AutoMirrored.Outlined.Send, "发送消息", Modifier.size(22.dp))
                 }
@@ -154,47 +162,39 @@ import java.time.ZoneId
     }
 }
 
-@Suppress("DEPRECATION")
-@Composable fun ChatMessageBubble(
-    message: Message, companionName: String = "知语", appearance: AppearanceImages = AppearanceImages(),
-    typography: ChatTypographySettings = LocalChatTypography.current,
+@Composable private fun OutgoingBubble(item: OutgoingDraft, state: AppState, viewModel: ChatViewModel,
+    appearance: AppearanceImages, typography: ChatTypographySettings,
 ) {
-    val user = message.role == "user"
-    val clipboard = LocalClipboardManager.current
-    var expanded by remember(message.id) { mutableStateOf(false) }
-    val zone = ZoneId.systemDefault()
-    val timestamp = remember(message.createdAt, zone) { ChatDisplayRules.messageTime(message.createdAt, zone) }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, if (user) Alignment.End else Alignment.Start), verticalAlignment = Alignment.Top) {
-        if (!user) AvatarImage(appearance.companionAvatar, "恋人头像", Modifier.size(40.dp).padding(top = 3.dp))
-        Column(Modifier.weight(1f, fill = false).widthIn(max = 640.dp), horizontalAlignment = if (user) Alignment.End else Alignment.Start) {
-            Text(if (user) "你" else companionName, Modifier.padding(horizontal = 4.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Surface(shape = RoundedCornerShape(topStart = if (user) 22.dp else 6.dp, topEnd = if (user) 6.dp else 22.dp, bottomEnd = 22.dp, bottomStart = 22.dp), color = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface,
-                border = BorderStroke(1.dp, if (user) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)),
-                modifier = Modifier.widthIn(max = 640.dp).testTag("message_${message.id}")) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    if (message.content.isNotEmpty()) Text(message.content, style = chatTextStyle(typography))
-                    ChatMediaAttachments(message.mediaAttachments)
-                    Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-                        if (message.sources.isNotEmpty()) TextButton(onClick = { expanded = !expanded }) {
-                            Icon(Icons.Outlined.Description, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("${message.sources.size} 条知识引用")
+    val failed = item.phase in setOf(OutgoingPhase.FAILED, OutgoingPhase.SUBMITTED_NO_REPLY)
+    if (item.submittedMessageId != null && !failed) return
+    Column(Modifier.fillMaxWidth().testTag("pending_outgoing_${item.id}"), horizontalAlignment = Alignment.End) {
+        if (item.submittedMessageId == null) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Text("你", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Surface(shape = RoundedCornerShape(20.dp), color = Color.Transparent,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))) {
+                        Column(Modifier.padding(14.dp)) {
+                            if (item.voiceDraftId != null) Text("语音消息", style = chatTextStyle(typography))
+                            if (item.content.isNotBlank()) Text(item.content, style = chatTextStyle(typography))
+                            item.image?.let { ChatMediaAttachments(listOf(it.attachment)) }
                         }
-                        IconButton(onClick = { clipboard.setText(AnnotatedString(message.content)) }, modifier = Modifier.size(48.dp)) { Icon(Icons.Outlined.ContentCopy, "复制消息", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    }
-                    if (expanded) message.sources.forEach { source ->
-                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                        Text(source.name, style = MaterialTheme.typography.labelLarge)
-                        SelectionContainer { Text(source.text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
+                AvatarImage(appearance.userAvatar, "我的头像", Modifier.size(40.dp))
             }
-            if (message.origin == "call_interrupted") Text("话说到一半", style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            timestamp?.let { Text(it, Modifier.padding(horizontal = 6.dp, vertical = 4.dp).testTag("message_time_${message.id}"),
-                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        if (user) AvatarImage(appearance.userAvatar, "我的头像", Modifier.size(40.dp).padding(top = 3.dp))
+        if (item.phase == OutgoingPhase.QUEUED) Text("等待发出", style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        item.problem?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+        if (failed) Row {
+            if (item.phase == OutgoingPhase.FAILED && item.submittedMessageId == null) TextButton(
+                onClick = { viewModel.retryOutgoing(item.id) }, enabled = state.connected,
+                modifier = Modifier.testTag("retry_outgoing_${item.id}")) { Text("重试") }
+            TextButton(onClick = { viewModel.discardOutgoing(item.id) }, modifier = Modifier.testTag("discard_outgoing_${item.id}")) {
+                Text(if (item.submittedMessageId == null) "移除" else "知道了")
+            }
+        }
     }
 }
 

@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
         ProactiveForeground.setVisible(true)
         enableEdgeToEdge()
         ProactiveNotifications.createChannel(applicationContext)
-        lifecycleScope.launch { ProactiveScheduler.recover(applicationContext) }
+        ProactiveScheduler.requestRecovery(applicationContext)
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = ChatViewModel(
@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
             ProactiveForeground.setVisible(false)
             LocalSemanticScheduler.enqueue(applicationContext)
             LocalMemoryRecognitionScheduler.schedule(applicationContext)
-            lifecycleScope.launch { ProactiveScheduler.recover(applicationContext) }
+            ProactiveScheduler.requestRecovery(applicationContext)
         }
         super.onStop()
     }

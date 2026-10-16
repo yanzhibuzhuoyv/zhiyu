@@ -46,4 +46,24 @@ class LocalContactPolicyTest {
         assertTrue(LocalContactPolicy.decide(now, enabled.copy(quietStart = 8, quietEnd = 8),
             "anxious", LocalContactStats()).eligible)
     }
+    @Test fun firstContactUsesPersonalityAndTheActualLastInteractionInsteadOfOneBlanketWait() {
+        val activity = now.minusSeconds(60)
+        val gaps = mapOf("anxious" to 5L, "playful" to 10L, "warm_v1" to 15L, "warm_v2" to 15L,
+            "gentle" to 20L, "custom" to 20L, "steady" to 60L, "distant" to 120L)
+        gaps.forEach { (style, minutes) ->
+            val stats = LocalContactStats(lastActivity = activity)
+            val first = LocalContactPolicy.decide(now, enabled, style, stats)
+            assertFalse(first.eligible)
+            assertEquals("recent_chat", first.reason)
+            assertEquals("First-contact time for $style", activity.plusSeconds(minutes * 60), first.nextDue)
+            val checkedLater = LocalContactPolicy.decide(now.plusSeconds(30), enabled, style, stats)
+            assertEquals("Checking again must not postpone the same interaction", first.nextDue, checkedLater.nextDue)
+        }
+    }
+    @Test fun anxiousFirstContactDoesNotWaitFortyFiveMinutesOrRequireAnEarlierContact() {
+        assertTrue(LocalContactPolicy.decide(now, enabled, "anxious",
+            LocalContactStats(lastActivity = now.minusSeconds(6 * 60))).eligible)
+        assertTrue(LocalContactPolicy.decide(now, enabled, "gentle",
+            LocalContactStats(lastActivity = now.minusSeconds(21 * 60))).eligible)
+    }
 }

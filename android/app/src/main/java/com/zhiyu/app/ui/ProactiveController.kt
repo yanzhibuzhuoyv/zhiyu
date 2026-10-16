@@ -14,15 +14,16 @@ import com.zhiyu.app.data.appCredentialStore
 import com.zhiyu.app.domain.ProactivePreferences
 import com.zhiyu.app.notifications.ProactiveNotifications
 import com.zhiyu.app.notifications.ProactiveScheduler
+import com.zhiyu.app.notifications.ContactPreferenceWriter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 @Stable
-class ProactiveController(context: Context, private val conversationId: String?, private val scope: CoroutineScope) {
+class ProactiveController(context: Context, private val conversationId: String?, private val scope: CoroutineScope,
+    private val service: com.zhiyu.app.domain.ProactiveService = LocalProactiveService(context, appCredentialStore(context))) {
     private val appContext = context.applicationContext
     private val store = ProactiveWorkStore(appContext)
-    private val service = LocalProactiveService(appContext, appCredentialStore(appContext))
     private val mutex = Mutex()
     var preferences by mutableStateOf(ProactivePreferences())
         private set
@@ -43,18 +44,19 @@ class ProactiveController(context: Context, private val conversationId: String?,
         ready = true
     }
 
-    fun toggle(enabled: Boolean) = operation {
-        val id = conversationId ?: throw IllegalStateException("请先进入聊天")
-        if (enabled && !ProactiveNotifications.allowed(appContext)) { permissionDenied(); return@operation }
-        if (!enabled) {
-            withContext(Dispatchers.IO) { store.setEnabled(id, false) }
-            ProactiveScheduler.cancel(appContext)
-            preferences = preferences.copy(enabled = false)
+    fun toggle(enabled: Boolean): Job {
+        val id = conversationId
+        val allowed = !enabled || ProactiveNotifications.allowed(appContext)
+        // Start the local commit before launching screen-bound presentation work. Leaving
+        // the Activity can cancel await/UI updates, but not a notification grant's settings.
+        val commit = if (id != null && allowed) ContactPreferenceWriter.submit(appContext, id,
+            preferences.copy(enabled = enabled), service) else null
+        return operation {
+            if (id == null) throw IllegalStateException("请先进入聊天")
+            if (!allowed) { permissionDenied(); return@operation }
+            if (!enabled) preferences = preferences.copy(enabled = false)
+            preferences = requireNotNull(commit).await()
         }
-        val accepted = service.savePreferences(id, preferences.copy(enabled = enabled))
-        withContext(Dispatchers.IO) { store.setEnabled(id, accepted.enabled) }
-        preferences = accepted
-        if (accepted.enabled) ProactiveScheduler.schedule(appContext, id) else ProactiveScheduler.cancel(appContext)
     }
 
     fun permissionDenied() { error = "通知没有开启，聊天仍可正常使用。你可以在系统设置中允许知语通知。" }

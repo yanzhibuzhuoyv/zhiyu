@@ -22,14 +22,16 @@ import kotlinx.coroutines.flow.first
     }
     val firstId = state.messages.firstOrNull()?.id
     val lastId = state.messages.lastOrNull()?.id
-    val pending = state.pendingMessage != null || state.pendingImage != null
-    val typing = pending || state.busy in listOf("AI 正在输入", "AI 正在思考")
-    val count = 2 + state.messages.size + (if (pending) 1 else 0) + (if (typing) 1 else 0)
-    LaunchedEffect(pending) { if (pending) followingTail = true }
+    val pending = state.pendingMessage != null || state.pendingImage != null || state.pendingOutgoing.isNotEmpty()
+    val legacyPending = state.pendingMessage != null || state.pendingImage != null
+    val typing = legacyPending || state.busy in listOf("AI 正在输入", "AI 正在思考")
+    val count = 2 + state.messages.size + state.pendingOutgoing.size + (if (legacyPending) 1 else 0) + (if (typing) 1 else 0)
+    val outgoingTail = state.pendingOutgoing.lastOrNull()?.id
+    LaunchedEffect(pending, outgoingTail) { if (pending) followingTail = true }
     LaunchedEffect(state.viewingOlder, firstId) {
         if (state.viewingOlder && !pending) list.scrollToItem(0)
     }
-    LaunchedEffect(state.viewingOlder, firstId, lastId, pending, typing, imeBottom, viewportHeight, fontSizeSp, followingTail) {
+    LaunchedEffect(state.viewingOlder, firstId, lastId, outgoingTail, state.pendingOutgoing.size, pending, typing, imeBottom, viewportHeight, fontSizeSp, followingTail) {
         if (state.messages.isEmpty() && !pending) return@LaunchedEffect
         if (state.viewingOlder && !pending) return@LaunchedEffect
         if (!followingTail) return@LaunchedEffect

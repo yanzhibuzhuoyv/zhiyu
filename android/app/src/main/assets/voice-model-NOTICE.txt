@@ -35,6 +35,16 @@ Corpus provider: Beijing Shell Shell Technology Co., Ltd.
 OpenSLR lists the corpus license as Apache License, Version 2.0.
 The application distributes model weights and support files, not that corpus.
 
+Voice selection gender groups (metadata only, no weight changes)
+Speaker order is the bundled data/speakers.txt from the model revision above.
+Speaker-order SHA256: 50a825fc9a89172eee04a4d68869d933d0eca0d847f3b6fcffff9514cc72442d
+Gender attributes are joined by speaker name from the AISHELL corpus provider:
+https://huggingface.co/datasets/AISHELL/AISHELL-3/blob/main/spk-info.txt
+Metadata SHA256: 86148f95beab318ad9d08bf945b1d56ffba8c97b09137ae784cc62b0cd6539ef
+The 174 model speakers map to 138 female and 36 male entries.
+These are corpus metadata labels, not inferred from the speaker number or pitch.
+Unmatched future speakers remain unclassified. Corpus license: Apache-2.0.
+
 ONNX Runtime
 Copyright (c) Microsoft Corporation
 License: MIT

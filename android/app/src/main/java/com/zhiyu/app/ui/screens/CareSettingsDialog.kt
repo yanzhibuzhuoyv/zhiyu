@@ -60,6 +60,8 @@ fun CareSettingsDialog(controller: CareController, close: () -> Unit) {
                     IconButton(onClick = close) { Icon(Icons.Outlined.Close, "关闭日记") }
                 }
                 Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CompanionBackgroundCard()
+                    HorizontalDivider()
                     calendarError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("care_error")) }
                     calendarNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("care_notice")) }
                     Text("你可以记下特别的事，TA 也会偶尔写下自己的感受。", style = MaterialTheme.typography.bodyMedium)

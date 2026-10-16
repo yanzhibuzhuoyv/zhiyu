@@ -18,7 +18,7 @@ class RemoteScenePhotos(private val environment: RemoteSceneEnvironment) {
         snapshot: OcIdentitySnapshot?): LocalSceneStockResult = serial.withLock {
         MediaRules.path(chat)
         val frozen = targets.map(RemoteSceneRules::freeze)
-        require(frozen.size <= 72 && frozen.all { it.scene.visualVersion == profile.visualVersion })
+        require(frozen.size <= 72 + LocalSelfieRules.SIZE && frozen.all { it.scene.visualVersion == profile.visualVersion })
         if (!configured()) return@withLock deferred("unconfigured")
         var skipped: LocalSceneStockResult? = null
         for (target in frozen) {
@@ -194,6 +194,11 @@ class RemoteScenePhotos(private val environment: RemoteSceneEnvironment) {
 
     private suspend fun reviewAndPublish(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget,
         candidate: RemoteSceneCandidate, image: AgnesGeneratedImage, recheck: Boolean = false): LocalSceneStockResult {
+        if (target.selfie != null && candidate.imageSha == binding.original.sha256) {
+            environment.saveCandidate(candidate.copy(status = LifePhotoReviewStatus.REJECTED,
+                reason = "selfie_reused_original", correction = null), image.bytes)
+            return deferred("rejected")
+        }
         var review = environment.review(binding, target, candidate.prompt, image)
         currentCoroutineContext().ensureActive()
         if (!environment.unchanged(binding, target)) return deferred("stale")

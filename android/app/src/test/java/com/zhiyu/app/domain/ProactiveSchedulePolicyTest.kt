@@ -16,7 +16,8 @@ class ProactiveSchedulePolicyTest {
 
     @Test fun staleAndMissingDueNeverCauseAnImmediateBackgroundBusyLoop() {
         assertEquals(now.plusSeconds(30), ProactiveSchedulePolicy.nextCheck(now, ProactiveRunRecord(now, "sent", now.minusSeconds(1))))
-        assertEquals(now.plusSeconds(900), ProactiveSchedulePolicy.nextCheck(now, null))
+        assertEquals(now.plusSeconds(30), ProactiveSchedulePolicy.nextCheck(now, null))
+        assertEquals(now.plusSeconds(900), ProactiveSchedulePolicy.nextCheck(now, ProactiveRunRecord(now, "foreground", null)))
         assertEquals(now.plusSeconds(86400), ProactiveSchedulePolicy.nextCheck(now,
             ProactiveRunRecord(now, "not_due", now.plusSeconds(86400 * 8))))
     }
@@ -31,5 +32,8 @@ class ProactiveSchedulePolicyTest {
         assertNull(ProactiveSchedulePolicy.parseNextDue(null))
         assertThrows(IllegalArgumentException::class.java) { ProactiveRunRecord(now, "Key=secret", null) }
         assertThrows(IllegalArgumentException::class.java) { ProactiveSchedulePolicy.uniqueDueName("../chat") }
+    }
+    @Test fun firstAllowedCheckDoesNotWaitAnExtraQuarterHourBeforeEvaluatingThePersonality() {
+        assertEquals(now.plusSeconds(30), ProactiveSchedulePolicy.nextCheck(now, null))
     }
 }

@@ -28,6 +28,7 @@ data class AppState(
     val busy: String? = null,
     val pendingMessage: String? = null,
     val pendingImage: MediaAttachment? = null,
+    val pendingOutgoing: List<OutgoingDraft> = emptyList(),
     val error: String? = null,
     val notice: String? = null,
 ) {

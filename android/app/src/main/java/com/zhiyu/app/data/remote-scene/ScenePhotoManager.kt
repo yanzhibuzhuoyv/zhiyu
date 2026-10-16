@@ -95,7 +95,11 @@ class ScenePhotoManager(context:Context,private val credentials:CredentialStore=
         require(job.expectedVersion==profile.visualVersion){"恋人外观已更新，旧候选不会再使用"}
         val snapshot=OcCreatorStore(app).read(chat)?.takeIf {it.identity.reference?.id==profile.referenceId&&
             it.identity.reference?.visualVersion==profile.visualVersion}
-        val targets=LocalDailyRepository(app).use {daily->LocalScenePrefetchRules.targets(daily.horizon(chat,profile.visualVersion,Instant.now()),Instant.now())}
+        val targets=LocalDailyRepository(app).use {daily->
+            val now = Instant.now()
+            val plans = daily.horizon(chat,profile.visualVersion,now)
+            com.zhiyu.app.data.selfie.LocalSelfieBank(app).targets(chat, profile, plans.first()) + LocalScenePrefetchRules.targets(plans,now)
+        }
             .filter {it.scene.dayId==job.dayId}
         require(targets.isNotEmpty()){"这段日常已过，不会重新发送"}
         val binding=environment.freeze(chat,targets.first(),profile,snapshot)

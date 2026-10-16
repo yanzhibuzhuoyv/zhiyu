@@ -37,7 +37,10 @@ class LocalSceneStock(context: Context,
         if (expectedVersion != null && expectedVersion != profile.visualVersion) return LocalSceneStockResult()
         val plans = LocalDailyRepository(app).use { it.horizon(chat, profile.visualVersion, instant) }
         val snapshot = characters.read(chat)?.takeIf { it.identity.reference?.id == profile.referenceId && it.identity.reference?.visualVersion == profile.visualVersion }
-        if(remoteDefault)return remotePhotos.prepare(chat,LocalScenePrefetchRules.targets(plans,instant),profile,snapshot)
+        if(remoteDefault) {
+            val selfieTargets = com.zhiyu.app.data.selfie.LocalSelfieBank(app).targets(chat, profile, plans.first())
+            return remotePhotos.prepare(chat, selfieTargets + LocalScenePrefetchRules.targets(plans,instant),profile,snapshot)
+        }
         val pictureIdentity = snapshot?.let { OcCallCharacterRules.resolve(it.identity, it.identity.reference) }
         val native = backgrounds.hasInstalledPack()
         val pending = LocalScenePrefetchRules.targets(plans, instant).filterNot { hasStock(it, native) }

@@ -40,8 +40,9 @@ object LocalVoiceRules {
         return results.toList()
     }
 
-    fun checkAudio(samples: FloatArray, rate: Int) {
-        require(rate in 8000..48000 && samples.size in 1..rate * 90 && samples.all { it.isFinite() && it in -1.0001f..1.0001f }) {
+    fun checkAudio(samples: FloatArray, rate: Int, maximumSeconds: Int = 90) {
+        require(maximumSeconds in 1..180)
+        require(rate in 8000..48000 && samples.size in 1..rate * maximumSeconds && samples.all { it.isFinite() && it in -1.0001f..1.0001f }) {
             "本机语音没有生成有效音频"
         }
     }

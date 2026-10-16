@@ -46,7 +46,7 @@ class LocalMediaRetentionNativeTest {
         val sent = stock("2026-09-01", 0xff222233.toInt())
         val portrait = media.ingest("image", picture(0xff333344.toInt()), "人物原图", dayId = "2026-09-01", purpose = "portrait")
         val user = media.ingest("image", picture(0xff444455.toInt()), "用户图片", dayId = "2026-09-01", purpose = "chat")
-        val sticker = media.ingest("sticker", picture(0xff555566.toInt()), "内置素材", dayId = "2026-09-01")
+        val sticker = legacySticker(context, picture(0xff555566.toInt()), "旧内置素材", day = "2026-09-01")
         val background = media.ingest("image", picture(0xff666677.toInt()), "生成的空场景", dayId = "2026-09-01", purpose = "scene_background")
         val undated = media.ingest("image", picture(0xff777788.toInt()), "生成的空场景", purpose = "scene_background")
         val result = LocalMediaRetention(context, { setOf(sent.id) }).sweep(today)
@@ -61,7 +61,7 @@ class LocalMediaRetentionNativeTest {
     @Test fun sharedBlobSurvivesPinnedAndCrossKindReferences() {
         val expired = stock()
         val protected = media.ingest("image", picture(), "人物原图", purpose = "portrait")
-        val sticker = media.ingest("sticker", picture(), "内置素材")
+        val sticker = legacySticker(context, picture(), "旧内置素材")
         val result = LocalMediaRetention(context, { emptySet() }).sweep(today)
         assertEquals(0, result.removedMetadata); assertEquals(0, result.removedBlobs)
         assertTrue(blob(expired).isFile); assertTrue(blob(sticker).isFile)

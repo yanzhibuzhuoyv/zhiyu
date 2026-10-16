@@ -74,7 +74,7 @@ class LocalProactiveServiceTest {
             val result = test.service().check("synthetic_oc", test.request())
             assertFalse(result.emitted)
             assertEquals("recent_chat", result.reason)
-            assertEquals(test.clock.plusSeconds(44 * 60).toString(), result.nextDueAt)
+            assertEquals(test.clock.plusSeconds(4 * 60).toString(), result.nextDueAt)
             assertTrue(test.gateway.requestIds.isEmpty())
         }
     }

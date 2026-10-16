@@ -6,13 +6,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.zhiyu.app.data.LocalVoiceRules
 import com.zhiyu.app.ui.VoiceController
 import com.zhiyu.app.domain.VoiceTuningSettings
 import java.util.Locale
@@ -29,15 +27,6 @@ import kotlin.math.roundToInt
     AlertDialog(onDismissRequest = close, title = { Text("恋人的声音") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("先选声音，再慢慢调到合你的心意。", style = MaterialTheme.typography.bodyMedium)
-            LocalVoiceRules.choices.forEach { voice ->
-                Row(Modifier.fillMaxWidth().testTag("voice_choice_${voice.id}"), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = controller.selectedVoiceId == voice.id, onClick = { controller.selectVoice(voice.id) },
-                        enabled = editable)
-                    Text(voice.name, Modifier.weight(1f))
-                    TextButton(onClick = { controller.preview(voice.id, draft) }, enabled = editable,
-                        modifier = Modifier.testTag("voice_preview_${voice.id}")) { Text("试听") }
-                }
-            }
             VoiceTimbreSelector(controller, draft, editable)
             VoiceTuningSlider("语速", "${String.format(Locale.ROOT, "%.2f", speed)} 倍", speed,
                 VoiceTuningSettings.MIN_SPEED..VoiceTuningSettings.MAX_SPEED, 11, editable, "voice_speed_slider") { speed = it }

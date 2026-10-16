@@ -23,11 +23,11 @@ class LocalVoicePlayback(context: Context) {
     private val stopVersion = AtomicLong(0L)
 
     suspend fun play(audio: LocalVoiceAudio, onLevel: (Float) -> Unit = {}, volume: Float = 1f,
-        pitchSemitones: Float = 0f) = withContext(Dispatchers.IO) {
+        pitchSemitones: Float = 0f, maximumSeconds: Int = 90) = withContext(Dispatchers.IO) {
         currentCoroutineContext().ensureActive()
         val token = stopVersion.get()
         val tuning = VoiceTuningSettings(volume = volume, pitchSemitones = pitchSemitones)
-        LocalVoiceRules.checkAudio(audio.samples, audio.sampleRate)
+        LocalVoiceRules.checkAudio(audio.samples, audio.sampleRate, maximumSeconds)
         val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
         val focus = focusRequest(attributes)
         lostFocus.set(false)

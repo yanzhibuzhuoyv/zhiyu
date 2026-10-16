@@ -158,13 +158,15 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
         db.update("conversations", values("updated_at" to message.createdAt), "owner=? AND id=?", arrayOf(owner, id))
         message
     }
-    fun history(owner: String, id: String, before: String? = null, limit: Int = 100): MessagePage {
+    fun history(owner: String, id: String, before: String? = null, limit: Int = 100,
+        includeCalls: Boolean = false): MessagePage {
         require(limit in 1..100)
         conversation(owner, id)
         val beforeSeq = before?.let { sequence(owner, id, it) }
         val args = mutableListOf(owner, id)
         beforeSeq?.let { args.add(it.toString()) }
-        val rows = readableDatabase.rawQuery("SELECT id,role,raw_bytes,sha256,created_at,origin,sources,attachments FROM messages WHERE owner=? AND conversation_id=?${if (beforeSeq == null) "" else " AND seq<?"} ORDER BY seq DESC LIMIT ${limit + 1}", args.toTypedArray()).use { cursor ->
+        val callFilter = if (includeCalls) "" else " AND origin NOT IN ('call_user','call_reply','call_interrupted')"
+        val rows = readableDatabase.rawQuery("SELECT id,role,raw_bytes,sha256,created_at,origin,sources,attachments FROM messages WHERE owner=? AND conversation_id=?$callFilter${if (beforeSeq == null) "" else " AND seq<?"} ORDER BY seq DESC LIMIT ${limit + 1}", args.toTypedArray()).use { cursor ->
             buildList { while (cursor.moveToNext()) add(cursor.metadata()) }
         }
         val selected = mutableListOf<Message>()

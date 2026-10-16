@@ -4,7 +4,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-data class LocalScenePrefetchTarget(val scene: LocalDailyScene, val index: Int, val slot: LocalDailySlot, val nextDay: Boolean)
+data class LocalScenePrefetchTarget(val scene: LocalDailyScene, val index: Int, val slot: LocalDailySlot, val nextDay: Boolean,
+    val selfie: LocalSelfieTicket? = null)
 data class LocalScenePrefetchResources(val cpuLoad: Double?, val thermalSafe: Boolean?, val memorySafe: Boolean?)
 data class LocalScenePrefetchDecision(val allowed: Boolean, val reason: String)
 

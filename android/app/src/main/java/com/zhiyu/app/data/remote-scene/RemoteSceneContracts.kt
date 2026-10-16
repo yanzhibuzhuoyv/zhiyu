@@ -78,7 +78,8 @@ internal object RemoteSceneRules {
         require(attempt in 0..1)
         return hash(listOf("remote-life-v1", binding.chat, binding.profile.visualVersion.toString(),
             binding.original.id, binding.original.sha256, binding.packageSha.orEmpty(),
-            LocalDailyRules.revision(target.scene), target.index.toString(), target.slot.time, attempt.toString()) + policyScope(binding)).take(32)
+            LocalDailyRules.revision(target.scene), target.index.toString(), target.slot.time, attempt.toString()) + policyScope(binding) +
+            target.selfie?.let { LocalSelfieRules.check(it); listOf("selfie-v1", it.scope, it.lane.toString(), it.generation.toString()) }.orEmpty()).take(32)
     }
     fun bindingSha(binding: RemoteSceneBinding): String = hash(listOf(binding.chat, binding.profile.mode,
         binding.profile.description, binding.profile.gender, binding.profile.hair, binding.profile.visualVersion.toString(),
@@ -132,6 +133,7 @@ internal object RemoteSceneRules {
         (candidate.reviewBindingSha ?: candidate.bindingSha) == bindingSha(binding)
 
     fun freeze(target: LocalScenePrefetchTarget): LocalScenePrefetchTarget {
+        target.selfie?.let(LocalSelfieRules::check)
         require(target.scene.visualVersion >= 0 && target.scene.fictional && target.scene.timezone == LocalDailyRules.TIMEZONE)
         require(target.index in target.scene.slots.indices && target.index in 0..23 && target.slot == target.scene.slots[target.index])
         LocalDailyRules.current(target.scene.slots, java.time.Instant.EPOCH)

@@ -29,7 +29,17 @@ object LocalContactPolicy {
         if (!preferences.enabled) return result("disabled", now.plus(Duration.ofDays(1)))
         if (stats.unanswered >= unansweredLimit) return result("awaiting_reply", now.plus(spacing))
         if (style == "distant" && stats.lastActivity == null) return result("reserved_style", now.plus(spacing))
-        val interactionDue = stats.lastActivity?.plus(Duration.ofMinutes(45))
+        // Anchor the first quiet interval to an actual exchanged message, never to a
+        // foreground repair/check. Subsequent contact cadence remains personality-specific.
+        val firstQuietMinutes = when (style) {
+            "anxious" -> 5L
+            "playful" -> 10L
+            "warm_v1", "warm_v2" -> 15L
+            "steady" -> 60L
+            "distant" -> 120L
+            else -> 20L
+        }
+        val interactionDue = stats.lastActivity?.plus(Duration.ofMinutes(firstQuietMinutes))
         if (interactionDue != null && now.isBefore(interactionDue)) return result("recent_chat", interactionDue)
         if (stats.todayCount >= cap) return result("daily_limit", nextDay)
         val contactDue = stats.lastContact?.plus(spacing)

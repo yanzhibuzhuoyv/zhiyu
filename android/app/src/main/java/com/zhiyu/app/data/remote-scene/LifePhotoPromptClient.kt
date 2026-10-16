@@ -82,10 +82,13 @@ class LifePhotoPromptClient(private val credentials: CredentialStore,
     }
     private fun stale() = ApiFailure(409, "聊天公司或模型已变更，旧生活照未采用", "life_prompt_stale")
     private fun framingConstraint(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget): String {
-        if (LocalDayStockRules.view(target.index) == "landscape")
+        if (view(target) == "landscape")
             return " This is scenery only: do not include any person, body fragment, silhouette or reflected character. Reject any such figure."
-        val policy = binding.framingPolicy ?: return ""
-        return if (OcFramingRules.permits(policy, true))
+        val selfie = if (target.selfie != null) " This is a new fictional OC portrait selfie: show the OC's face in a natural new expression or pose. " +
+            "Do not reuse the unchanged original reference image. The requested OC portrait must be visible. Keep all identity and crop constraints; " +
+            "visual review must reject an unchanged reference or a picture without the requested OC." else ""
+        val policy = binding.framingPolicy ?: return selfie
+        return selfie + if (OcFramingRules.permits(policy, true))
             " The user has confirmed this complete reference; full-body activity framing may use its already visible body."
         else when (policy.framing) {
             OcFraming.HEAD -> " User crop policy is HEAD: show only the original head/neck view, never torso, hips, legs or full body. Reject a wider crop."
@@ -93,12 +96,15 @@ class LifePhotoPromptClient(private val credentials: CredentialStore,
             else -> " Preserve the original visible crop exactly; never invent or reveal unseen body or expand to full body."
         }
     }
+    private fun view(target: LocalScenePrefetchTarget) = if (target.selfie != null) "portrait" else LocalDayStockRules.view(target.index)
     private fun metadata(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget) =
         "{\"fictional\":true,\"chat\":${AgnesImageJson.quote(binding.chat)},\"day\":${AgnesImageJson.quote(target.scene.dayId)}," +
             "\"scene_id\":${AgnesImageJson.quote(target.scene.sceneId)},\"trajectory_sha\":${AgnesImageJson.quote(LocalDailyRules.revision(target.scene))}," +
             "\"time\":${AgnesImageJson.quote(target.slot.time)},\"activity\":${AgnesImageJson.quote(target.slot.activity)}," +
             "\"tags\":[${target.slot.tags.joinToString(",", transform = AgnesImageJson::quote)}]," +
-            "\"view\":${AgnesImageJson.quote(LocalDayStockRules.view(target.index))},\"reference_sha\":${AgnesImageJson.quote(binding.original.sha256)}}"
+            "\"purpose\":${AgnesImageJson.quote(if (target.selfie != null) "selfie" else "daily")}," +
+            "\"selfie_variant\":${target.selfie?.let { "\"${it.lane}:${it.generation}\"" } ?: "null"}," +
+            "\"view\":${AgnesImageJson.quote(view(target))},\"reference_sha\":${AgnesImageJson.quote(binding.original.sha256)}}"
 
     companion object {
         private const val CONSTRAINT = "Preserve the same original OC identity, face, clothes, handedness and visible appendage/accessory counts. " +

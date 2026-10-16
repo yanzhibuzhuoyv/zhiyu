@@ -10,7 +10,9 @@ data class ProactiveRunRecord(val checkedAt: Instant, val outcome: String, val n
 
 object ProactiveSchedulePolicy {
     fun nextCheck(now: Instant, record: ProactiveRunRecord?): Instant {
-        val due = record?.nextDue ?: now.plusSeconds(15 * 60)
+        // A new grant needs a first check promptly. Foreground/permission skips with
+        // no due keep the ordinary repair interval, rather than polling every 30 seconds.
+        val due = record?.nextDue ?: now.plusSeconds(if (record == null) 30 else 15 * 60)
         return due.coerceIn(now.plusSeconds(30), now.plusSeconds(24 * 3600))
     }
 

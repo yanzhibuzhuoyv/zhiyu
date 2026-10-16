@@ -12,14 +12,16 @@ object LocalMediaFreshness {
     }
 }
 
-data class LocalMediaPlan(val prompt: String, val candidates: List<MediaAttachment>, val nonce: String) {
+data class LocalMediaPlan(val prompt: String, val candidates: List<MediaAttachment>, val nonce: String,
+    val selfieRequested: Boolean = false, val requiredAttachmentId: String? = null, val unavailableMessage: String? = null,
+    val selfieStatus: String? = null) {
     fun parse(raw: String): LocalMediaReply {
         val marks = Regex("\\[\\[ZHIYU_MEDIA_([^\\]\\r\\n]{1,160})\\]\\]").findAll(raw).toList()
         val one = marks.singleOrNull()
-        val selected = one?.takeIf { raw.substring(it.range.last + 1).isBlank() }
+        val selected = requiredAttachmentId?.let { identifier -> candidates.singleOrNull { it.id == identifier } } ?: one?.takeIf { raw.substring(it.range.last + 1).isBlank() }
             ?.groupValues?.get(1)?.takeIf { it.startsWith("$nonce:") }?.removePrefix("$nonce:")
             ?.let { identifier -> candidates.singleOrNull { it.id == identifier } }
-        val content = raw.replace(Regex("\\[\\[ZHIYU_MEDIA_[^\\r\\n]*?(?:\\]\\]|$)"), "").trim()
+        val content = unavailableMessage ?: raw.replace(Regex("\\[\\[ZHIYU_MEDIA_[^\\r\\n]*?(?:\\]\\]|$)"), "").trim()
         require(content.isNotBlank()) { "AI 这次没有返回文字，请稍后重试" }
         return LocalMediaReply(content, selected?.let(::listOf) ?: emptyList())
     }

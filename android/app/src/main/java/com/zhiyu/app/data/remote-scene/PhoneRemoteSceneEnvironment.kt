@@ -25,6 +25,7 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
     private val pauses = ContactPauseStore(app)
     private val candidates = RemoteSceneCandidateStore(app)
     private val framing = OcFramingStore(app)
+    private val selfies = com.zhiyu.app.data.selfie.LocalSelfieBank(app)
     private val prompts = LifePhotoPromptClient(credentials, stillCurrent = ::unchanged)
     private fun jobs() = LocalImageJobStore(app)
     override fun configured() = imageCredentials.configuration() != null
@@ -78,6 +79,7 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
         val instant = Instant.now()
         if (!daily.matches(binding.chat, target.scene, instant)) return false
         val revision = LocalDailyRules.revision(target.scene)
+        if (target.selfie != null) return target.scene.dayId == LocalDailyRules.dayId(instant) && selfies.current(binding.chat, profile, target)
         return LocalScenePrefetchRules.targets(daily.horizon(binding.chat, profile.visualVersion, instant), instant).any {
             it.index == target.index && it.slot == target.slot && LocalDailyRules.revision(it.scene) == revision
         }
@@ -94,6 +96,7 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
             .map { media.details(it.id) }.any { item ->
                 item.attachment.dayId == target.scene.dayId && item.attachment.visualVersion == profile.visualVersion &&
                     stockTags(chat, target).all { it in item.tags }
+                    && (target.selfie == null || selfies.eligible(chat, item, profile, target.scene))
                     && OcFramingStockRules.permits(framing.active(chat,profile),item.tags.toSet(),"contains_person" in item.tags)
             }
     override fun job(requestId: String) = jobs().use { it.get(requestId) }
@@ -107,8 +110,12 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
     override fun candidateBytes(candidate: RemoteSceneCandidate) = candidates.bytes(candidate)
     override suspend fun prompt(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget, correction: String?) =
         prompts.create(binding, target, correction)
-    override suspend fun review(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget, prompt: String, image: AgnesGeneratedImage) =
-        prompts.review(binding, target, prompt, image)
+    override suspend fun review(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget, prompt: String, image: AgnesGeneratedImage): LifePhotoReview {
+        val sha = ChatPhotoRules.sha(image.bytes)
+        if (target.selfie != null && !selfies.acceptsPixels(binding.chat, binding.profile, target, sha))
+            return LifePhotoReview(LifePhotoReviewStatus.REJECTED, "selfie_duplicate_or_stale", sha)
+        return prompts.review(binding, target, prompt, image)
+    }
     override suspend fun generate(binding: RemoteSceneBinding, prompt: String): AgnesGeneratedImage {
         val reference = withContext(Dispatchers.IO) { referencePng(binding.originalBytes) }
         currentCoroutineContext().ensureActive()
@@ -129,7 +136,8 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
         candidate: RemoteSceneCandidate, bytes: ByteArray, coroutine: CoroutineContext): Boolean = characters.withCurrentSnapshot(binding.chat) { snapshot ->
         LocalDailyRepository(app).use { daily -> daily.withCurrentScene(binding.chat, profile.visualVersion, Instant.now()) {
             coroutine.ensureActive()
-            if (!current(binding, target, profile, snapshot, daily)) false else
+            if (!current(binding, target, profile, snapshot, daily) || target.selfie != null &&
+                !selfies.acceptsPixels(binding.chat, profile, target, candidate.imageSha)) false else
                 pauses.withDeliveryAllowed(binding.chat, checkNotNull(binding.contactRevision)) {
                     candidates.withCurrentCandidate(candidate) {
                         coroutine.ensureActive()
@@ -141,16 +149,19 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
     }
     private fun ingest(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget, profile: VisualProfile, bytes: ByteArray): Boolean {
         val tags = target.slot.tags + stockTags(binding.chat, target) +
-            (if (LocalDayStockRules.view(target.index) != "landscape") listOf("contains_person") else emptyList()) +
+            (if (target.selfie != null || LocalDayStockRules.view(target.index) != "landscape") listOf("contains_person") else emptyList()) +
             (binding.framingPolicy?.let(OcFramingStockRules::tags) ?: emptyList())
-        media.ingest("image", bytes, "云服务生成并视觉复核的生活照", profile.visualVersion, target.scene.dayId,
-            "${target.slot.activity} · 虚构角色生活照（自动视觉复核可能出错）", tags.distinct())
+        if (target.selfie != null) require(ChatPhotoRules.sha(bytes) != binding.original.sha256) { "原图不能当作新自拍" }
+        media.ingest("image", bytes, if (target.selfie != null) "云服务生成并视觉复核的自拍" else "云服务生成并视觉复核的生活照",
+            profile.visualVersion, target.scene.dayId,
+            "${target.slot.activity} · 虚构角色${if (target.selfie != null) "自拍" else "生活照"}（自动视觉复核可能出错）", tags.distinct())
         return true
     }
 
-    private fun stockTags(chat: String, target: LocalScenePrefetchTarget) = listOf("daily_stock", "decoded_final",
+    private fun stockTags(chat: String, target: LocalScenePrefetchTarget) = listOf(if (target.selfie != null) "selfie_stock" else "daily_stock", "decoded_final",
         "remote_generated", "composite_reviewed", "slot_${target.slot.time.replace(":", "")}",
-        "trajectory_${LocalDailyRules.revision(target.scene).take(24)}", "remote_chat_${chat.take(24)}")
+        "trajectory_${LocalDailyRules.revision(target.scene).take(24)}", "remote_chat_${chat.take(24)}") +
+        target.selfie?.let(LocalSelfieRules::tags).orEmpty()
 
     /** Encoding/resizing the complete original is a transport derivative, never a character cutout or composite. */
     private fun referencePng(original: ByteArray): ByteArray {

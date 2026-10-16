@@ -23,7 +23,7 @@ class CallInterruptedMemoryOriginNativeTest {
         assertEquals(source.id, result.messageId)
         assertEquals(source.createdAt, result.createdAt)
         assertEquals("call_interrupted", result.origin)
-        assertEquals(source, archive.history(owner, chat.id).messages.single())
+        assertEquals(source, archive.history(owner, chat.id, includeCalls = true).messages.single())
     }
 
     @Test fun precisionMaterializationKeepsEachIndependentOriginWithoutChangingRanking() {
@@ -33,7 +33,7 @@ class CallInterruptedMemoryOriginNativeTest {
         assertEquals(listOf(prefix.id, complete.id), results.map { it.messageId })
         assertEquals(listOf("call_interrupted", "reply"), results.map { it.origin })
         assertEquals(listOf(prefix.content, complete.content), results.map { it.text })
-        assertEquals(listOf(complete, prefix), archive.history(owner, chat.id).messages)
+        assertEquals(listOf(complete, prefix), archive.history(owner, chat.id, includeCalls = true).messages)
     }
 
     @Test fun coldPrecisionAndRecentContextKeepOriginAcrossDatabaseReopen() {
@@ -44,7 +44,7 @@ class CallInterruptedMemoryOriginNativeTest {
         assertEquals("call_interrupted", recalled.origin)
         assertEquals(source.content, recalled.text)
         assertEquals("call_interrupted", archive.promptContext(owner, chat.id).messages.single().origin)
-        assertEquals(source, archive.history(owner, chat.id).messages.single())
+        assertEquals(source, archive.history(owner, chat.id, includeCalls = true).messages.single())
     }
 
     @Test fun correctionClosureCannotUpgradeAnInterruptedSuccessorToAnOrdinaryReply() {
@@ -68,7 +68,7 @@ class CallInterruptedMemoryOriginNativeTest {
         assertEquals(prefix.content, result.text)
         assertEquals("call_interrupted", result.origin)
         assertEquals("current_correction", result.evidenceState)
-        assertEquals(listOf(old, prefix), archive.history(owner, chat.id).messages)
+        assertEquals(listOf(old, prefix), archive.history(owner, chat.id, includeCalls = true).messages)
     }
 
     private fun hit(source: Message) = LocalSemanticHit(source.id, source.role, source.createdAt, "mid",

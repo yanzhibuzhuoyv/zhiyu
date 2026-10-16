@@ -85,4 +85,16 @@ class LifePhotoPromptClientTest {
             "same OC tea", AgnesGeneratedImage(png, "image/png")).status)
         assertEquals(1, provider.calls)
     }
+    @Test fun selfiePurposeOverridesLandscapeIndexWhileKeepingActualSlotAndCropConstraints() = runTest {
+        val store = Store(); val provider = Provider("{\"prompt\":\"The same OC in a new portrait selfie.\"}")
+        val real = LocalScenePrefetchTarget(scene, 0, scene.slots[0], false,
+            LocalSelfieTicket("a".repeat(64), 0, 0))
+        val prompt = client(store, provider).create(binding(store), real)
+        assertTrue(prompt.contains("selfie", ignoreCase = true))
+        assertFalse(prompt.contains("scenery only"))
+        assertTrue(provider.messages.last().content.contains("\"view\":\"portrait\""))
+        assertTrue(provider.messages.last().content.contains("\"purpose\":\"selfie\""))
+        assertTrue(provider.messages.last().content.contains(scene.slots[0].activity))
+        assertTrue(provider.messages.first().content.contains("unseen body"))
+    }
 }

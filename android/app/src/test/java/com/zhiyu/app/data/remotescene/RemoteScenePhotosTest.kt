@@ -120,4 +120,21 @@ class RemoteScenePhotosTest {
         assertEquals("review_unknown", run(fake).reason)
         assertEquals(0, fake.publishes); assertEquals(1, fake.candidates.size)
     }
+
+    @Test fun selfieLanesAndConsumedGenerationsDoNotReuseDailyOrOtherSelfiePaidIds() {
+        val binding = binding(); val daily = targets.first()
+        val first = daily.copy(selfie = LocalSelfieTicket("a".repeat(64), 0, 0))
+        val lane = first.copy(selfie = first.selfie!!.copy(lane = 1))
+        val refill = first.copy(selfie = first.selfie!!.copy(generation = 1))
+        val ids = listOf(daily, first, lane, refill).map { RemoteSceneRules.requestId(binding, it, 0) }
+        assertEquals(4, ids.distinct().size)
+    }
+    @Test fun unchangedOriginalPixelsCannotBePublishedAsANewSelfieEvenIfReviewSaysApproved() = runTest {
+        val fake = Fake()
+        val selfie = targets.first().copy(selfie = LocalSelfieTicket("a".repeat(64), 0, 0))
+        val result = run(fake, listOf(selfie))
+        assertEquals(0, result.prepared); assertEquals(0, fake.publishes)
+        assertEquals(1, fake.candidates.size)
+        run(fake, listOf(selfie)); assertEquals(1, fake.imageCalls)
+    }
 }

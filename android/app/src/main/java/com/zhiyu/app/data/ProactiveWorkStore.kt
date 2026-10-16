@@ -53,4 +53,15 @@ class ProactiveWorkStore(context: Context, name: String = "proactive_delivery") 
         val outcome = preferences.getString(prefix + "outcome", null) ?: error("主动联系检查状态不完整")
         ProactiveRunRecord(Instant.parse(checked), outcome, preferences.getString(prefix + "next", null)?.let(Instant::parse))
     }
+
+    /** A verified connection invalidates only a provider-rejection deferral, never a contact interval. */
+    fun releaseConnectionBackoff(conversationId: String, now: Instant): Boolean = synchronized(lock) {
+        if (!enabled(conversationId)) return@synchronized false
+        val record = lastRun(conversationId) ?: return@synchronized false
+        if (record.outcome != "needs_connection") return@synchronized false
+        // Compare and update under the same lock as Worker recordRun; a newly completed
+        // contact must not be overwritten by an older connection-failure snapshot.
+        recordRun(conversationId, record.copy(nextDue = now))
+        true
+    }
 }

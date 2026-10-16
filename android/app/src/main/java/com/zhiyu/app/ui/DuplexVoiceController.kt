@@ -15,7 +15,7 @@ enum class DuplexPhase { IDLE, PREPARING, LISTENING, THINKING, SPEAKING, STOPPIN
 
 @Stable class DuplexVoiceController(private val uiScope:CoroutineScope,
     private val factory:(VoiceTokenSource,(Boolean,Boolean)->Unit)->DuplexPortsFactory,
-    private val config:DuplexConfig=DuplexConfig(endSilenceMillis=800,maxReplyCodePoints=32768),
+    private val config:DuplexConfig=DuplexConfig(endSilenceMillis=com.zhiyu.app.domain.CallTurnPolicy.endpointMillis,maxReplyCodePoints=32768),
     private val dispatcher:CoroutineDispatcher=Dispatchers.Default) {
     var phase by mutableStateOf(DuplexPhase.IDLE);private set
     var transcript by mutableStateOf("");private set

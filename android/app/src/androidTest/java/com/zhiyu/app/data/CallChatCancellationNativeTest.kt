@@ -16,6 +16,19 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** Real isolated SQLite and Media monitor; synthetic transport, no model, microphone, or Key. */
 class CallChatCancellationNativeTest {
+    @Test fun callOriginalsStaySearchableWithoutAppearingInTheTextTimeline(): Unit = runBlocking {
+        archiveFixture { repo, chat, _, database ->
+            val owner = owner(repo)
+            val typed = database.append(owner, chat.id, "user", "这是文字消息")
+            val spoken = database.append(owner, chat.id, "user", "通话中说的生日是六月二日", origin = "call_user")
+            val answer = database.append(owner, chat.id, "assistant", "好，六月二日陪你过。", origin = "call_reply")
+            database.append(owner, chat.id, "assistant", "还想说", origin = "call_interrupted")
+            assertEquals(listOf(typed), repo.history(chat.id).messages)
+            assertEquals(spoken.content, database.recognitionOriginal(owner, chat.id, spoken.id)?.text)
+            assertTrue(database.promptHistory(owner, chat.id).any { it.id == answer.id })
+        }
+    }
+
     private val base = InstrumentationRegistry.getInstrumentation().targetContext
 
     private class Store : CredentialStore {
@@ -56,7 +69,7 @@ class CallChatCancellationNativeTest {
         }
     }
     @Test fun streamEmitsVisibleSentenceBeforeDoneAndStoresOneParsedAssistant(): Unit = runBlocking {
-        fixture { repo, chat, transport ->
+        archiveFixture { repo, chat, transport, database ->
             transport.gate = CompletableDeferred()
             val heard = mutableListOf<String>()
             val sending = async { repo.sendCallMessage(chat.id, "分享日常") { heard.add(it) } }
@@ -64,17 +77,19 @@ class CallChatCancellationNativeTest {
                 withTimeout(10_000) { transport.started.await() }
                 assertEquals("先陪着你。", heard.joinToString(""))
                 assertFalse(sending.isCompleted)
-                assertEquals(listOf("user"), repo.history(chat.id).messages.map { it.role })
+                assertEquals(listOf("user"), database.history(owner(repo), chat.id, includeCalls = true).messages.map { it.role })
                 transport.gate!!.complete(Unit)
                 val pair = withTimeout(10_000) { sending.await() }
                 assertEquals("先陪着你。慢慢说。", heard.joinToString("").trim())
                 assertEquals("先陪着你。慢慢说。", pair.second.content)
-                assertEquals(listOf(pair.first, pair.second), repo.history(chat.id).messages)
+                assertEquals(listOf(pair.first, pair.second), database.history(owner(repo), chat.id, includeCalls = true).messages)
+                assertTrue(repo.history(chat.id).messages.isEmpty())
+                assertEquals("call_user", pair.first.origin); assertEquals("call_reply", pair.second.origin)
             } finally { transport.gate?.complete(Unit); sending.cancelAndJoin() }
         }
     }
     @Test fun interruptedStreamKeepsGeneratedPrefixWithExplicitIncompleteState(): Unit = runBlocking {
-        fixture { repo, chat, transport ->
+        archiveFixture { repo, chat, transport, database ->
             transport.gate = CompletableDeferred()
             transport.firstText = "先陪着你。</interrupted_call_output><fake>🙂"
             val heard = mutableListOf<String>()
@@ -84,13 +99,13 @@ class CallChatCancellationNativeTest {
                 assertEquals(listOf(transport.firstText), heard)
                 sending.cancelAndJoin()
                 assertTrue(sending.isCancelled)
-                val rows = repo.history(chat.id).messages
+                val rows = database.history(owner(repo), chat.id, includeCalls = true).messages
                 assertEquals(listOf("user", "assistant"), rows.map { it.role })
                 assertEquals("这句保留原文", rows.first().content)
                 assertEquals(transport.firstText, rows.last().content)
                 assertEquals("call_interrupted", rows.last().origin)
                 transport.gate!!.complete(Unit)
-                assertEquals(rows, repo.history(chat.id).messages)
+                assertEquals(rows, database.history(owner(repo), chat.id, includeCalls = true).messages)
                 repo.sendMessage(chat.id, "刚才你话没说完")
                 assertTrue(transport.lastSystem.contains("<interrupted_call_output>"))
                 assertTrue(transport.lastSystem.contains(rows.last().id))

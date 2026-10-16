@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -29,6 +30,7 @@ import java.io.File
 import java.lang.reflect.Proxy
 
 /** Synthetic UI only: no saved keys, binding, application database or provider calls. */
+@Suppress("DEPRECATION")
 class WatercolorUiTest {
     @get:Rule val compose = createComposeRule()
     private lateinit var viewModel: ChatViewModel
@@ -97,7 +99,9 @@ class WatercolorUiTest {
         val dark = InstrumentationRegistry.getArguments().getString("watercolorDark") == "true"
         val state = AppState(restoring = false, connected = true, messages = originals,
             profile = CompanionProfile(name = "知语"))
+        var clipboard: androidx.compose.ui.platform.ClipboardManager? = null
         compose.setContent {
+            clipboard = LocalClipboardManager.current
             ZhiYuTheme(darkTheme = dark) {
                 Scaffold(topBar = { CompanionTopBar("知语", null) { IconButton({}) { Icon(Icons.Outlined.MoreVert, "更多设置") } } }) {
                     Box(Modifier.fillMaxSize().padding(it)) { ChatScreen(state, viewModel) }
@@ -105,7 +109,7 @@ class WatercolorUiTest {
             }
         }
         compose.onNodeWithTag("default_watercolor_background").assertExists()
-        compose.onNodeWithText(originals.last().content).assertIsDisplayed()
+        assertCompanionSegmentsAndCopy { clipboard?.getText()?.text }
         compose.onNodeWithTag("message_draft").assertIsDisplayed()
         compose.onNodeWithContentDescription("发送消息").assertIsNotEnabled()
         compose.onNodeWithText("记忆").assertDoesNotExist()
@@ -114,8 +118,10 @@ class WatercolorUiTest {
 
     @Test fun customBackgroundReplacesDefaultFloralArtwork() {
         val image = Bitmap.createBitmap(80, 80, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.rgb(170, 194, 183)) }
+        var clipboard: androidx.compose.ui.platform.ClipboardManager? = null
         // This tiny fixture is collected after composition disposal; never recycle while UI owns it.
         compose.setContent {
+            clipboard = LocalClipboardManager.current
             ZhiYuTheme(darkTheme = false) {
                 CompositionLocalProvider(LocalAppearanceImages provides AppearanceImages(background = image)) {
                     ChatScreen(AppState(restoring = false, connected = true, messages = originals), viewModel)
@@ -124,7 +130,19 @@ class WatercolorUiTest {
         }
         compose.onNodeWithTag("custom_chat_background").assertExists()
         compose.onNodeWithTag("default_watercolor_background").assertDoesNotExist()
-        compose.onNodeWithText(originals.last().content).assertIsDisplayed()
+        assertCompanionSegmentsAndCopy { clipboard?.getText()?.text }
+    }
+
+    private fun assertCompanionSegmentsAndCopy(copiedText: () -> String?) {
+        val original = originals.last()
+        val segments = ResponseSegments.split(original.content)
+        assertEquals(original.content, segments.joinToString("") { it.text })
+        segments.forEachIndexed { index, segment ->
+            compose.onNodeWithTag("message_segment_${original.id}_$index").assertExists()
+            compose.onNodeWithText(segment.text.trim()).assertIsDisplayed()
+        }
+        compose.onNode(hasContentDescription("复制消息") and hasAnyAncestor(hasTestTag("message_${original.id}"))).performClick()
+        compose.runOnIdle { assertEquals(original.content, copiedText()) }
     }
 
     private fun screenshot(name: String) {

@@ -117,10 +117,10 @@ internal class DuplexCommunicationSession private constructor(private val manage
     companion object {
         private val HEADSETS = setOf(AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
             AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET)
-        private fun priority(type: Int): Int = when {
+        internal fun priority(type: Int): Int = when {
             type in HEADSETS -> 0
-            type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> 1
-            type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> 2
+            type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> 1
+            type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> 2
             else -> 3
         }
 

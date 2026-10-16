@@ -110,15 +110,19 @@ class SingleChatTest {
         assertTrue(repository.discardedDrafts.isEmpty())
     }
 
-    @Test fun photoFailureRetainsTheDraftAndSuccessClearsOnlyThatPhoto() = runModel { model, repository ->
+    @Test fun photoFailureRetainsItsQueuedSnapshotAndExplicitRetryClearsOnlyThatPhoto() = runModel { model, repository ->
         val picture = photo(); model.draftImage(picture); repository.rejectPhoto = true
         model.send(); advanceUntilIdle()
-        assertEquals(picture, model.state.value.draftImage)
+        assertNull(model.state.value.draftImage)
+        val failed = model.state.value.pendingOutgoing.single()
+        assertEquals(picture, failed.image)
+        assertEquals(OutgoingPhase.FAILED, failed.phase)
         assertNotNull(model.state.value.error)
         assertTrue(repository.discardedDrafts.isEmpty())
         repository.rejectPhoto = false
-        model.send(); advanceUntilIdle()
+        model.retryOutgoing(failed.id); advanceUntilIdle()
         assertNull(model.state.value.draftImage)
+        assertTrue(model.state.value.pendingOutgoing.isEmpty())
         assertEquals(listOf(picture.attachment.id), repository.discardedDrafts)
         assertEquals("", repository.sentContents.single())
     }

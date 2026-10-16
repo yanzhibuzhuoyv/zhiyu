@@ -11,6 +11,30 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CallChatGatewayTest {
+    @Test fun callCompletionNeverPublishesIntoTheTextTimeline() = model { model, repo ->
+        model.draft("等会再发的文字")
+        val snapshot = model.state.value
+        assertEquals("陪你聊聊。", model.sendCallText(repo.chat.id, "刚刚醒了"))
+        assertEquals(2, repo.rows.size)
+        assertEquals(snapshot.messages, model.state.value.messages)
+        assertEquals(snapshot.draft, model.state.value.draft)
+        assertEquals(snapshot.busy, model.state.value.busy)
+        assertNull(model.state.value.pendingMessage)
+    }
+
+    @Test fun pendingCallDoesNotShowAKeyboardMessageOrTakeTheTextOperation() = model { model, repo ->
+        repo.answer = { awaitCancellation() }
+        val call = launch { model.sendCallText(repo.chat.id, "正在通话的原话") }
+        try {
+            runCurrent()
+            assertFalse(model.state.value.isBusy)
+            assertNull(model.state.value.pendingMessage)
+            assertTrue(model.state.value.messages.isEmpty())
+        } finally { call.cancelAndJoin() }
+        assertEquals(listOf("user"), repo.rows.map { it.role })
+        assertTrue(model.state.value.messages.isEmpty())
+    }
+
     @Test fun streamingFirstSentenceDoesNotPublishAnUnfinishedAssistantOrEraseTheDraft() = model { model, repo ->
         val gate = CompletableDeferred<Unit>(); val heard = mutableListOf<String>()
         model.draft("还没写完")
@@ -19,11 +43,11 @@ class CallChatGatewayTest {
         try {
             runCurrent()
             assertEquals(listOf("先陪着你。"), heard)
-            assertTrue(model.state.value.isBusy)
+            assertFalse(model.state.value.isBusy)
             assertTrue(repo.rows.none { it.role == "assistant" })
             gate.complete(Unit); call.join()
             assertEquals(listOf("先陪着你。", "慢慢说。"), heard)
-            assertEquals(listOf("user", "assistant"), model.state.value.messages.map { it.role })
+            assertTrue(model.state.value.messages.isEmpty())
             assertEquals("还没写完", model.state.value.draft)
         } finally { gate.complete(Unit); call.cancelAndJoin() }
     }
@@ -34,7 +58,7 @@ class CallChatGatewayTest {
         try {
             runCurrent(); assertEquals(listOf("开头。"), heard)
             call.cancelAndJoin(); advanceUntilIdle()
-            assertEquals(listOf("user"), model.state.value.messages.map { it.role })
+            assertTrue(model.state.value.messages.isEmpty())
             assertNull(model.state.value.busy); assertNull(model.state.value.error)
         } finally { call.cancelAndJoin() }
     }
@@ -54,7 +78,7 @@ class CallChatGatewayTest {
         model.draft("尚未写完"); model.draftImage(image)
         assertEquals("陪你聊聊。", model.sendCallText(repo.chat.id, "刚刚下班了"))
         assertEquals(listOf(repo.chat.id to "刚刚下班了"), repo.calls)
-        assertEquals(listOf("user", "assistant"), model.state.value.messages.map { it.role })
+        assertTrue(model.state.value.messages.isEmpty())
         assertEquals(repo.chat.id, model.state.value.selectedId)
         assertEquals(0, repo.created)
         assertEquals("尚未写完", model.state.value.draft); assertEquals(image, model.state.value.draftImage)
@@ -65,11 +89,11 @@ class CallChatGatewayTest {
         repo.answer = { awaitCancellation() }
         val call = launch { model.sendCallText(repo.chat.id, "这句话已经说出口") }
         runCurrent()
-        assertTrue(model.state.value.isBusy); assertEquals("这句话已经说出口", model.state.value.pendingMessage)
+        assertFalse(model.state.value.isBusy); assertNull(model.state.value.pendingMessage)
         call.cancel(); advanceUntilIdle()
         assertTrue(call.isCancelled)
-        assertEquals(repo.rows, model.state.value.messages)
-        assertEquals(listOf("user"), model.state.value.messages.map { it.role })
+        assertTrue(model.state.value.messages.isEmpty())
+        assertTrue(model.state.value.messages.isEmpty())
         assertNull(model.state.value.error); assertNull(model.state.value.busy); assertNull(model.state.value.pendingMessage)
     }
 
@@ -77,9 +101,9 @@ class CallChatGatewayTest {
         repo.answer = { throw ApiFailure(503, "raw-provider synthetic-secret https://private.invalid", "provider_unavailable") }
         try { model.sendCallText(repo.chat.id, "你好"); fail("Failure must reach the call owner") }
         catch (_: ApiFailure) { }
-        assertEquals(repo.rows, model.state.value.messages)
-        assertEquals("user", model.state.value.messages.single().role)
-        assertNotNull(model.state.value.error)
+        assertTrue(model.state.value.messages.isEmpty())
+        assertEquals("user", repo.rows.single().role)
+        assertNull(model.state.value.error)
         assertFalse(model.state.value.error.orEmpty().contains("raw-provider"))
         assertFalse(model.state.value.error.orEmpty().contains("synthetic-secret"))
         assertNull(model.state.value.pendingMessage); assertNull(model.state.value.busy)
@@ -107,12 +131,12 @@ class CallChatGatewayTest {
         val answerGate = CompletableDeferred<Unit>(); repo.answer = { answerGate.await(); "新回复" }
         val next = launch { model.sendCallText(repo.chat.id, "新句") }; runCurrent()
         historyGate.complete(Unit); runCurrent()
-        assertTrue(model.state.value.isBusy); assertEquals("新句", model.state.value.pendingMessage)
+        assertFalse(model.state.value.isBusy); assertNull(model.state.value.pendingMessage)
         assertTrue("The older snapshot cannot replace a newer operation", model.state.value.messages.isEmpty())
         answerGate.complete(Unit); advanceUntilIdle()
         assertTrue(old.isCancelled); assertTrue(next.isCompleted)
-        assertEquals("The next successful turn also recovers the saved interrupted original", repo.rows, model.state.value.messages)
-        assertEquals("新回复", model.state.value.messages.last().content)
+        assertTrue("Call originals remain outside the text timeline", model.state.value.messages.isEmpty())
+        assertEquals("新回复", repo.rows.last().content)
     }
 
     @Test fun cancelledOldHistoryCannotPopulateAnUnrelatedConnection() = model { model, repo ->
@@ -147,8 +171,8 @@ class CallChatGatewayTest {
             call.cancel(); answerGate.complete(Unit); runCurrent()
             assertTrue("Canceled provider callback must never publish a late pair", model.state.value.messages.isEmpty())
             historyGate.complete(Unit); advanceUntilIdle()
-            assertTrue(call.isCancelled); assertEquals(repo.rows, model.state.value.messages)
-            assertEquals(listOf("user"), model.state.value.messages.map { it.role })
+            assertTrue(call.isCancelled); assertTrue(model.state.value.messages.isEmpty())
+            assertTrue(model.state.value.messages.isEmpty())
         } finally {
             // A deliberate RED must still release the fake non-cooperative provider and history.
             answerGate.complete(Unit); historyGate.complete(Unit); call.cancelAndJoin()

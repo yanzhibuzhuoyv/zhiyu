@@ -33,7 +33,8 @@ internal class DailyShareNativeFixture(val chat: String = LocalMediaStore.identi
 
     fun image(labels: List<String> = tags, day: String? = event.dayId, version: Int = 0,
         purpose: String = "library", kind: String = "image", color: Int = 0xff598d84.toInt()): MediaAttachment =
-        assets.ingest(kind, png(color), "合成测试图片", version, day, slot.activity, labels, purpose)
+        if (kind == "sticker") legacySticker(context, png(color), "合成测试旧表情", day, labels, version)
+        else assets.ingest(kind, png(color), "合成测试图片", version, day, slot.activity, labels, purpose)
 
     fun png(color: Int = 0xff598d84.toInt()): ByteArray {
         val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)

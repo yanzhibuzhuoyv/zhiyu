@@ -48,6 +48,15 @@ import com.zhiyu.app.ui.screens.*
     val photos = rememberChatPhotoController(state.draftImage, viewModel::draftImage)
     val media = rememberMediaController(state.selectedId, state.connected)
     val ocScope = rememberCoroutineScope()
+    val chatVoice = remember(appContext, ocScope) { ChatVoiceController(appContext, ocScope) }
+    LaunchedEffect(state.selectedId, state.connected) { chatVoice.cancel() }
+    val voiceLifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(chatVoice, voiceLifecycle) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) chatVoice.pause() }
+        voiceLifecycle.addObserver(observer)
+        onDispose { voiceLifecycle.removeObserver(observer); chatVoice.cancel() }
+    }
+    LaunchedEffect(callOpen) { if (callOpen) chatVoice.pause() }
     val scenePhotos=remember(appContext,ocScope){ScenePhotoController(com.zhiyu.app.data.remotescene.ScenePhotoManager(appContext),ocScope)}
     LaunchedEffect(scenePhotosOpen,state.connected,state.selectedId) {
         scenePhotos.connect(if(scenePhotosOpen&&state.connected)state.selectedId else null)
@@ -134,14 +143,10 @@ import com.zhiyu.app.ui.screens.*
                                 modifier=Modifier.testTag("planar_menu"))
                             DropdownMenuItem(text = { Text("照片生成服务") }, leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
                                 onClick = { menuOpen = false; imageServiceOpen = true })
-                            DropdownMenuItem(text = { Text("候选照片") }, leadingIcon = { Icon(Icons.Outlined.Collections, null) },
-                                onClick = { menuOpen=false; scenePhotosOpen=true },modifier=Modifier.testTag("scene_photos_menu"))
                             DropdownMenuItem(text={Text("OC 取景与补全")},leadingIcon={Icon(Icons.Outlined.AutoAwesome,null)},
                                 onClick={menuOpen=false;expansionOpen=true},modifier=Modifier.testTag("oc_expansion_menu"))
                             DropdownMenuItem(text = { Text("恋人的声音") }, leadingIcon = { Icon(Icons.Outlined.RecordVoiceOver,null) },
                                 onClick = { menuOpen=false; voiceSettingsOpen=true })
-                            DropdownMenuItem(text = { Text("图片与表情包") }, leadingIcon = { Icon(Icons.Outlined.PhotoLibrary, null) },
-                                onClick = { menuOpen = false; mediaLibrary.reload(); mediaLibraryOpen = true })
                             DropdownMenuItem(text = { Text("聊天字号") }, leadingIcon = { Icon(Icons.Outlined.TextFields, null) },
                                 onClick = { menuOpen = false; typographyOpen = true }, modifier = Modifier.testTag("chat_font_menu"))
                             DropdownMenuItem(text = { Text("日历") }, leadingIcon = { Icon(Icons.Outlined.Event, null) },
@@ -170,9 +175,16 @@ import com.zhiyu.app.ui.screens.*
                 !state.connected -> ConnectionScreen(state, viewModel)
                 else -> CompositionLocalProvider(LocalAppearanceImages provides appearance.images,
                     LocalMediaController provides media, LocalChatTypography provides typography.settings) {
-                        ChatScreen(state.copy(busy = state.busy ?: if (photos.busy) "准备图片" else null), viewModel,
-                            composerActions = { ChatPhotoAction(photos, !state.isBusy) },
-                            composerPreview = { ChatPhotoPreview(photos, state.draftImage, !state.isBusy) })
+                        ChatScreen(state, viewModel,
+                            composerActions = {
+                                ChatPhotoAction(photos, state.connected && !state.restoring && !chatVoice.capturing)
+                                ChatVoiceAction(chatVoice, state.connected && !state.restoring && !photos.busy && state.draftImage == null && !callOpen)
+                            },
+                            composerPreview = {
+                                ChatPhotoPreview(photos, state.draftImage, state.connected && !state.restoring)
+                                ChatVoiceDraft(chatVoice, viewModel::sendVoiceClip)
+                            },
+                            composerPreparing = photos.busy || chatVoice.capturing)
                     }
             }
         }
@@ -220,11 +232,9 @@ import com.zhiyu.app.ui.screens.*
     if (callOpen && state.connected && state.selectedId!=null) {
         DuplexCallDialog(duplex,checkNotNull(state.selectedId),companionName,
             viewModel::sendCallText,onDismiss={callOpen=false},streamText=viewModel::streamCallText,character={ speaking,mouth ->
-                val character = currentCallIdentity
-                val animatedCharacter=planar.forBinding(planarBinding)
-                if(animatedCharacter!=null)PlanarPreview(animatedCharacter,if(speaking)mouth.coerceIn(0f,1f)else 0f,true,Modifier.fillMaxSize())
-                else CharacterPreview(character,OcMotion(),
-                    ocCreator::source,modifier=Modifier.fillMaxSize())
+                CallCharacterPreview(currentCallIdentity,planar.forBinding(planarBinding),
+                    if(speaking)mouth.coerceIn(0f,1f)else 0f, ocCreator::source,
+                    onEdit={callOpen=false;planarOpen=true},modifier=Modifier.fillMaxSize())
             })
     }
     if (mediaLibraryOpen && state.connected) CompositionLocalProvider(LocalMediaController provides media) {
