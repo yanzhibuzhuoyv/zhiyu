@@ -1,95 +1,131 @@
-# 知语 · 原生 Android AI 恋人
+# 知语 · ZhiYu
 
-当前开发版本为 **0.2.11 手机独立版**：本机保存独立原话、资料与素材，直接通过 HTTPS 调用选择的 AI 公司，无需电脑后端、Docker 或 USB。API Key 登录、固定恋人设定和一个持续聊天页面保持；云模型仍需联网。安装与升级边界见 [Android 本地版](docs/ANDROID.md)。
+原生 Android AI 伴侣应用，含端侧图像引擎（Qwen-Image 剪层/蒸馏）。本文件说明**如何从源码构建**与**用了哪些技术**；逐版变更见 [CHANGELOG.md](CHANGELOG.md)，整仓库结构见 [README-OVERVIEW.md](README-OVERVIEW.md)。
 
-0.2.11 新增前台连续收音、录放重叠、插话取消和原背景人物口型；DeepSeek 通话可在模型第一句返回后开始合成语音，其他公司保留完整回答后朗读。思考、图片和日历控制标记不朗读；被打断的已生成原话独立保存并标明未完成。已借鉴 rea-reverse 的流式首句思路；VoiceMem 分区候选经真实十万向量 A/B 漏召回而未采用，原语义优先 RAG 和逐句存档保持。[通话、研究与验收边界](docs/DUPLEX_ANDROID_2026-10-15.md)。
+---
 
-0.2.10 新增“更多→OC 取景与补全”：用户可以保持原取景、拒绝扩图，或明确提交全身补全；候选需实际像素审核、用户预览和确认才采用，原图和原视频形象保留。独立取景修订同时约束生活照生成、普通配图和日常分享。动态形象未保存编辑支持有界原子暂存与正常重建恢复，修复关闭预览时的图片回收崩溃。710 JVM＋241 AVD 检查通过，本批无新付费 API 调用。[收尾报告](docs/NONVOICE_COMPLETION_2026-10-15.md)；全双工接线在此版本后进行。
+## 一、仓库构成
 
-0.2.9 新增“更多→候选照片”：分页预览、用当前聊天 Key 重新审图、明确失败后确认一次重新生成、清理私有候选像素。未知或损坏的旧候选不再挡住后续生活照，也不重付费；空间不足在新生图预留前暂停。原图、已发送图片和生成记录保留。675 JVM＋209 AVD 检查通过，本批无新付费 API 调用。[使用、验证与边界](docs/SCENE_PHOTO_RECOVERY_2026-10-15.md)。
-
-0.2.8 固定人格核心、保留上传原背景，只对确认的人物部位做动画；默认 image 2.5 参考编辑准备生活照，独立图像 Key，不再要求先安装巨型学生模型。加入实际暂停主动联系及恢复旧请求门，650 JVM＋173 AVD 回归通过。真实中转8次请求6张成功，人物细节仍可能漂移；全双工和自动全身扩图尚未完成。[使用、试图和限制](docs/OC_BACKGROUND_IMAGE_SERVICE_2026-10-14.md)。
-
-0.2.7 新增手机“动态形象”工坊：确认 OC 后手动修正眼口、头颈、头发和附件，提供撤销/重做、原图对照、角色包存取，保存后接入通话页的 GLES 网格动画和现有口型。前视角局部动画已在电脑 AVD 验证，完整自动分层与真正全双工仍未完成。详见 [制作、升级和验证](docs/PLANAR_ANDROID_2026-10-14.md)。
-
-0.2.6 新增带图片的主动日常分享：按固定性格每天加权伪随机选择 0–7 次，关联当天真实保存的 OC 轨迹事项，只发送对应的已就绪照片；缺图等待，过时跳过，重启不重抽、不重复发送。原离线学生模型包继续使用。详见 [分享机制、安装与验证](docs/DAILY_PHOTO_SHARE_2026-10-13.md)。
-
-0.2.3 修复已导入／生成形象却在视频页提示未设定；照片提交后即在聊天显示，识图与回复随后继续，回复失败仍保留原图。按最新要求移除 2D／3D 建模，历史模型使用已经保存的图片；照片局部动画保留。[修复与测试](docs/CALL_CHARACTER_FIX_2026-10-11.md)。
-
-OC 使用导入或生成的已确认原图，保留背景并提供人物动作范围和眼口手动修正。参考编辑准备生活图库，照片局部网格与离线声音接入前台连续通话。完整自动 Cubism、红米真实回声和蓝牙效果仍待验证。[此前实现与边界](docs/MOBILE_FEATURE_PARITY.md)
-
-## 手机本地版当前状态
-
-Kotlin Android 是当前手机产品的唯一功能实现；Python 后端明确冻结为 legacy，只修安全、兼容和契约正确性。手机使用 BGE INT8 语义主路径与 FTS4 补查，旧后端使用 FTS5/BM25，两侧 schema、迁移及排名不等价。共享 JSON 生成两端带 ID 的行为规则与 `ok/not_searched/partial` 检索状态；状态只描述执行过程，不证明用户从未说过。旧后端 A/B 结果不作为手机召回等价证明。[共享契约及本轮验证](docs/NATIVE_RETRIEVAL_CONTRACT_V4.md)。
-
-真正中文 BGE INT8 语义检索、逐条无损原话存档、后台三层标注及更正指针、日轨迹和两套本机素材库已接入。0.2.2 接入持久两次 OC 生成、固定主体生活图库、图片聊天／后续追问、2D／3D 编辑和离线轮流语音／角色视频通话。生日年度提醒及已定约定的取消／改期静默处理；独立原文证据满足要求才修改本 App 日历。见 [API 实测](docs/AGNES_API_TRIAL.md)、[OC 制作](docs/OC_CREATOR_V4.md) 和 [离线声音](docs/LOCAL_VOICE_NATIVE.md)。
-
-当前修复验证见 [0.2.3 记录](docs/CALL_CHARACTER_FIX_2026-10-11.md)，此前功能集成见 [0.2.2 记录](docs/NATIVE_V4_VALIDATION_2026-10-11.md)。此前一万轮／两万条长原话、五千万 Unicode／十万真实语义分片测试已完成，原文和重启校验通过；严格全汉字补测按用户要求停止，不计为通过。本轮没有重跑长测或替换 RAG 算法，大库召回仍约20.66–21.56秒。测试只操作隔离模拟器，不等于红米实测；同签名调试包供覆盖试用，正式收费发行另做。
-
-## 0.1.x 电脑后端版历史记录
-
-以下保留此前实现与测试背景。旧包、USB 后端连接及服务端身份方式不适用于当前手机本地包；当前验证结果以新的本地报告为准。
-
-表情已改为同一次聊天回答中的语义选择，日常分享也可自然配图，成熟/疏离性格少发。电脑试用库改用 QQ 风格软萌仓鼠与真实猫狗反应图，旧圆脸样例退出候选但历史保留。[当前表情行为](docs/STICKERS.md)、[测试与素材来源](docs/STICKERS_VALIDATION.md)。
-
-Kotlin + Jetpack Compose 原生应用，FastAPI + SQLite 后端。选择 AI 公司、输入自己的 API Key 后进入同一段持续聊天；成功验证后本次安装固定公司与模型。选择页显示“恋人仅此唯一，此择不可挽回”。聊天记忆直接召回已保存的较早原话，资料导入使用弹窗。
-
-0.1.3 新增透明描边气泡、头像与背景、OC 图片导入/样例、独立图库与表情包库、北京日期虚拟生活轨迹，以及可关闭的主动联系通知。记忆管理入口已从用户界面移除，后台仍保留每条完整原话。焦虑型未回复时逐步增加联系频率，疏离型最多一次或不发；新预设只用于首次选择，已有绑定保持原样。调试包 `artifacts/ZhiYu-0.1.3-media-debug.apk`；[素材与接入](docs/MEDIA.md)、[本轮电脑验证](docs/MEDIA_VALIDATION.md)。中转生图尚未配置，两次生成机会会保留。
-
-可选“我们调好的恋人”：温柔体贴、俏皮亲昵、成熟稳重，支持女友、男友或不限定，以及名字和称呼；成功绑定后整份预设不可修改。“自行调教”可更新自己的恋人设定，继续原聊天；不启用设定时不增加性格预设。后端把恋人设定作为系统消息使用，把旧聊天和资料当作低信任参考。默认中文 BM25，支持可选本地 BGE 文档检索。
-
-新增“温柔相伴·试用版”`warm_v2`：稳定的温柔底色，也能表达不同意见和暂时妥协；当前互动不会自动改成永久性格。电脑直接打开 <http://127.0.0.1:8798/trial>，选择公司、输入自己的Key试用；安卓包为 `artifacts/ZhiYu-0.1.1-warm-v2-debug.apk`。[试用方式、真实对照与限制](docs/COMPANION_PRESET_TRIAL.md)。旧预设及已绑定初版均保留。
-
-USB真机修复包为`artifacts/ZhiYu-0.1.2-usb-debug.apk`；启动电脑后端并开启USB调试后，运行`.\scripts\Start-AndroidUsbDebug.ps1 -ApkPath .\artifacts\ZhiYu-0.1.2-usb-debug.apk -RestartApp`覆盖安装、建立连接。保留原Key与绑定，默认不再使用模拟器专用地址。[USB联调说明](docs/ANDROID.md)。
-
-## 本机启动
-
-已安装 Python 3.11+（SQLite >=3.43并支持FTS5）与 [uv](https://docs.astral.sh/uv/) 后，在项目根目录执行：
-
-```powershell
-.\scripts\Start-Backend.ps1
+```
+zhiyu/
+├── android/            手机端主产品（Kotlin + Jetpack Compose），唯一功能实现
+├── backend/            Python 后端（FastAPI），已冻结为 legacy
+├── native/qwen-edge/   端侧图像引擎原生层（C++ / JNI / stable-diffusion.cpp 分支）
+├── shared/             两端共享的行为契约（由脚本生成，构建时校验）
+├── scripts/            评测、冒烟、量化、打包与联调脚本
+├── qwen-image-edge/    上游实验工程：剪层与蒸馏的实验报告与工具
+├── compose*.yaml       Docker Compose 编排
+└── docs/               各功能的设计、验证与边界记录
 ```
 
-首次启动按 `backend/uv.lock` 安装依赖。API 文档：<http://127.0.0.1:8790/docs>；健康检查：<http://127.0.0.1:8790/health>。
+---
 
-没有 Key 时可以显式开启本地演示：
+## 二、Android 端构建
 
-```powershell
-.\scripts\Start-Backend.ps1 -Demo
+### 2.1 环境要求
+
+| 组件 | 版本 | 说明 |
+|------|------|------|
+| JDK | 17 | `sourceCompatibility` / `targetCompatibility` = 17 |
+| Android SDK Platform | **android-36** | `compileSdk = 36` |
+| Android NDK | **30.0.16248370** | `ndkVersion` 已锁定；ABI 过滤 `arm64-v8a` / `armeabi-v7a` / `x86_64` |
+| Gradle | 9.5.0 | 由 wrapper 自动下载 |
+| Android Gradle Plugin | 9.3.0 | |
+| Kotlin | 2.3.21 | 含 Compose 编译器插件 |
+| CMake + Ninja | — | 仅在需要重新编译 JNI 时用到 |
+
+`android/local.properties` 需指向 SDK（该文件不入库）：
+
+```properties
+sdk.dir=C\:\\Users\\<你>\\AppData\\Local\\Android\\Sdk
 ```
 
-安卓端选择“本地演示”，Key 填 `demo-key`。演示回复在界面中标明，不调用云端模型。正常连接会发起一次极短请求验证 Key，可能产生少量费用，后续聊天按所选厂商计费。
+### 2.2 构建命令
 
-## 安卓联调
+```powershell
+cd android
+.\gradlew.bat :app:assembleDebug              # debug APK
+.\gradlew.bat :app:assembleRelease            # release APK（R8 混淆已开启）
+.\gradlew.bat :app:testDebugUnitTest          # JVM 单元测试
+.\gradlew.bat :app:connectedDebugAndroidTest  # 设备/模拟器上的仪器测试
+```
 
-- 普通进入页只要求公司与 API Key；后端地址由构建配置提供。0.1.2调试默认 `http://127.0.0.1:8791`，USB手机通过ADB端口转发访问电脑Docker测试服务。
-- 使用 `scripts/Start-AndroidUsbDebug.ps1` 建立连接；模拟器同样可用ADB reverse。局域网地址可在debug“开发设置”调整，需另行配置后端监听。
-- release 通过 `-PzhiyuBackendUrl=https://你的域名` 配置 HTTPS 后端，配置非 HTTPS 会拒绝构建；未配置的包提示服务尚未配置。部署需证书及正式签名。
-- 新版后台记忆调试 APK 位于 `artifacts/ZhiYu-0.1.1-background-memory-debug.apk`；旧包保留，界面和构建说明见 [ANDROID.md](docs/ANDROID.md)。
+ABI 分包已启用（`splits.abi`），产物在 `android/app/build/outputs/apk/`，同时生成 universal APK。
 
-## 知识库
+> release 构建支持 `-PzhiyuBackendUrl=https://你的域名` 注入后端地址；**非 HTTPS 会被拒绝构建**。
 
-聊天“更多设置→资料”弹窗导入 txt / md / pdf / docx，单个最大 5 MiB。扫描 PDF 暂需先 OCR。相关内容参与回答并展示来源；聊天长期记忆独立于文档 RAG。不同服务商和 Key 的资料、会话分别隔离。
+### 2.3 构建前置：模型与原生产物
 
-复用了 `../rag-system` 的中文检索逻辑并保留 MIT 声明；原工程、索引和 `.env` 保持原状。[旧索引导入与语义模式说明](docs/RAG.md)。导入工具先 `--dry-run`，再使用当前连接的令牌导入指定身份。
+`app/build.gradle.kts` 里多个自定义 task 挂在 `preBuild` 上，它们**从仓库外的 `../artifacts/` 读取模型与原生库并做 SHA-256 硬校验，校验失败即中断构建**。全新克隆后必须先准备这些产物：
 
-## 服务商与模型
+| 目录 | 内容 | 来源 |
+|------|------|------|
+| `artifacts/native-voice/` | sherpa-onnx 1.13.8 AAR、zipformer 中英流式 ASR、vits-icefall-zh-aishell3 中文 TTS | `scripts/prepare_native_voice.py`（从 k2-fsa/sherpa-onnx 官方 release 固定版本下载） |
+| `artifacts/portrait-models/` | `u2netp.onnx` 人像分割 | `backend/prepare_portrait_model.py`（固定 URL + SHA） |
+| `artifacts/semantic-models/` | `bge-small-zh-v1.5-int8.onnx` + 词表 + manifest | `backend/prepare_semantic_model.py`（BAAI/bge-small-zh-v1.5，固定 revision） |
+| `artifacts/native-media-seed/` | 打包进 APK 的示例素材 | `scripts/prepare_native_media.py` |
+| `artifacts/model-packs/qwen-edge/` | Qwen 图像模型包 manifest | `scripts/package_qwen_model.py` |
+| `artifacts/android-qwen-jni/r2/jniLibs/` | `libzhiyu_qwen_text_jni.so`、`libzhiyu_qwen_image_jni.so` | `native/qwen-edge/android-jni/build.py` |
 
-[服务商适配说明](docs/PROVIDERS.md)列出已核验的官方 API 地址和差异。首次选择时可展开模型设置，成功验证后固定；实际调用取决于 Key 的授权、区域、余额和厂商支持。豆包需填写已授权模型 ID 或 `ep-` 接入点 ID。
+模型准备脚本只做「固定版本 + 哈希校验」的下载与导出，不执行下载来的源码。
 
-Key、绑定与自调设定由 Android Keystore 加密保存。退出仅清除 Key/token，不解除绑定；旧安装升级沿用已有连接及原恋人设定。绑定依赖本次安装，清数据、卸载或换设备不会保留本机绑定。API Key 是后端数据身份，更换不同 Key 不自动迁移旧聊天。后端只短期将 Key 保存在进程内存；重启后设备自动重新鉴权。`identity.secret` 与 SQLite 须一起备份。
+**接入但不在本仓库的依赖**：`android/app/libs/rig2d-0.2.0-studio.jar`（角色动画 2D 网格核心，来自同级 `../rig2d` 工程，SHA-256 `0b0d161e…`，构建时由 `verifyPlanarCore` 校验）。缺这个 jar 无法构建。
 
-双方每条原话均独立入库，正文只存一份并可无损压缩；按作者、相关性与时间权重并列召回，保留最新用户修订，不做记忆融合。三层标注已持久保存并参与排序；Docker默认使用所选AI在后台额外识别一次本人资料、偏好、愿望和承诺，完整原文与待办保存后先返回回复，严格核对原话出处，失败仍保留本轮聊天。同一次聊天优先回应当下，旧事只在有帮助时自然带出；应用尚未启用独立意图分类器。连续实测中分类比既有检索更贵，暂不接入前台跳过。基础类系统提示区分“无法确认”和“明确没发生”，AI猜测／用户问句不能证明用户事实，但模型仍有违反规则的案例。[连续实测与事实限制](docs/MEMORY_ROUTE_CONTINUOUS_EVAL.md) · [本地路由三轮](docs/MEMORY_ROUTE_EVAL.md) · [后台行为与边界](docs/MEMORY_ATTENTION.md)。记忆管理 API 保留供内部使用，Android 用户界面不再显示记忆选项。冷归档保留完整原文并支持回查，长期/永久及未解决承诺受到保护。没有自动删除或生产批量冷却任务。附近记录的联系须由原文支持，不能仅凭时间接近认定。
+### 2.4 构建期完整性校验
 
-历史每批最多100条；原文与索引仍会增长。语义标注不等于语义向量检索；此段记录的旧后端聊天候选为FTS/Bloom，未实现Engram。[三层与语义识别](docs/MEMORY_TIERS.md) · [冷归档容量实测](docs/MEMORY_COLD_PROOF.md) · [正文存储](docs/BODY_STORAGE.md) · [记忆与恋人设定](docs/CONVERSATION_MEMORY.md) · [存储与维护](docs/STORAGE.md)。
+这些 task 会在构建前强制校验，任何一个哈希不匹配都会**直接失败而不是警告**：
 
-新增原文检索顺序研究版：A 词项先查、语义补漏；B 语义先查、词项补漏。48道冻结合成题和千/万轮增长实验已完成，另有114次官方DeepSeek调用及逐题独审。两版检索耗时接近，换顺序仍不能消除模型把“未查到”说成“你没告诉过”的错误；研究代码尚未替换生产检索。[两版结果与失败记录](docs/MEMORY_RETRIEVAL_ORDER_EVAL.md)。
+| task | 校验对象 |
+|------|---------|
+| `verifyPlanarCore` | `rig2d-0.2.0-studio.jar`、`assets/planar/contract.json` |
+| `verifyQwenJni` | 4 个 Qwen JNI `.so`（arm64-v8a / x86_64） |
+| `prepareQwenAssets` | Qwen 模型包 `manifest.json` |
+| `preparePortraitAssets` | `u2netp.onnx` + 示例素材（仅允许 2 张图入包） |
+| `prepareSemanticAssets` | BGE int8 onnx、`vocab.txt`、`config.json`、`tokenizer_config.json`、`manifest.json` |
+| `prepareVoiceAssets` | 13 个语音模型文件 + sherpa AAR |
+| `prepareQwenTestAssets` | 公开测试 checkpoint（长度 262288 字节） |
+| `verifyCompanionContract` | 执行 `python shared/generate_companion_contract.py --check`，保证两端契约一致 |
 
-两版又分别测试完整回答的出处与范围校验：24道新题、8条长回复、24条预写挑战，首轮192次官方调用及另22次日期回归；保留草稿、审核、一次修订和再审。校验仍有漏判/误拦截，普通校验增加的等待中位约1.4秒，未接入前台。[校验实测与日期口径限制](docs/ANSWER_GUARD_AB_EVAL.md)。
+> 设计意图：模型件、原生库、契约都属于「供应链输入」，任何一个被替换都让构建失败，避免静默地用错权重出图。
 
-新增单次来源分段对照：32道新题、128条普通及16条长回答，A/B各比较自由回答和JSON来源约束。代码标明原话作者/保存时间，但6次JSON只返回空白，自然段仍有“没跟我讲过”等范围错误，完整引文降低陪聊自然度；未替换默认聊天。[单次生成实测](docs/EVIDENCE_REPLY_AB_EVAL.md)。
+### 2.5 Android 依赖清单
 
-## 测试与部署
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| `androidx.compose:compose-bom` | 2026.06.01 | Compose 版本统一约束 |
+| `androidx.activity:activity-compose` | 1.13.0 | Compose Activity 入口 |
+| `androidx.compose.material3:material3` | BOM 托管 | Material 3 |
+| `androidx.compose.material:material-icons-extended` | BOM 托管 | 扩展图标 |
+| `androidx.lifecycle:lifecycle-viewmodel-compose` | 2.10.0 | ViewModel 集成 |
+| `androidx.lifecycle:lifecycle-runtime-compose` | 2.10.0 | `collectAsStateWithLifecycle` |
+| `org.jetbrains.kotlinx:kotlinx-coroutines-android` | 1.10.2 | 协程 |
+| `com.squareup.okhttp3:okhttp` | 5.4.0 | 直连各家 AI 服务的 HTTPS 客户端 |
+| `androidx.exifinterface:exifinterface` | 1.4.2 | 图片方向元数据 |
+| `com.google.mlkit:text-recognition-chinese` | 16.0.1 | 图片中文 OCR |
+| `androidx.work:work-runtime-ktx` | 2.12.0 | 后台任务调度 |
+| `com.microsoft.onnxruntime:onnxruntime-android` | 1.30.0 | 端侧 ONNX 推理（BGE 语义、u2netp 人像） |
+| `com.tom-roush:pdfbox-android` | 2.0.27.0 | 资料导入解析 PDF |
+| `sherpa-onnx` AAR（本地） | 1.13.8 | 端侧 ASR + TTS |
+| `rig2d-0.2.0-studio.jar`（本地） | 0.2.0 | 角色网格动画核心 |
+| `junit:junit` | 4.13.2 | JVM 单元测试 |
+| `androidx.test.ext:junit` | 1.3.0 | 仪器测试 |
+
+---
+
+## 三、后端构建（legacy）
+
+### 3.1 环境要求
+
+Python **3.11+**，SQLite **≥3.43**（需 FTS5）。依赖锁定在 `backend/uv.lock`，用 [uv](https://docs.astral.sh/uv/) 管理。
+
+### 3.2 运行与测试
+
+```powershell
+.\scripts\Start-Backend.ps1          # 启动（默认 127.0.0.1:8790）
+.\scripts\Start-Backend.ps1 -Demo    # 无 Key 本地演示
+```
+
+API 文档 <http://127.0.0.1:8790/docs>，健康检查 <http://127.0.0.1:8790/health>。
 
 ```powershell
 cd backend
@@ -98,14 +134,103 @@ uv run --no-sync pytest --cov=app --cov-report=term-missing
 uv run --no-sync ruff check app tests
 ```
 
-Docker 部署：`docker compose up --build -d --wait`，默认绑定电脑回环端口，关闭演示。独立容器测试：`.\scripts\Test-Docker.ps1`；构建、重启/重建恢复与测试环境用法见 [DOCKER.md](docs/DOCKER.md)。
+Docker：
 
-已有镜像时可单独运行`.\scripts\Test-LongFields.ps1`验证双方16k和合成64k回复的保存/索引/分页/重启，使用无网络临时容器。[长字段实测](docs/LONG_FIELDS_TEST.md)。
+```powershell
+docker compose up --build -d --wait
+.\scripts\Test-Docker.ps1            # 独立容器测试
+```
 
-双方长字段耐久使用`.\scripts\Test-LongFieldsEndurance.ps1 -Turns 1000`或`-Turns 10000`，普通用户消息2k–4k字符、合成AI回复4k–8k字符，穿插16k/64k边界。使用独立磁盘卷和固定镜像，不调用云端AI。[负载、执行状态与证据](docs/LONG_FIELDS_ENDURANCE.md)。
+`backend/Dockerfile` 分 `base` / `test` / `runtime` 三阶段；`runtime` 阶段在镜像构建时执行 `prepare_portrait_model.py` 预置模型，**不在请求路径上下载模型**。Compose 已设 `cap_drop: ALL`、`no-new-privileges`、`pids_limit: 256`。
 
-[首版架构与范围](docs/ARCHITECTURE.md) · [实际验证结果](docs/VALIDATION.md)
+### 3.3 后端依赖
 
-已部署版本支持后台识别、旧事呈现和基础证据提示；此前Windows/Linux后端各757项通过、覆盖率分别95.07%/94.89%，本轮Windows/Linux脚本各612项通过，新增单次来源回答研究模块覆盖92.98%。Android沿用此前65项单元测试、19项API36模拟器专项联测，APK接口未改。此前连续实验另完成102次官方DeepSeek调用，技术完整结束与事实准确分开评价。此前千轮长字段完整流程通过，两万条长消息副本在全部原文一致的条件下，压缩及冷归档后整理副本主库540.20→224.29MiB；工作文件不会因释放页立即缩小。这是合成库的全冷场景，保留重要活跃记忆的真实用户库不保证同一比例。[实际验证、镜像差异与限制](docs/VALIDATION.md)。本机8791运行新版后端，普通用户只选公司和Key；本轮没有启用自动skip或修改APK。
+| 依赖 | 版本约束 | 用途 |
+|------|---------|------|
+| `fastapi` | ≥0.115,<1 | HTTP 服务 |
+| `uvicorn[standard]` | ≥0.34,<1 | ASGI 服务器 |
+| `httpx` | ≥0.28,<1 | 调用外部 AI 服务 |
+| `python-multipart` | ≥0.0.20,<1 | 表单 / 文件上传 |
+| `pypdf` | ≥6.18,<7 | PDF 资料解析 |
+| `python-docx` | ≥1.2,<2 | DOCX 资料解析 |
+| `pillow` | ≥12.3,<13 | 图片处理 |
+| `tzdata` | ≥2026.5,<2027 | 时区数据 |
 
-此前万轮保存/检索检查点通过但最终删除失败的原报告仍保留failed；独立删除修复和后续完整千轮报告分别留证，不合并为新镜像从零万轮通过。[历史耐久记录](docs/LONG_FIELDS_ENDURANCE.md)。不做记忆融合；合成测试不代表真实云模型回复正确率。
+可选 extras：`dev`（pytest / pytest-asyncio / pytest-cov / ruff）、`semantic`（sentence-transformers）、`portrait`（numpy / onnxruntime）。
+
+---
+
+## 四、原生层构建（端侧图像引擎）
+
+原生层对 stable-diffusion.cpp 的**固定分支**做适配，锁定信息在 `native/qwen-edge/diffusion/upstream-lock.json`：
+
+| 项 | 值 |
+|---|---|
+| 上游 | `github.com/leejet/stable-diffusion.cpp` |
+| commit | `2988060a4338a5dcd94721c964a8e87003c1ac8b` |
+| ggml 子模块 | `d25b121ce1d6ae0c7e62ad080460d9fc1e46dd93` |
+| 补丁 SHA-256 | `9bf82bfd37dd1ffd5df28fd32e0a3948ae10ab8f086c886496c01203f300cc95` |
+
+编译 JNI 动态库（产出 `artifacts/android-qwen-jni/`，并自动 audit 导出符号与依赖）：
+
+```powershell
+python native\qwen-edge\android-jni\build.py
+```
+
+原生层目录：`adapter/`（适配器推理）、`diffusion/`（采样与 VAE 设备端分阶段）、`android-jni/`（JNI 导出与输入契约）、`student/`。
+
+端侧图像引擎的**上游实验工程**在 `qwen-image-edge/`：剪层（L24/L36）、蒸馏学生（Qwen3-0.6B/1.7B + 适配器）、GGUF 量化。交付清单与体积账本见 [qwen-image-edge/交付说明.md](qwen-image-edge/交付说明.md)，工具链在 `qwen-image-edge/tools/`。
+
+模型权重不入库，发布在本仓库 Release（`te-encoder-L24`、`distill-students`）。
+
+---
+
+## 五、常见构建问题
+
+| 现象 | 原因与处理 |
+|------|-----------|
+| `Qwen JNI SHA mismatch` / `Voice model SHA mismatch` / `Portrait model SHA256 mismatch` | `../artifacts/` 下的模型件被替换或缺失，按第 2.3 节重新准备 |
+| `Planar core/contract SHA mismatch` | `rig2d-0.2.0-studio.jar` 缺失或被改动；改库必须同步 `contract.json` 并重跑回归 |
+| `Semantic asset SHA256 mismatch` | BGE int8 导出件不匹配，重跑 `backend/prepare_semantic_model.py` |
+| `SDK location not found` | 缺 `android/local.properties` |
+| `NDK not configured` / 找不到 `30.0.16248370` | 用 SDK Manager 安装对应 NDK 版本 |
+| 找不到 `libzhiyu_qwen_*.so` | 先跑 `native/qwen-edge/android-jni/build.py` |
+| `verifyCompanionContract` 失败 | 两端契约不同步，跑 `python shared/generate_companion_contract.py` 重新生成 |
+| 中文乱码 | 构建脚本与 Python 均依赖 UTF-8；PowerShell 下先设 `$env:PYTHONUTF8='1'` |
+
+---
+
+## 六、构建验证记录
+
+下列命令是在**本仓库 GitHub 上的实际克隆**中执行通过的，不是纸面推导（2026-10-16 实测）：
+
+```
+克隆：git clone --depth 1 --branch master https://github.com/yanzhibuzhuoyv/zhiyu.git
+      → backend/tests 共 51 个测试文件
+
+cd backend
+uv sync --frozen --extra dev
+  → exit 0，依赖按 uv.lock 完整安装
+
+uv run --no-sync pytest --cov=app --cov-report=term-missing
+  → 892 passed, 1 warning in 156.50s
+  → app 覆盖率 TOTAL 4630 stmts / 252 miss = 95%
+
+uv run --no-sync ruff check app tests
+  → All checks passed!
+
+python shared/generate_companion_contract.py --check
+  → companion contract verified:
+    7fae113eebdaf8075382978a45afe2463008b4cb5a2ec382d1ddc75354d3a937
+```
+
+> **Android 端未在此环境实测**：`app/build.gradle.kts` 的 `preBuild` 依赖仓库外的 `../artifacts/`（Qwen JNI、u2netp、BGE int8、sherpa 语音件、rig2d jar），本机虽已具备这些文件，但重新生成 JNI 需要完整 CMake/NDK 工具链，未在本轮验证。第 2.3 / 2.4 节描述的是构建脚本的**实际约束**（哈希与路径均取自源码），准备齐产物后即可按 2.2 节构建。
+
+---
+
+## 七、免责声明
+
+- 本项目为个人学习与自用项目，**非任何公司或机构的官方产品**，未用于任何商业用途。
+- 应用访问第三方 AI 服务需自备 API Key，费用与合规由使用者承担。
+- 端侧图像引擎的权重衍生于 Qwen-Image-2.1-Turbo（**Qwen Research License**），许可副本见 `qwen-image-edge/LICENSE-Qwen-Image-2.1-Turbo`；依其第 31 条标注 **Built with Qwen / Improved using Qwen**。
+- 使用本项目产生的任何后果由使用者自行承担。

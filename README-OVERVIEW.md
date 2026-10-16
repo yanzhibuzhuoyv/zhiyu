@@ -1,6 +1,7 @@
-# 知语 · 原生 Android AI 伴侣 + 端侧图像引擎
+# 知语 · ZhiYu 总览
 
-> 本文件是**整仓库总览**。知语主工程的完整功能、版本变更、测试与部署细节见 [README.md](README.md)。
+> 本文件是**整仓库总览**：项目是什么、两部分怎么配合、构建怎么入手。
+> 构建步骤与技术栈细节见 [README.md](README.md)；逐版变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 本仓库包含两个部分：
 
@@ -17,38 +18,42 @@
 
 ## 一、知语主工程
 
-当前开发版本为 **0.2.11 手机独立版**：本机保存独立原话、资料与素材，直接通过 HTTPS 调用选择的 AI 公司，无需电脑后端、Docker 或 USB。云模型仍需联网。安装与升级边界见 [Android 本地版](docs/ANDROID.md)。
+一个**手机本地优先**的 AI 伴侣应用：原话、资料、素材都存在本机，App 直接通过 HTTPS 调用使用者自己选的模型服务商，不依赖自建服务器。
 
-Kotlin Android 是当前手机产品的唯一功能实现；Python 后端明确冻结为 legacy，只修安全、兼容和契约正确性。手机使用 BGE INT8 语义主路径与 FTS4 补查，旧后端使用 FTS5/BM25，两侧 schema、迁移及排名不等价。
+### 架构
 
-### 本机启动（Python 后端）
+```
+┌─ Android（Kotlin + Compose，当前唯一功能实现）────────────────┐
+│  UI 层      ui/        Compose 界面 + ViewModel               │
+│  领域层     domain/    检索规则、联系人策略、回复分段           │
+│  数据层     data/      SQLite 原话库、本机素材库、会话存储       │
+│  端侧推理   onnxruntime（BGE 语义检索 / u2netp 人像分割）       │
+│  语音       sherpa-onnx（zipformer ASR + vits TTS）            │
+│  图像引擎   native/qwen-edge（JNI + stable-diffusion.cpp）      │
+└────────────────┬──────────────────────────────────────────────┘
+                 │ HTTPS（使用者自备 API Key）
+                 ▼
+       所选 AI 服务商（DeepSeek / 通义千问 / 腾讯混元 …）
 
-已安装 Python 3.11+（SQLite >= 3.43 并支持 FTS5）与 [uv](https://docs.astral.sh/uv/) 后，在项目根目录执行：
-
-```powershell
-.\scripts\Start-Backend.ps1
+┌─ Python 后端（FastAPI，legacy 冻结）──────────────────────────┐
+│  只修安全、兼容与契约正确性；schema / 迁移 / 排名与手机端不等价   │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-首次启动按 `backend/uv.lock` 安装依赖。API 文档：<http://127.0.0.1:8790/docs>；健康检查：<http://127.0.0.1:8790/health>。
+### 检索与记忆
 
-没有 Key 时可以显式开启本地演示：
+手机端以 **BGE INT8 语义检索**为主路径、**FTS4** 补查；旧后端用 FTS5/BM25。两侧 schema、迁移及排名**不等价**，旧后端 A/B 结果不能当作手机端召回等价的证明。两端共享的行为契约由 `shared/generate_companion_contract.py` 生成，构建时校验。
 
-```powershell
-.\scripts\Start-Backend.ps1 -Demo
-```
-
-### 测试与部署
+### 运行
 
 ```powershell
-cd backend
-uv sync --frozen --extra dev
-uv run --no-sync pytest --cov=app --cov-report=term-missing
-uv run --no-sync ruff check app tests
+.\scripts\Start-Backend.ps1          # 旧后端，默认 127.0.0.1:8790
+.\scripts\Start-Backend.ps1 -Demo    # 无 Key 本地演示
 ```
 
-Docker 部署：`docker compose up --build -d --wait`。独立容器测试：`.\scripts\Test-Docker.ps1`。
+API 文档 <http://127.0.0.1:8790/docs>，健康检查 <http://127.0.0.1:8790/health>。
 
-详见 [README.md](README.md) 的「测试与部署」「安卓联调」「知识库」「服务商与模型」各节。
+Android 端构建环境与命令见 [README.md](README.md) 第二节；后端依赖、测试与 Docker 见第三节。
 
 ---
 
