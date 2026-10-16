@@ -1,0 +1,43 @@
+{
+ "E1_fullbody|36|42":   {"ok": true,  "why": "站立全身，含白球鞋"},
+ "E1_fullbody|36|1234": {"ok": true,  "why": "站立全身，含凉鞋"},
+ "E1_fullbody|36|7":    {"ok": true,  "why": "倚沙发全身，含白鞋"},
+ "E1_fullbody|36|99":   {"ok": true,  "why": "全身入镜，含帆布鞋"},
+ "E1_fullbody|36|2024": {"ok": true,  "why": "坐姿全身，赤脚可见"},
+ "E1_fullbody|36|555":  {"ok": true,  "why": "坐姿全身，赤脚可见"},
+
+ "E1_fullbody|28|42":   {"ok": false, "why": "仅头肩特写，无腿部"},
+ "E1_fullbody|28|1234": {"ok": false, "why": "裁到大腿，膝下缺失"},
+ "E1_fullbody|28|7":    {"ok": false, "why": "仅头肩特写，无腿部"},
+ "E1_fullbody|28|99":   {"ok": false, "why": "仅头肩特写，无腿部"},
+ "E1_fullbody|28|2024": {"ok": false, "why": "牛仔短裤，裁于大腿上部"},
+ "E1_fullbody|28|555":  {"ok": false, "why": "仅头肩特写，无腿部"},
+
+ "E1_fullbody|24|42":   {"ok": true,  "why": "站立全身，含白鞋"},
+ "E1_fullbody|24|1234": {"ok": true,  "why": "站立全身，含白鞋"},
+ "E1_fullbody|24|7":    {"ok": true,  "why": "站立全身，含帆布鞋"},
+ "E1_fullbody|24|99":   {"ok": true,  "why": "腿部延至脚踝，膝下可见"},
+ "E1_fullbody|24|2024": {"ok": true,  "why": "腿部延至脚踝，膝下可见"},
+ "E1_fullbody|24|555":  {"ok": true,  "why": "坐姿双腿膝下可见"},
+
+ "E2_picnic|36|42":   {"ok": true, "why": "草坪+格子垫+篮子+食物"},
+ "E2_picnic|36|1234": {"ok": true, "why": "草坪+篮子+格子垫"},
+ "E2_picnic|36|7":    {"ok": true, "why": "草坪+篮子+食物+格子垫"},
+ "E2_picnic|36|99":   {"ok": true, "why": "草坪+篮子+食物+格子垫"},
+ "E2_picnic|36|2024": {"ok": true, "why": "草坪+篮子+食物+格子垫"},
+ "E2_picnic|36|555":  {"ok": true, "why": "草坪+篮子+食物+格子垫"},
+
+ "E2_picnic|28|42":   {"ok": true, "why": "草坪+篮子+食物(近景)"},
+ "E2_picnic|28|1234": {"ok": true, "why": "草坪+篮子+格纹垫"},
+ "E2_picnic|28|7":    {"ok": true, "why": "草坪+篮子+食物(贴脸特写)"},
+ "E2_picnic|28|99":   {"ok": true, "why": "草坪+篮子+食物(贴脸特写)"},
+ "E2_picnic|28|2024": {"ok": true, "why": "草坪+篮子+垫子(贴脸特写)"},
+ "E2_picnic|28|555":  {"ok": true, "why": "草坪+篮子+格纹垫(特写)"},
+
+ "E2_picnic|24|42":   {"ok": true, "why": "草坪+格子垫+篮子+食物"},
+ "E2_picnic|24|1234": {"ok": true, "why": "草坪+垫子+篮子+食物"},
+ "E2_picnic|24|7":    {"ok": true, "why": "草坪+篮子+食物+格子垫"},
+ "E2_picnic|24|99":   {"ok": true, "why": "草坪+篮子+食物+格子垫"},
+ "E2_picnic|24|2024": {"ok": true, "why": "草坪+篮子+食物+格子垫"},
+ "E2_picnic|24|555":  {"ok": true, "why": "草坪+篮子+食物+格子垫"}
+}

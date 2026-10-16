@@ -1,0 +1,43 @@
+# 模型权重与大数据：绝不允许进入 Git（单文件 >2 GiB 无法上传 Release，
+# >100 MiB 会被 GitHub 直接拒收）。权重走 Release 附件分发，见 README。
+models/
+distill/
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.bin
+*.onnx
+*.zyqwen
+
+# 实验产出与中间结果
+exp_*/
+student_*/
+*_out/
+embeds/
+edit_embeds/
+edit_out/
+edit_out_confirm/
+packed_embeds_*/
+packed_L*_out/
+
+# 运行日志与缓存
+*.log
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# 编译产物
+tools/llamacpp-build/
+tools/llamacpp/conversion/
+tools/llamacpp/gguf-py/
+*.a
+*.obj
+*.exe
+*.dll
+*.o
+
+# 本地虚拟环境
+.venv/
+venv/
