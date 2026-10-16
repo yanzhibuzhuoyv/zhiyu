@@ -1,0 +1,39 @@
+# 构建产物
+build/
+.gradle/
+.kotlin/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+out/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 探针中间产物（receipt 与日志必须保留，因此只忽略临时文件）
+artifacts/**/_debug-*.png
+artifacts/**/*.tmp
+
+# 模型权重：**不入 Git**（计划 §3.2 的纪律）
+*.onnx
+*.tflite
+*.mnn
+*.param
+*.bin
+models/
+model-packs/
+
+# 本地配置
+local.properties
+.env
+
+# 本机角色及运行状态（不作为可再分发素材）
+.studio-data/
+.studio-logs/

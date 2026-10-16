@@ -1,0 +1,25 @@
+{
+  "format": "rig2d-planar-1",
+  "mode": "front_mesh",
+  "parameterInput": "reject_out_of_range",
+  "maxSide": 1536,
+  "maxLayers": 64,
+  "maxVertices": 1089,
+  "maxTriangles": 2048,
+  "maxSourceBytes": 20971520,
+  "maxTexturePixels": 24000000,
+  "maxTextureBytes": 96000000,
+  "roles": ["base", "face", "eye_left", "eye_right", "mouth", "hair", "body", "accessory"],
+  "parameters": {
+    "headX": [-1, 1, 0],
+    "headY": [-1, 1, 0],
+    "tilt": [-1, 1, 0],
+    "blinkLeft": [0, 1, 0],
+    "blinkRight": [0, 1, 0],
+    "mouth": [0, 1, 0],
+    "breath": [0, 1, 0],
+    "sway": [-1, 1, 0]
+  },
+  "trueSideViews": false,
+  "cubismMoc3": false
+}

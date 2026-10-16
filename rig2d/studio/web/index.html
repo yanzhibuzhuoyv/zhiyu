@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>知语 · 角色工坊</title><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="masthead">
+    <a class="wordmark" href="/" aria-label="知语角色工坊首页"><span class="flower" aria-hidden="true">✽</span>知语<span>角色工坊</span></a>
+    <span class="edition">把你的想象，轻轻唤醒。</span>
+    <div class="header-actions"><button id="demo" class="quiet">试试十二翼角色</button><label class="button primary">导入角色图片<input id="image-file" type="file" accept="image/png,image/jpeg,image/webp" hidden></label></div>
+  </header>
+  <main>
+    <section class="workspace" aria-label="角色预览">
+      <div class="workspace-top"><div><span class="eyebrow">CHARACTER ATELIER</span><h1 id="project-name">让她，来到你眼前</h1></div><span id="render-badge" class="badge">等待一张图片</span></div>
+      <div id="stage" class="stage">
+        <div class="botanical botanical-left" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="botanical botanical-right" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div id="empty-state" class="empty-state"><span class="empty-flower" aria-hidden="true">✽</span><h2>从一张喜欢的图片开始</h2><p>照片、插画，或是带着许多翅膀的 OC。<br>每一处小细节，都可以留下。</p><button id="empty-import" class="primary">选择我的角色</button></div>
+        <img id="fallback" class="fallback" alt="角色原始图片" hidden>
+        <img id="original-compare" class="fallback original-compare" alt="导入的角色原图对照" hidden>
+        <canvas id="character" aria-label="角色动态网格预览"></canvas>
+        <canvas id="edit-overlay" aria-label="角色标注画布"></canvas>
+        <div id="stage-note" class="stage-note" hidden>拖动调整眼口位置，再看看她动起来的样子。</div>
+      </div>
+      <div class="playbar"><button id="undo-edit" disabled title="Ctrl+Z">撤销修改</button><button id="redo-edit" disabled title="Ctrl+Shift+Z / Ctrl+Y">重做修改</button><button id="compare-original" disabled aria-pressed="false">查看原图</button><button id="play" disabled aria-pressed="true">暂停动画</button><button id="neutral" disabled>看原始姿态</button><label class="switch"><input id="idle" type="checkbox" checked>自然呼吸与眨眼</label><label class="switch"><input id="follow" type="checkbox" checked>跟随注视</label><label class="switch"><input id="mesh" type="checkbox">显示网格</label></div>
+      <div id="status" class="status" role="status" aria-live="polite">导入后，先确认眼睛、嘴巴和想保留的附件，再保存角色。</div>
+      <div class="bottom-actions"><span id="project-meta">仅在本机处理图片</span><div><label class="button quiet">打开角色包<input id="package-file" type="file" accept=".zip,application/zip" hidden></label><button id="download" disabled>下载角色包</button><button id="save" class="primary" disabled>保存并更新预览</button></div></div>
+    </section>
+    <aside class="inspector" aria-label="角色编辑工具">
+      <nav class="tabs" aria-label="编辑类别"><button class="tab active" data-panel="anchors" aria-selected="true">眼口定位</button><button class="tab" data-panel="layers" aria-selected="false">头发与附件</button><button class="tab" data-panel="motion" aria-selected="false">动作与声音</button></nav>
+      <section id="panel-anchors" class="panel"><span class="eyebrow">01 / LITTLE EXPRESSIONS</span><h2>先找到她的眼睛</h2><p class="hint">选择一项，在图片上拖出范围。头部中心与颈部支点点击即可定位。保存后，标注会变成可动的网格。</p>
+        <div class="anchor-tools"><button class="anchor active" data-anchor="eyeLeft">左眼</button><button class="anchor" data-anchor="eyeRight">右眼</button><button class="anchor" data-anchor="mouth">嘴巴</button><button class="anchor" data-anchor="head">头部中心</button><button class="anchor" data-anchor="neck">颈部支点</button></div>
+        <div id="anchor-values" class="coordinates"></div><button id="reset-anchors" class="quiet" disabled>恢复建议位置</button>
+        <div class="paper-note"><span>✿</span><p>我们先给出建议，你来决定是否合适。眼口、头发和附件都可以调整；改错了可撤销，也可查看原图对照。</p></div>
+      </section>
+      <section id="panel-layers" class="panel" hidden><span class="eyebrow">02 / EVERY LITTLE DETAIL</span><h2>把特别的地方留下</h2><p class="hint">一只或十二只翅膀、发丝、武器，都能单独画一层。画保留或擦除时只修改这一层。</p>
+        <div class="layer-toolbar"><button id="add-layer" disabled>＋ 添加附件层</button><button id="subject-select" class="quiet" disabled>整体保留范围</button></div><div id="layer-list" class="layer-list"></div>
+        <div id="layer-editor" hidden><label>图层名称<input id="layer-name" maxlength="80"></label><div class="form-row"><label>类型<select id="layer-role"><option value="accessory">附件 / 翼 / 武器</option><option value="hair">头发</option><option value="body">身体</option><option value="face">脸部</option><option value="eye_left">左眼</option><option value="eye_right">右眼</option><option value="mouth">嘴巴</option></select></label><label>前后顺序<input id="layer-z" type="number" min="-1000" max="90" step="1"></label></div><label>随动幅度<input id="layer-strength" type="range" min="0" max="1" step=".01" value=".5"></label></div>
+        <div class="mask-tools"><button data-tool="polygon" class="tool active">点选轮廓</button><button data-tool="keep" class="tool">画保留</button><button data-tool="erase" class="tool">擦除</button><button id="finish-polygon" class="quiet">完成轮廓</button></div>
+        <label class="brush-label">画笔大小<input id="brush-size" type="range" min="2" max="140" value="24"><output id="brush-value">24</output></label><div class="form-row"><button id="undo-point" class="quiet">撤回一个点</button><button id="remove-layer" class="quiet">删除此层</button></div>
+        <p id="layer-hint" class="hint">先选择一个附件层，或调整整体保留范围。</p>
+      </section>
+      <section id="panel-motion" class="panel" hidden><span class="eyebrow">03 / A SOFT BREATH</span><h2>给她一点生命感</h2><p class="hint">调整滑杆时会暂停自然动作，方便看清效果。点“自然呼吸与眨眼”可恢复。</p><div id="parameter-list" class="parameter-list"></div>
+        <div class="audio-box"><h3>跟着声音说话</h3><p class="hint">选择本地音频，口型会跟随音量变化。</p><label class="button quiet">选择音频<input id="audio-file" type="file" accept="audio/*" hidden></label><audio id="voice-audio" controls hidden></audio><p id="audio-status" class="hint">尚未选择音频</p></div>
+      </section>
+    </aside>
+  </main>
+  <footer>知语 · 角色工坊 <span>图片由你定义，动作慢慢雕琢。</span></footer>
+  <script type="module" src="/app.mjs"></script>
+</body>
+</html>
