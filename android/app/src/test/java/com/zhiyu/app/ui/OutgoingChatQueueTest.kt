@@ -13,7 +13,7 @@ import org.junit.Test
 class OutgoingChatQueueTest {
     @Test fun retryReusesTheDurableRequestIdWhileTheNextDraftHasItsOwnId() = model { vm, repo ->
         repo.beforeCommitFailure = ApiFailure(503, "temporary")
-        vm.draft("第一条原话"); vm.send(); runCurrent()
+        vm.draft("第一条原话"); vm.send(); startTextTurn()
         vm.draft("第二条原话"); vm.send()
         val ids = vm.state.value.pendingOutgoing.map { it.id }
         repo.firstAnswer.complete(Unit); advanceUntilIdle()
@@ -25,7 +25,7 @@ class OutgoingChatQueueTest {
 
     @Test fun aLateSubmissionCallbackFromAFailedAttemptCannotContaminateTheRetry() = model { vm, repo ->
         repo.beforeCommitFailure = ApiFailure(503, "temporary")
-        vm.draft("只有这一条原话"); vm.send(); runCurrent()
+        vm.draft("只有这一条原话"); vm.send(); startTextTurn()
         repo.firstAnswer.complete(Unit); advanceUntilIdle()
         val id = vm.state.value.pendingOutgoing.single().id
         val retryGate = CompletableDeferred<Unit>(); repo.secondBeforeCommit = retryGate
@@ -42,7 +42,7 @@ class OutgoingChatQueueTest {
 
     @Test fun failedUnsubmittedSnapshotCanBeRetriedWithoutReplacingANewerComposer() = model { vm, repo ->
         repo.beforeCommitFailure = ApiFailure(503, "synthetic private provider body")
-        vm.draft("失败的第一句"); vm.send(); runCurrent()
+        vm.draft("失败的第一句"); vm.send(); startTextTurn()
         vm.draft("队列第二句"); vm.send()
         vm.draft("新的未发送草稿")
         repo.firstAnswer.complete(Unit); advanceUntilIdle()
@@ -61,7 +61,7 @@ class OutgoingChatQueueTest {
 
     @Test fun committedOriginalAppearsBeforeTheAnswerAndCannotBeRepostedAfterReplyFailure() = model { vm, repo ->
         repo.afterCommitFailure = ApiFailure(503, "private provider failure")
-        vm.draft("这句话已经送出"); vm.send(); runCurrent()
+        vm.draft("这句话已经送出"); vm.send(); startTextTurn()
         assertEquals(listOf("这句话已经送出"), vm.state.value.messages.map { it.content })
         assertNotNull(vm.state.value.pendingOutgoing.single().submittedMessageId)
         vm.draft("下一句"); vm.send()
@@ -77,7 +77,7 @@ class OutgoingChatQueueTest {
 
     @Test fun expiredKeyPausesQueuedMessagesUntilReconnectAndExplicitRetry() = model { vm, repo ->
         repo.beforeCommitFailure = ApiFailure(401, "secret body", "session_expired")
-        vm.draft("第一句"); vm.send(); runCurrent()
+        vm.draft("第一句"); vm.send(); startTextTurn()
         vm.draft("第二句"); vm.send()
         repo.firstAnswer.complete(Unit); advanceUntilIdle()
         assertFalse(vm.state.value.connected)
@@ -106,7 +106,7 @@ class OutgoingChatQueueTest {
 
     @Test fun changingConnectionLeavesOldFailedSnapshotsButCannotSendThemToTheNewTarget() = model { vm, repo ->
         repo.beforeCommitFailure = ApiFailure(503, "temporary")
-        vm.draft("旧连接的话"); vm.send(); runCurrent()
+        vm.draft("旧连接的话"); vm.send(); startTextTurn()
         repo.firstAnswer.complete(Unit); advanceUntilIdle()
         val failedId = vm.state.value.pendingOutgoing.single().id
         vm.serverUrl("https://different.synthetic.invalid"); advanceUntilIdle()
@@ -117,7 +117,7 @@ class OutgoingChatQueueTest {
     }
 
     @Test fun anotherMessageCanBeAcceptedWhileTheFirstAnswerIsPendingAndSendsInOrder() = model { vm, repo ->
-        vm.draft("第一句"); vm.send(); runCurrent()
+        vm.draft("第一句"); vm.send(); startTextTurn()
         vm.draft("还有第二句"); vm.send(); runCurrent()
         assertEquals(listOf("第一句"), repo.contents)
         assertEquals("", vm.state.value.draft)
@@ -135,6 +135,8 @@ class OutgoingChatQueueTest {
         assertEquals(listOf("先说这个", "再说那个"), repo.contents)
         assertEquals("正在写的第三句", vm.state.value.draft)
         assertEquals(1, repo.peakActive)
+        assertEquals(2, repo.rows.count { it.role == "user" })
+        assertEquals(1, repo.rows.count { it.role == "assistant" })
     }
 
     @Test fun queuedPhotosUseTheirOwnAttachmentRatherThanTheNewPickerSelection() = model { vm, repo ->
@@ -156,7 +158,11 @@ class OutgoingChatQueueTest {
         repo.firstAnswer.complete(Unit); advanceUntilIdle()
         assertEquals((0 until 32).map { "消息$it" }, repo.contents)
         assertEquals(1, repo.peakActive)
+        assertEquals(32, repo.rows.count { it.role == "user" })
+        assertEquals(1, repo.rows.count { it.role == "assistant" })
     }
+
+    private fun TestScope.startTextTurn() { advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent() }
 
     private fun image(char: Char): ChatImageDraft {
         val id = char.toString().repeat(32)
@@ -212,6 +218,31 @@ private class QueueRepository : ChatRepository {
         image: MediaAttachment?, voiceDraftId: String?, onSubmitted: (Message) -> Unit): Pair<Message, Message> {
         requestIds += requestId
         return super<ChatRepository>.sendQueuedMessage(id, content, requestId, image, voiceDraftId, onSubmitted)
+    }
+    override suspend fun sendQueuedTextBatch(id: String, inputs: List<QueuedTextInput>,
+        onSubmitted: (String, Message) -> Unit): QueuedTextBatchResult {
+        val checked = QueuedTextBatchRules.check(inputs)
+        active++; peakActive = maxOf(peakActive, active)
+        val firstNumber = contents.size + 1
+        requestIds += checked.map { it.requestId }; contents += checked.map { it.content }
+        try {
+            beforeCommitFailure?.let { failure ->
+                if (firstNumber == 1) firstAnswer.await()
+                beforeCommitFailure = null; throw failure
+            }
+            val users = checked.mapIndexed { index, input -> QueuedTextSubmission(input.requestId,
+                Message("u${firstNumber + index}", "user", input.content, emptyList(), "2026-10-16T12:34:56+08:00")) }
+            rows += users.map { it.message }
+            users.forEach { row ->
+                submittedCallbacks += { message -> onSubmitted(row.requestId, message) }
+                onSubmitted(row.requestId, row.message)
+            }
+            if (firstNumber == 1) firstAnswer.await()
+            afterCommitFailure?.let { failure -> afterCommitFailure = null; throw failure }
+            val assistant = Message("a${contents.size}", "assistant", "好啊。", emptyList(), "2026-10-16T12:34:57+08:00")
+            rows += assistant
+            return QueuedTextBatchResult(users, assistant)
+        } finally { active-- }
     }
     override suspend fun discardVoiceDraft(id: String) { cleanedVoices += id }
     private suspend fun answer(content: String, image: MediaAttachment?, voiceId: String? = null, submitted: (Message) -> Unit = {}): Pair<Message, Message> {

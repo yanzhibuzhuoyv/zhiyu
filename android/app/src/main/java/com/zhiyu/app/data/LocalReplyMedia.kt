@@ -18,6 +18,8 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     private val framing = OcFramingStore(appContext)
     private val selfies = com.zhiyu.app.data.selfie.LocalSelfieBank(appContext)
     private val characters = OcCreatorStore(appContext)
+    private val borrower = com.zhiyu.app.data.selfie.LocalPhotoBorrower(appContext)
+    private val borrowed = com.zhiyu.app.data.selfie.LocalPhotoBorrowStore(appContext)
     suspend fun prepare(id: String, profile: CompanionProfile?, recent: List<Message>, userText: String = ""): LocalMediaPlan {
         withContext(Dispatchers.IO) { NativeSeedImporter(appContext).install() }
         val visualProfile = visual.profile(id)
@@ -71,8 +73,12 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
                         }
                     val final = if (!plan.selfieRequested) reply else {
                         val selected = reply.attachments.singleOrNull()?.let { assets.details(it.id) }
-                        if (selected != null && consumeSelfie(id, selected, current, scene)) reply
-                        else LocalMediaReply(plan.unavailableMessage ?: SELFIE_PENDING, emptyList())
+                        if (selected != null && plan.borrowed != null) {
+                            val image = consumeBorrowed(id, plan.borrowed, current, scene)
+                            if (image != null) reply.copy(attachments = listOf(image)) else LocalMediaReply(SELFIE_PENDING, emptyList())
+                        } else if (selected != null && consumeSelfie(id, selected, current, scene)) reply
+                        else if (plan.preserveGeneratedText && plan.candidates.isEmpty() && plan.borrowed == null) reply
+                        else LocalMediaReply(if (plan.borrowed != null) SELFIE_PENDING else plan.unavailableMessage ?: SELFIE_PENDING, emptyList())
                     }
                     save(final)
                 }
@@ -95,7 +101,7 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     private fun selfiePlan(chat: String, profile: VisualProfile, scene: LocalDailyScene, dailyPrompt: String,
         recentSha: Set<String>): LocalMediaPlan {
         val selected = assets.list("image", profile.visualVersion, 1000, scene.dayId).asSequence()
-            .filter { it.sha256 !in recentSha }.map { assets.details(it.id) }.filter { "selfie_stock" in it.tags }
+            .filter { it.sha256 !in recentSha && borrowed.available(chat, it) }.map { assets.details(it.id) }.filter { "selfie_stock" in it.tags }
             .filter { selfies.eligible(chat, it, profile, scene) }
             .firstOrNull {
                 try { assets.download(it.attachment.id, it.attachment.sha256); true }
@@ -103,19 +109,30 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
             }?.attachment
         if (selected != null) return LocalMediaPlan("$dailyPrompt\n对方明确索要自拍。这次已准备一张当前 OC 的新自拍素材，系统会附图。" +
             "自然回应即可，不声称实时相机或真实拍摄。", listOf(selected), "", true, selected.id)
+        val early = borrower.offer(chat, profile, scene, recentSha)
+        if (early != null) return LocalMediaPlan("$dailyPrompt\n这次分享已备好的人像照片；不声称将来的活动已经发生，" +
+            "不把图中活动说成当前刚经历的事。若还有其他问题，完整回应其他问题并自然带出照片。",
+            listOf(early.attachment.copy(dayId = scene.dayId)), "", true, early.attachment.id,
+            unavailableMessage = BORROW_CAPTION, selfieStatus = "borrowed_preview", borrowed = early)
+        val photos = com.zhiyu.app.data.remotescene.RemoteScenePhotos(appContext)
         val status = when {
             profile.mode == "none" || profile.referenceId == null -> "oc_missing"
-            !com.zhiyu.app.data.remotescene.RemoteScenePhotos(appContext).configured() ->
-                "image_service_unconfigured"
+            !photos.configured() -> "image_service_unconfigured"
+            !photos.reviewConfigured() -> "review_model_unavailable"
             else -> "inventory_pending"
         }
-        return LocalMediaPlan("$dailyPrompt\n对方索要自拍，这次还没准备好合适的照片。自然说明，不得声称已发图或提及系统实现。",
+        return LocalMediaPlan("$dailyPrompt\n对方索要自拍，这次还没准备好合适的照片。自然说明，不得声称已发图或提及系统实现。" +
+            "若还有其他问题，完整回应其他问题并自然说明照片等准备好再给。",
             emptyList(), "", true, unavailableMessage = SELFIE_PENDING, selfieStatus = status)
     }
 
     private fun consumeSelfie(chat: String, item: LocalMediaDetails, profile: VisualProfile, scene: LocalDailyScene): Boolean =
         try { selfies.consume(chat, item, profile, scene) }
         catch (failure: Exception) { if (!localSelfieFailure(failure)) throw failure; false }
+
+    private fun consumeBorrowed(chat: String, photo: LocalBorrowedPhoto, profile: VisualProfile, scene: LocalDailyScene): MediaAttachment? =
+        try { borrower.consume(chat, photo, profile, scene) }
+        catch (failure: Exception) { if (!localSelfieFailure(failure)) throw failure; null }
 
     private fun localSelfieFailure(failure: Exception): Boolean {
         if (failure !is IllegalArgumentException && failure !is IllegalStateException && failure !is java.io.IOException &&
@@ -127,6 +144,11 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     private fun currentReply(id: String, plan: LocalMediaPlan, raw: String, current: VisualProfile,
         scene: LocalDailyScene): LocalMediaReply {
             val reply = plan.parse(raw)
+            if (plan.borrowed != null) {
+                val image = borrower.validate(id, plan.borrowed, current, scene)
+                return if (image == null) LocalMediaReply(SELFIE_PENDING, emptyList())
+                    else LocalMediaReply(if (plan.preserveGeneratedText) reply.content else BORROW_CAPTION, listOf(image))
+            }
             val selected = reply.attachments.mapNotNull { asset ->
                 try { assets.download(asset.id,asset.sha256); assets.details(asset.id) }
                 catch (_: IllegalArgumentException) { null }
@@ -144,7 +166,9 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     /** Legacy reviewed stock keeps its existing behavior; new remote stock proves its actual scene ownership. */
     private fun stockEligible(chat: String, item: LocalMediaDetails, scene: LocalDailyScene, profile: VisualProfile): Boolean {
         if (item.purpose != "library" || item.attachment.kind != "image") return false
+        if (!borrowed.available(chat, item.attachment)) return false
         val tags = item.tags.toSet()
+        if (!LocalPhotoBorrowRules.ready(scene.dayId, tags, now())) return false
         if (!OcFramingStockRules.permits(framing.active(chat, profile),tags,item.attachment.kind == "image" && "contains_person" in tags)) return false
         if ("selfie_stock" in tags) return selfies.eligible(chat, item, profile, scene)
         if ("daily_stock" !in tags) return true
@@ -161,5 +185,6 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     }
     companion object {
         private const val SELFIE_PENDING = "这会儿还没准备好合适的自拍，等我弄好了再给你看。"
+        private const val BORROW_CAPTION = "这张我挺喜欢的，先给你看看。"
     }
 }

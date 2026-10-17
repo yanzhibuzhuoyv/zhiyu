@@ -98,7 +98,8 @@ class ScenePhotoManager(context:Context,private val credentials:CredentialStore=
         val targets=LocalDailyRepository(app).use {daily->
             val now = Instant.now()
             val plans = daily.horizon(chat,profile.visualVersion,now)
-            com.zhiyu.app.data.selfie.LocalSelfieBank(app).targets(chat, profile, plans.first()) + LocalScenePrefetchRules.targets(plans,now)
+            com.zhiyu.app.data.selfie.LocalSelfieBank(app).targets(chat, profile, plans.first()) +
+                LocalScenePrefetchRules.targets(plans,now).map { com.zhiyu.app.data.selfie.LocalPhotoBorrowStore(app).adjusted(chat, it) }
         }
             .filter {it.scene.dayId==job.dayId}
         require(targets.isNotEmpty()){"这段日常已过，不会重新发送"}

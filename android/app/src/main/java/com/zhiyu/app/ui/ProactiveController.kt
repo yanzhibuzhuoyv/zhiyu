@@ -9,7 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.zhiyu.app.BuildConfig
 import com.zhiyu.app.data.LocalProactiveService
-import com.zhiyu.app.data.ProactiveWorkStore
+import com.zhiyu.app.data.LocalProactivePreferencesStore
 import com.zhiyu.app.data.appCredentialStore
 import com.zhiyu.app.domain.ProactivePreferences
 import com.zhiyu.app.notifications.ProactiveNotifications
@@ -23,7 +23,7 @@ import kotlinx.coroutines.sync.withLock
 class ProactiveController(context: Context, private val conversationId: String?, private val scope: CoroutineScope,
     private val service: com.zhiyu.app.domain.ProactiveService = LocalProactiveService(context, appCredentialStore(context))) {
     private val appContext = context.applicationContext
-    private val store = ProactiveWorkStore(appContext)
+    private val localPreferences = LocalProactivePreferencesStore(appContext)
     private val mutex = Mutex()
     var preferences by mutableStateOf(ProactivePreferences())
         private set
@@ -37,9 +37,8 @@ class ProactiveController(context: Context, private val conversationId: String?,
     fun restore() = operation {
         val id = conversationId ?: return@operation
         val remote = service.preferences(id)
-        val locallyEnabled = withContext(Dispatchers.IO) { store.enabled(id) }
-        preferences = remote.copy(enabled = remote.enabled && locallyEnabled && ProactiveNotifications.allowed(appContext))
-        if (preferences.enabled) ProactiveScheduler.schedule(appContext, id)
+        preferences = remote
+        if (preferences.enabled && ProactiveNotifications.allowed(appContext)) ProactiveScheduler.schedule(appContext, id)
         else ProactiveScheduler.cancel(appContext)
         ready = true
     }
@@ -61,6 +60,20 @@ class ProactiveController(context: Context, private val conversationId: String?,
 
     fun permissionDenied() { error = "通知没有开启，聊天仍可正常使用。你可以在系统设置中允许知语通知。" }
     fun dismissError() { error = null }
+
+    /** Permission host entry point; the grant and saved contact choice are separate state. */
+    fun reconcileNotificationPermission(granted: Boolean, freshGrant: Boolean = false): Job {
+        if (!granted || !ProactiveNotifications.allowed(appContext)) return operation { ProactiveScheduler.cancel(appContext) }
+        val id = conversationId
+        // Start an explicit grant's durable commit before any screen-bound suspension.
+        if (id != null && !preferences.enabled && (freshGrant || !localPreferences.hasExplicitChoice(id))) return toggle(true)
+        return operation {
+            if (id == null) return@operation
+            preferences = service.preferences(id)
+            if (preferences.enabled && ProactiveNotifications.allowed(appContext)) ProactiveScheduler.schedule(appContext, id)
+            else ProactiveScheduler.cancel(appContext)
+        }
+    }
 
     private fun operation(block: suspend () -> Unit) = scope.launch {
         mutex.withLock {

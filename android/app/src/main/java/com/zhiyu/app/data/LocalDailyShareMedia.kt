@@ -14,6 +14,7 @@ class LocalDailyShareMedia(context: Context, private val now: () -> Instant = In
     private val visual = LocalVisualRepository(app)
     private val assets = LocalMediaStore(app)
     private val framing = OcFramingStore(app)
+    private val borrowed = com.zhiyu.app.data.selfie.LocalPhotoBorrowStore(app)
 
     fun scene(chat: String, at: Instant = now()): LocalDailyScene {
         return visual.withCurrentProfile(chat) { profile ->
@@ -81,6 +82,8 @@ class LocalDailyShareMedia(context: Context, private val now: () -> Instant = In
     private fun eligible(item: LocalMediaDetails, event: LocalDailyShareEvent, profile: VisualProfile, chat:String): Boolean {
         val asset = item.attachment
         val tags = item.tags.toSet()
+        if (!borrowed.available(chat, asset)) return false
+        if (!LocalPhotoBorrowRules.ready(event.dayId, tags, now())) return false
         if (item.purpose != "library" || asset.kind != "image" || asset.dayId != event.dayId ||
             asset.visualVersion != event.visualVersion || "daily_stock" !in tags || "decoded_final" !in tags ||
             "local_placeholder" in tags) return false

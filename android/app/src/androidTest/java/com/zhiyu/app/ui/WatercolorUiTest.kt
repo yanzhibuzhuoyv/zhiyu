@@ -99,9 +99,7 @@ class WatercolorUiTest {
         val dark = InstrumentationRegistry.getArguments().getString("watercolorDark") == "true"
         val state = AppState(restoring = false, connected = true, messages = originals,
             profile = CompanionProfile(name = "知语"))
-        var clipboard: androidx.compose.ui.platform.ClipboardManager? = null
         compose.setContent {
-            clipboard = LocalClipboardManager.current
             ZhiYuTheme(darkTheme = dark) {
                 Scaffold(topBar = { CompanionTopBar("知语", null) { IconButton({}) { Icon(Icons.Outlined.MoreVert, "更多设置") } } }) {
                     Box(Modifier.fillMaxSize().padding(it)) { ChatScreen(state, viewModel) }
@@ -109,7 +107,7 @@ class WatercolorUiTest {
             }
         }
         compose.onNodeWithTag("default_watercolor_background").assertExists()
-        assertCompanionSegmentsAndCopy { clipboard?.getText()?.text }
+        assertCompanionSegmentsWithoutCopyButton()
         compose.onNodeWithTag("message_draft").assertIsDisplayed()
         compose.onNodeWithContentDescription("发送消息").assertIsNotEnabled()
         compose.onNodeWithText("记忆").assertDoesNotExist()
@@ -118,10 +116,8 @@ class WatercolorUiTest {
 
     @Test fun customBackgroundReplacesDefaultFloralArtwork() {
         val image = Bitmap.createBitmap(80, 80, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.rgb(170, 194, 183)) }
-        var clipboard: androidx.compose.ui.platform.ClipboardManager? = null
         // This tiny fixture is collected after composition disposal; never recycle while UI owns it.
         compose.setContent {
-            clipboard = LocalClipboardManager.current
             ZhiYuTheme(darkTheme = false) {
                 CompositionLocalProvider(LocalAppearanceImages provides AppearanceImages(background = image)) {
                     ChatScreen(AppState(restoring = false, connected = true, messages = originals), viewModel)
@@ -130,10 +126,10 @@ class WatercolorUiTest {
         }
         compose.onNodeWithTag("custom_chat_background").assertExists()
         compose.onNodeWithTag("default_watercolor_background").assertDoesNotExist()
-        assertCompanionSegmentsAndCopy { clipboard?.getText()?.text }
+        assertCompanionSegmentsWithoutCopyButton()
     }
 
-    private fun assertCompanionSegmentsAndCopy(copiedText: () -> String?) {
+    private fun assertCompanionSegmentsWithoutCopyButton() {
         val original = originals.last()
         val segments = ResponseSegments.split(original.content)
         assertEquals(original.content, segments.joinToString("") { it.text })
@@ -141,8 +137,7 @@ class WatercolorUiTest {
             compose.onNodeWithTag("message_segment_${original.id}_$index").assertExists()
             compose.onNodeWithText(segment.text.trim()).assertIsDisplayed()
         }
-        compose.onNode(hasContentDescription("复制消息") and hasAnyAncestor(hasTestTag("message_${original.id}"))).performClick()
-        compose.runOnIdle { assertEquals(original.content, copiedText()) }
+        compose.onNodeWithContentDescription("复制消息").assertDoesNotExist()
     }
 
     private fun screenshot(name: String) {

@@ -17,6 +17,11 @@ class LocalSelfieRulesTest {
             .forEach { assertFalse(it, LocalSelfieRules.requested(it)) }
         listOf("给我发张自拍", "想看你的自拍").forEach { assertTrue(it, LocalSelfieRules.requested(it)) }
     }
+    @Test fun directUnqualifiedPhotoRequestsMeanCompanionPhotosWithoutConsumingForOffersOrScenery() {
+        listOf("发张照片", "给我发照片").forEach { assertTrue(it, LocalSelfieRules.requested(it)) }
+        listOf("给你发张照片", "教我怎么拍照片", "怎么拍照片好看", "给我发张风景照", "发张风景照片", "不要给我发照片", "别给我发张照片")
+            .forEach { assertFalse(it, LocalSelfieRules.requested(it)) }
+    }
     @Test fun threeLanesAndConsumptionGenerationsHaveDistinctValidatedMarkers() {
         val scope = "a".repeat(64)
         val first = LocalSelfieTicket(scope, 0, 0)

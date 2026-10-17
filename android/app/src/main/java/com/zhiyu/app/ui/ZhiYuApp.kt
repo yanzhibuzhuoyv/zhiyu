@@ -104,6 +104,7 @@ import com.zhiyu.app.ui.screens.*
     val care = rememberCareController()
     val typography = rememberChatTypographyController()
     AutoCompanionPermissions(active = state.connected && state.selectedId != null, proactive = proactive, care = care)
+    AutoBackgroundGuidance(active = state.connected && state.selectedId != null && proactive.ready && !proactive.busy, contactEnabled = proactive.preferences.enabled)
     val mediaLibrary = rememberMediaLibraryController()
     var pickerTarget by rememberSaveable { mutableStateOf<String?>(null) }
     val appearance = rememberAppearanceController()

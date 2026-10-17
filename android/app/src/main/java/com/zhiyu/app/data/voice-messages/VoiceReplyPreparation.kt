@@ -28,7 +28,8 @@ internal class VoiceReplyPreparation(
         val pieces = mutableListOf<FloatArray>()
         var rate = 0
         var total = 0L
-        for (text in LocalVoiceRules.speechChunks(original.text)) {
+        for ((text, pauseMillis) in VoiceSpeechProsody.parts(original.text)) {
+            require(pauseMillis in 0..260)
             context.ensureActive()
             check(current(original)) { "语音来源已经改变" }
             val audio = synthesize(text, voice, tuning) { context[kotlinx.coroutines.Job]?.isActive != false }
@@ -38,6 +39,12 @@ internal class VoiceReplyPreparation(
             total += audio.samples.size
             require(total <= rate.toLong() * 180) { "这段语音超过三分钟，文字仍完整保留" }
             pieces.add(audio.samples)
+            if (pauseMillis > 0) {
+                val pause = FloatArray(rate * pauseMillis / 1000)
+                total += pause.size
+                require(total <= rate.toLong() * 180) { "这段语音超过三分钟，文字仍完整保留" }
+                pieces.add(pause)
+            }
         }
         context.ensureActive()
         val combined = FloatArray(total.toInt())

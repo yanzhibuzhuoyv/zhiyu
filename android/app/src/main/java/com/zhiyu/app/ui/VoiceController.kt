@@ -102,14 +102,12 @@ enum class VoicePhase { IDLE, PREPARING, LISTENING, REVIEWING, WAITING, SPEAKING
         transcript = ""; reviewText = ""
         operation(VoicePhase.PREPARING) { current, token ->
             withContext(Dispatchers.IO) {
-                current.openRecognition().use { recognition ->
-                    currentCoroutineContext().ensureActive()
-                    val text = microphone.capture(recognition,
-                        onStarted = { scope.launch { if (version == token) phase = VoicePhase.LISTENING } },
-                        onPartial = { value -> scope.launch { if (version == token) transcript = value } })
-                    withContext(Dispatchers.Main.immediate) {
-                        if (version == token) { transcript = text; reviewText = text; phase = VoicePhase.REVIEWING }
-                    }
+                currentCoroutineContext().ensureActive()
+                val text = microphone.capture({ current.openRecognition() },
+                    onStarted = { scope.launch { if (version == token) phase = VoicePhase.LISTENING } },
+                    onPartial = { value -> scope.launch { if (version == token) transcript = value } })
+                withContext(Dispatchers.Main.immediate) {
+                    if (version == token) { transcript = text; reviewText = text; phase = VoicePhase.REVIEWING }
                 }
             }
         }

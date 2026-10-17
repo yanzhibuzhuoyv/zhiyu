@@ -82,13 +82,15 @@ class LifePhotoPromptClient(private val credentials: CredentialStore,
     }
     private fun stale() = ApiFailure(409, "聊天公司或模型已变更，旧生活照未采用", "life_prompt_stale")
     private fun framingConstraint(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget): String {
+        val reshoot = if (target.reshoot != null) " This replaces a photo already shared early. Create a distinct new image and pose at the stated capture_time " +
+            "within the same planned activity; reject a duplicate of the previously borrowed pixels. " else ""
         if (view(target) == "landscape")
-            return " This is scenery only: do not include any person, body fragment, silhouette or reflected character. Reject any such figure."
+            return reshoot + " This is scenery only: do not include any person, body fragment, silhouette or reflected character. Reject any such figure."
         val selfie = if (target.selfie != null) " This is a new fictional OC portrait selfie: show the OC's face in a natural new expression or pose. " +
             "Do not reuse the unchanged original reference image. The requested OC portrait must be visible. Keep all identity and crop constraints; " +
             "visual review must reject an unchanged reference or a picture without the requested OC." else ""
-        val policy = binding.framingPolicy ?: return selfie
-        return selfie + if (OcFramingRules.permits(policy, true))
+        val policy = binding.framingPolicy ?: return reshoot + selfie
+        return reshoot + selfie + if (OcFramingRules.permits(policy, true))
             " The user has confirmed this complete reference; full-body activity framing may use its already visible body."
         else when (policy.framing) {
             OcFraming.HEAD -> " User crop policy is HEAD: show only the original head/neck view, never torso, hips, legs or full body. Reject a wider crop."
@@ -101,6 +103,7 @@ class LifePhotoPromptClient(private val credentials: CredentialStore,
         "{\"fictional\":true,\"chat\":${AgnesImageJson.quote(binding.chat)},\"day\":${AgnesImageJson.quote(target.scene.dayId)}," +
             "\"scene_id\":${AgnesImageJson.quote(target.scene.sceneId)},\"trajectory_sha\":${AgnesImageJson.quote(LocalDailyRules.revision(target.scene))}," +
             "\"time\":${AgnesImageJson.quote(target.slot.time)},\"activity\":${AgnesImageJson.quote(target.slot.activity)}," +
+            "\"capture_time\":${AgnesImageJson.quote(target.reshoot?.photoTime ?: target.slot.time)}," +
             "\"tags\":[${target.slot.tags.joinToString(",", transform = AgnesImageJson::quote)}]," +
             "\"purpose\":${AgnesImageJson.quote(if (target.selfie != null) "selfie" else "daily")}," +
             "\"selfie_variant\":${target.selfie?.let { "\"${it.lane}:${it.generation}\"" } ?: "null"}," +

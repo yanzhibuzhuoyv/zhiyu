@@ -45,6 +45,7 @@ data class RemoteSceneCandidate(val requestId: String, val chat: String, val bin
 /** Network methods run outside commit locks; publish performs the final complete binding CAS. */
 interface RemoteSceneEnvironment {
     fun configured(): Boolean
+    fun reviewConfigured(): Boolean = configured()
     fun hasCandidateCapacity():Boolean=true
     suspend fun freeze(chat: String, target: LocalScenePrefetchTarget, profile: VisualProfile,
         snapshot: OcIdentitySnapshot?): RemoteSceneBinding?
@@ -75,11 +76,18 @@ internal object RemoteSceneRules {
         return hash(listOf("remote-life-retry-v1", sourceId)).take(32)
     }
     fun requestId(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget, attempt: Int): String {
+        return opportunityId(binding.chat, binding.profile.visualVersion, binding.original, binding.packageSha,
+            binding.framingPolicy, target, attempt)
+    }
+    /** Credential-free source identity for published pixels; it does not create a synthetic provider binding. */
+    fun opportunityId(chat: String, version: Int, original: OcAssetRef, packageSha: String?, framing: OcFramingPolicy?,
+        target: LocalScenePrefetchTarget, attempt: Int): String {
         require(attempt in 0..1)
-        return hash(listOf("remote-life-v1", binding.chat, binding.profile.visualVersion.toString(),
-            binding.original.id, binding.original.sha256, binding.packageSha.orEmpty(),
-            LocalDailyRules.revision(target.scene), target.index.toString(), target.slot.time, attempt.toString()) + policyScope(binding) +
-            target.selfie?.let { LocalSelfieRules.check(it); listOf("selfie-v1", it.scope, it.lane.toString(), it.generation.toString()) }.orEmpty()).take(32)
+        return hash(listOf("remote-life-v1", chat, version.toString(), original.id, original.sha256, packageSha.orEmpty(),
+            LocalDailyRules.revision(target.scene), target.index.toString(), target.slot.time, attempt.toString()) +
+            (framing?.let { listOf("framing-v1", OcFramingRules.hash(it)) } ?: emptyList()) +
+            target.selfie?.let { LocalSelfieRules.check(it); listOf("selfie-v1", it.scope, it.lane.toString(), it.generation.toString()) }.orEmpty() +
+            target.reshoot?.let { listOf("borrow-reshoot-v1", it.borrowedRequestId, it.borrowedSha, it.photoTime) }.orEmpty()).take(32)
     }
     fun bindingSha(binding: RemoteSceneBinding): String = hash(listOf(binding.chat, binding.profile.mode,
         binding.profile.description, binding.profile.gender, binding.profile.hair, binding.profile.visualVersion.toString(),
@@ -134,6 +142,7 @@ internal object RemoteSceneRules {
 
     fun freeze(target: LocalScenePrefetchTarget): LocalScenePrefetchTarget {
         target.selfie?.let(LocalSelfieRules::check)
+        LocalPhotoBorrowRules.check(target)
         require(target.scene.visualVersion >= 0 && target.scene.fictional && target.scene.timezone == LocalDailyRules.TIMEZONE)
         require(target.index in target.scene.slots.indices && target.index in 0..23 && target.slot == target.scene.slots[target.index])
         LocalDailyRules.current(target.scene.slots, java.time.Instant.EPOCH)

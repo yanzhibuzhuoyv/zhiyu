@@ -77,6 +77,15 @@ interface ChatRepository {
         image != null -> sendPhotoMessage(id, content, image, onSubmitted)
         else -> sendMessage(id, content, onSubmitted)
     }
+    /** Commit originals atomically and notify in input order; a batch has exactly one shared answer. */
+    suspend fun sendQueuedTextBatch(id: String, inputs: List<QueuedTextInput>,
+        onSubmitted: (String, Message) -> Unit = { _, _ -> }): QueuedTextBatchResult {
+        val checked = QueuedTextBatchRules.check(inputs)
+        check(checked.size == 1) { "当前连接暂不支持连续文字统一回复，请逐条发送" }
+        val input = checked.single()
+        val pair = sendQueuedMessage(id, input.content, input.requestId, onSubmitted = { onSubmitted(input.requestId, it) })
+        return QueuedTextBatchResult(listOf(QueuedTextSubmission(input.requestId, pair.first)), pair.second)
+    }
     suspend fun sendCallMessage(id: String, content: String, onDelta: suspend (String) -> Unit): Pair<Message, Message> =
         sendMessage(id, content).also { onDelta(it.second.content) }
     suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment): Pair<Message, Message> =

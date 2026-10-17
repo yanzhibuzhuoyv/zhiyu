@@ -30,6 +30,7 @@ object LocalDailyShareScheduler {
     fun next(context: Context, chat: String, now: Instant = Instant.now(), continueChain: Boolean = false) {
         val state = LocalDailyShareWorkStore(context)
         if (!state.enabled(chat) || !ProactiveNotifications.allowed(context)) return
+        migrateLegacyNetwork(context, chat)
         val due = LocalDailyShareSchedulePolicy.nextCheck(now, state.lastRun(chat))
         val request = OneTimeWorkRequestBuilder<LocalDailyShareWorker>().setConstraints(network())
             .setInputData(workDataOf(CHAT_INPUT to ProactiveRules.conversationId(chat), CHAIN_INPUT to true))
@@ -42,6 +43,7 @@ object LocalDailyShareScheduler {
     /** Inventory arrival can re-check a waiting event, without replacing its independent due chain. */
     fun pictureAvailable(context: Context, chat: String) {
         if (!LocalDailyShareWorkStore(context).enabled(chat) || !ProactiveNotifications.allowed(context)) return
+        migrateLegacyNetwork(context, chat)
         val request = OneTimeWorkRequestBuilder<LocalDailyShareWorker>().setConstraints(network())
             .setInputData(workDataOf(CHAT_INPUT to ProactiveRules.conversationId(chat), "picture_ready" to true))
             .setInitialDelay(10, TimeUnit.SECONDS).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
@@ -50,5 +52,34 @@ object LocalDailyShareScheduler {
     }
 
     fun cancel(context: Context) = WorkManager.getInstance(context).cancelAllWorkByTag(WORK_TAG)
-    private fun network() = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+    private fun network() = ProactiveNetwork.constraints()
+
+    /** Own fixed input contracts only; updateWork preserves UUID, enqueue time and attempts. */
+    private fun migrateLegacyNetwork(context: Context, chat: String) {
+        val app = context.applicationContext ?: context
+        BackgroundNetworkRepair.launch("Daily share network repair") { migrateLegacyNetworkNow(app, chat) }
+    }
+
+    private fun migrateLegacyNetworkNow(context: Context, chat: String) {
+        val manager = WorkManager.getInstance(context)
+        val id = ProactiveRules.conversationId(chat)
+        val contracts = listOf(
+            LocalDailyShareSchedulePolicy.uniqueDueName(chat) to workDataOf(CHAT_INPUT to id, CHAIN_INPUT to true),
+            PHOTO_READY + chat to workDataOf(CHAT_INPUT to id, "picture_ready" to true)
+        )
+        contracts.forEach { (name, input) ->
+            manager.getWorkInfosForUniqueWork(name).get(5, TimeUnit.SECONDS).filter { row ->
+                !row.state.isFinished && row.workerClassName == LocalDailyShareWorker::class.java.name &&
+                    ProactiveNetwork.isLegacy(row.constraints)
+            }.forEach { row ->
+                val request = OneTimeWorkRequestBuilder<LocalDailyShareWorker>().setId(row.id)
+                    .setInputData(input)
+                    .setInitialDelay(row.initialDelayMillis, TimeUnit.MILLISECONDS)
+                    .setConstraints(ProactiveNetwork.constraints(row.constraints))
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                    .apply { row.tags.forEach(::addTag) }.build()
+                manager.updateWork(request).get(5, TimeUnit.SECONDS)
+            }
+        }
+    }
 }

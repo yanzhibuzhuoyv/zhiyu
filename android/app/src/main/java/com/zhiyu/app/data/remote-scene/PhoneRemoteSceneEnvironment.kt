@@ -26,9 +26,11 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
     private val candidates = RemoteSceneCandidateStore(app)
     private val framing = OcFramingStore(app)
     private val selfies = com.zhiyu.app.data.selfie.LocalSelfieBank(app)
+    private val borrowed = com.zhiyu.app.data.selfie.LocalPhotoBorrowStore(app)
     private val prompts = LifePhotoPromptClient(credentials, stillCurrent = ::unchanged)
     private fun jobs() = LocalImageJobStore(app)
     override fun configured() = imageCredentials.configuration() != null
+    override fun reviewConfigured() = credentials.read()?.let { ChatPhotoRules.nativeVision(it.providerId, it.model) } == true
     override fun hasCandidateCapacity()=candidates.hasCapacity()
 
     override suspend fun freeze(chat: String, target: LocalScenePrefetchTarget, profile: VisualProfile,
@@ -80,6 +82,7 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
         if (!daily.matches(binding.chat, target.scene, instant)) return false
         val revision = LocalDailyRules.revision(target.scene)
         if (target.selfie != null) return target.scene.dayId == LocalDailyRules.dayId(instant) && selfies.current(binding.chat, profile, target)
+        if (borrowed.adjusted(binding.chat, target.copy(reshoot = null)).reshoot != target.reshoot) return false
         return LocalScenePrefetchRules.targets(daily.horizon(binding.chat, profile.visualVersion, instant), instant).any {
             it.index == target.index && it.slot == target.slot && LocalDailyRules.revision(it.scene) == revision
         }
@@ -97,6 +100,7 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
                 item.attachment.dayId == target.scene.dayId && item.attachment.visualVersion == profile.visualVersion &&
                     stockTags(chat, target).all { it in item.tags }
                     && (target.selfie == null || selfies.eligible(chat, item, profile, target.scene))
+                    && borrowed.available(chat, item.attachment)
                     && OcFramingStockRules.permits(framing.active(chat,profile),item.tags.toSet(),"contains_person" in item.tags)
             }
     override fun job(requestId: String) = jobs().use { it.get(requestId) }
@@ -112,6 +116,8 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
         prompts.create(binding, target, correction)
     override suspend fun review(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget, prompt: String, image: AgnesGeneratedImage): LifePhotoReview {
         val sha = ChatPhotoRules.sha(image.bytes)
+        if (borrowed.borrowed(binding.chat, sha)) return LifePhotoReview(LifePhotoReviewStatus.REJECTED, "borrowed_pixels_repeated", sha,
+            if (target.reshoot != null) "Create a distinct new image, expression and pose at the requested capture time. Preserve the original OC identity and visible crop." else null)
         if (target.selfie != null && !selfies.acceptsPixels(binding.chat, binding.profile, target, sha))
             return LifePhotoReview(LifePhotoReviewStatus.REJECTED, "selfie_duplicate_or_stale", sha)
         return prompts.review(binding, target, prompt, image)
@@ -152,6 +158,7 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
             (if (target.selfie != null || LocalDayStockRules.view(target.index) != "landscape") listOf("contains_person") else emptyList()) +
             (binding.framingPolicy?.let(OcFramingStockRules::tags) ?: emptyList())
         if (target.selfie != null) require(ChatPhotoRules.sha(bytes) != binding.original.sha256) { "原图不能当作新自拍" }
+        require(!borrowed.borrowed(binding.chat, ChatPhotoRules.sha(bytes))) { "已经提前分享的照片不能重复发布" }
         media.ingest("image", bytes, if (target.selfie != null) "云服务生成并视觉复核的自拍" else "云服务生成并视觉复核的生活照",
             profile.visualVersion, target.scene.dayId,
             "${target.slot.activity} · 虚构角色${if (target.selfie != null) "自拍" else "生活照"}（自动视觉复核可能出错）", tags.distinct())
@@ -161,7 +168,9 @@ internal class PhoneRemoteSceneEnvironment(context: Context) : RemoteSceneEnviro
     private fun stockTags(chat: String, target: LocalScenePrefetchTarget) = listOf(if (target.selfie != null) "selfie_stock" else "daily_stock", "decoded_final",
         "remote_generated", "composite_reviewed", "slot_${target.slot.time.replace(":", "")}",
         "trajectory_${LocalDailyRules.revision(target.scene).take(24)}", "remote_chat_${chat.take(24)}") +
-        target.selfie?.let(LocalSelfieRules::tags).orEmpty()
+        target.selfie?.let(LocalSelfieRules::tags).orEmpty() + target.reshoot?.let {
+            listOf("reshoot_${it.borrowedRequestId}", "capture_${it.photoTime.replace(":", "")}")
+        }.orEmpty()
 
     /** Encoding/resizing the complete original is a transport derivative, never a character cutout or composite. */
     private fun referencePng(original: ByteArray): ByteArray {

@@ -97,18 +97,18 @@ class LocalVoiceEngine(context: Context) : AutoCloseable {
 
 class LocalVoiceRecognition internal constructor(private val recognizer: OnlineRecognizer,
     private val stream: OnlineStream, private val lock: Any,
-    private val onClose: (LocalVoiceRecognition) -> Unit) : AutoCloseable {
+    private val onClose: (LocalVoiceRecognition) -> Unit) : VoiceCaptureRecognition {
     private var closed = false
     private var finished = false
-    fun accept(samples: FloatArray): String = synchronized(lock) {
+    override fun accept(samples: FloatArray): String = synchronized(lock) {
         check(!closed && !finished)
         require(samples.size in 1..16000 && samples.all { it.isFinite() && it in -1.0001f..1.0001f })
         stream.acceptWaveform(samples, LocalVoiceRules.ASR_SAMPLE_RATE)
         while (recognizer.isReady(stream)) recognizer.decode(stream)
         recognizer.getResult(stream).text
     }
-    fun endpoint(): Boolean = synchronized(lock) { check(!closed && !finished); recognizer.isEndpoint(stream) }
-    fun finish(): String = synchronized(lock) {
+    override fun endpoint(): Boolean = synchronized(lock) { check(!closed && !finished); recognizer.isEndpoint(stream) }
+    override fun finish(): String = synchronized(lock) {
         check(!closed)
         if (finished) return@synchronized recognizer.getResult(stream).text
         stream.acceptWaveform(FloatArray(LocalVoiceRules.ASR_SAMPLE_RATE / 2), LocalVoiceRules.ASR_SAMPLE_RATE)

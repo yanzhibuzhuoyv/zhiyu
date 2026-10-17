@@ -9,6 +9,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.work.WorkManager
 import com.zhiyu.app.data.LocalChatDatabase
+import com.zhiyu.app.data.LocalProactivePreferencesStore
 import com.zhiyu.app.data.ProactiveWorkStore
 import com.zhiyu.app.data.appCredentialStore
 import com.zhiyu.app.domain.LocalMemoryCodec
@@ -29,6 +30,8 @@ data class CompanionBackgroundStatus(
     val nextCheckAt: Instant? = null,
     val lastOutcome: String? = null,
     val needsRefresh: Boolean = false,
+    val lastCheckedAt: Instant? = null,
+    val migrationIssue: String? = null,
 )
 
 enum class CompanionBackgroundSetting { NOTIFICATIONS, APP_DETAILS, BATTERY }
@@ -51,7 +54,9 @@ object CompanionBackgroundAccess {
             }
             val record = store.lastRun(chat)
             basic.copy(contactEnabled = store.enabled(chat), hasScheduledWork = scheduled,
-                nextCheckAt = record?.nextDue, lastOutcome = record?.outcome)
+                nextCheckAt = record?.nextDue, lastOutcome = record?.outcome,
+                lastCheckedAt = record?.checkedAt,
+                migrationIssue = LocalProactivePreferencesStore(app).migrationIssue(chat))
         } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
             basic.copy(needsRefresh = true)

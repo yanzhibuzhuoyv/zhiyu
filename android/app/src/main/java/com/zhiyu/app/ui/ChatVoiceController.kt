@@ -20,10 +20,8 @@ class AndroidChatVoiceRecorder(context: Context) : ChatVoiceRecorder {
     override suspend fun record(started: () -> Unit, partial: (String) -> Unit,
         samples: (FloatArray) -> Unit): String = withContext(Dispatchers.IO) {
         LocalVoiceEngine(app).use { engine ->
-            engine.openRecognition().use { session ->
-                microphone.capture(session, started, partial, maximumSeconds = 60,
-                    autoEndpoint = false, onSamples = samples)
-            }
+            microphone.capture({ engine.openRecognition() }, started, partial, maximumSeconds = 60,
+                autoEndpoint = false, onSamples = samples)
         }
     }
     override fun stop() = microphone.finishTurn()

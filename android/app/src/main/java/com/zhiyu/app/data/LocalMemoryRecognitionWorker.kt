@@ -3,7 +3,9 @@ package com.zhiyu.app.data
 import android.content.Context
 import androidx.work.*
 import com.zhiyu.app.domain.*
+import com.zhiyu.app.notifications.BackgroundNetworkRepair
 import com.zhiyu.app.notifications.ProactiveForeground
+import com.zhiyu.app.notifications.ProactiveNetwork
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,6 +15,8 @@ import java.util.concurrent.TimeUnit
 class LocalMemoryRecognitionWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         if (ProactiveForeground.isVisible()) return@withContext Result.retry()
+        // Do not read a Key or start a paid classification when the runtime network is absent.
+        if (!ProactiveNetwork.available(applicationContext)) return@withContext Result.retry()
         val credentials = appCredentialStore(applicationContext)
         val saved = credentials.read() ?: return@withContext Result.success()
         val binding = credentials.readBinding() ?: return@withContext Result.success()
@@ -43,18 +47,38 @@ class LocalMemoryRecognitionWorker(context: Context, parameters: WorkerParameter
 object LocalMemoryRecognitionScheduler {
     private const val ONCE = "zhiyu_native_memory_recognition_once"
     private const val PERIODIC = "zhiyu_native_memory_recognition_periodic"
-    private fun constraints() = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+    private fun constraints() = ProactiveNetwork.constraints()
 
-    /** Invoke after successful login/send and when the app becomes hidden; KEEP preserves running leases. */
+    /** Invoke after successful login/send and when the app becomes hidden. */
     fun schedule(context: Context) {
-        val manager = WorkManager.getInstance(context)
+        val app = context.applicationContext ?: context
+        val manager = WorkManager.getInstance(app)
         val once = OneTimeWorkRequestBuilder<LocalMemoryRecognitionWorker>().setConstraints(constraints())
             .setInitialDelay(15, TimeUnit.SECONDS).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build()
         manager.enqueueUniqueWork(ONCE, ExistingWorkPolicy.KEEP, once)
         val periodic = PeriodicWorkRequestBuilder<LocalMemoryRecognitionWorker>(15, TimeUnit.MINUTES)
             .setConstraints(constraints()).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build()
-        manager.enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.KEEP, periodic)
+        // UPDATE keeps the same periodic UUID and adds the INTERNET-only request to an old row.
+        manager.enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.UPDATE, periodic)
+        BackgroundNetworkRepair.launch("Memory recognition network repair") { migrateLegacyNetworkNow(app) }
     }
+
+    /** This worker does not consume input, so updating an existing lease cannot change its meaning. */
+    private fun migrateLegacyNetworkNow(context: Context) {
+        val manager = WorkManager.getInstance(context)
+        manager.getWorkInfosForUniqueWork(ONCE).get(5, TimeUnit.SECONDS).filter { row ->
+            !row.state.isFinished && row.workerClassName == LocalMemoryRecognitionWorker::class.java.name &&
+                ProactiveNetwork.isLegacy(row.constraints)
+        }.forEach { row ->
+            val request = OneTimeWorkRequestBuilder<LocalMemoryRecognitionWorker>().setId(row.id)
+                .setInitialDelay(row.initialDelayMillis, TimeUnit.MILLISECONDS)
+                .setConstraints(ProactiveNetwork.constraints(row.constraints))
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .apply { row.tags.forEach(::addTag) }.build()
+            manager.updateWork(request).get(5, TimeUnit.SECONDS)
+        }
+    }
+
     fun cancel(context: Context) {
         val manager = WorkManager.getInstance(context)
         manager.cancelUniqueWork(ONCE)

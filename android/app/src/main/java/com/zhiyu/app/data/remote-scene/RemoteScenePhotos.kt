@@ -13,6 +13,7 @@ import kotlinx.coroutines.sync.withLock
 class RemoteScenePhotos(private val environment: RemoteSceneEnvironment) {
     constructor(context: Context) : this(PhoneRemoteSceneEnvironment(context))
     fun configured(): Boolean = environment.configured()
+    fun reviewConfigured(): Boolean = environment.reviewConfigured()
 
     suspend fun prepare(chat: String, targets: List<LocalScenePrefetchTarget>, profile: VisualProfile,
         snapshot: OcIdentitySnapshot?): LocalSceneStockResult = serial.withLock {
@@ -20,6 +21,7 @@ class RemoteScenePhotos(private val environment: RemoteSceneEnvironment) {
         val frozen = targets.map(RemoteSceneRules::freeze)
         require(frozen.size <= 72 + LocalSelfieRules.SIZE && frozen.all { it.scene.visualVersion == profile.visualVersion })
         if (!configured()) return@withLock deferred("unconfigured")
+        if (!reviewConfigured()) return@withLock deferred("review_unavailable")
         var skipped: LocalSceneStockResult? = null
         for (target in frozen) {
             currentCoroutineContext().ensureActive()
@@ -67,6 +69,7 @@ class RemoteScenePhotos(private val environment: RemoteSceneEnvironment) {
         snapshot: OcIdentitySnapshot?, requestId: String): LocalSceneStockResult = serial.withLock {
         MediaRules.path(chat); MediaRules.path(requestId)
         val frozen = actionTarget(target, profile)
+        if (!reviewConfigured()) return@withLock deferred("review_unavailable")
         val binding = environment.freeze(chat, frozen, profile, snapshot)
             ?: return@withLock deferred("original_or_connection_unavailable")
         if (!environment.unchanged(binding, frozen)) return@withLock deferred("stale")
@@ -194,7 +197,7 @@ class RemoteScenePhotos(private val environment: RemoteSceneEnvironment) {
 
     private suspend fun reviewAndPublish(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget,
         candidate: RemoteSceneCandidate, image: AgnesGeneratedImage, recheck: Boolean = false): LocalSceneStockResult {
-        if (target.selfie != null && candidate.imageSha == binding.original.sha256) {
+        if ((target.selfie != null || target.reshoot != null) && candidate.imageSha == binding.original.sha256) {
             environment.saveCandidate(candidate.copy(status = LifePhotoReviewStatus.REJECTED,
                 reason = "selfie_reused_original", correction = null), image.bytes)
             return deferred("rejected")

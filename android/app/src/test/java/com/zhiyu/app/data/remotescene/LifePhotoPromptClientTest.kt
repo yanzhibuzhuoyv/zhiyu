@@ -97,4 +97,15 @@ class LifePhotoPromptClientTest {
         assertTrue(provider.messages.last().content.contains(scene.slots[0].activity))
         assertTrue(provider.messages.first().content.contains("unseen body"))
     }
+    @Test fun borrowedSlotReplacementDescribesAnotherPhotoMomentWithoutChangingItsStoredTrajectory() = runTest {
+        val store = Store(); val provider = Provider("{\"prompt\":\"The same OC in a distinct new pose by the window.\"}")
+        val time = java.time.LocalTime.parse(target.slot.time).plusMinutes(1).toString()
+        val replacement = target.copy(reshoot = LocalSceneReshoot("c".repeat(32), "d".repeat(64), time))
+        client(store, provider).create(binding(store), replacement)
+        val metadata = provider.messages.last().content
+        assertTrue(metadata.contains("\"capture_time\":\"$time\""))
+        assertTrue(metadata.contains("\"time\":\"${target.slot.time}\""))
+        assertTrue(metadata.contains(LocalDailyRules.revision(scene)))
+        assertTrue(provider.messages.first().content.contains("distinct", ignoreCase = true))
+    }
 }

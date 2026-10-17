@@ -19,8 +19,10 @@ class LocalProactiveService(context: Context, private val store: CredentialStore
     private val now: () -> Instant = Instant::now,
 ) : ProactiveService {
     private val prefs = context.applicationContext.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
+    private val sharedPreferences = if (preferencesName == "local_proactive") LocalProactivePreferencesStore(context) else null
     override suspend fun preferences(id: String): ProactivePreferences = withContext(Dispatchers.IO) {
         ProactiveRules.conversationId(id)
+        sharedPreferences?.let { return@withContext it.read(id) }
         val data = prefs.getString(id, null)?.let(::JSONObject) ?: return@withContext ProactivePreferences()
         ProactivePreferences(data.getBoolean("enabled"), data.getInt("start"), data.getInt("end"), data.getString("zone"))
     }
@@ -28,6 +30,7 @@ class LocalProactiveService(context: Context, private val store: CredentialStore
         ProactiveRules.conversationId(id)
         LocalContactPolicy.decide(now(), preferences, "gentle", LocalContactStats())
         check(gateway.conversations().any { it.id == id }) { "这段聊天不存在" }
+        sharedPreferences?.let { it.save(id, preferences); return@withContext preferences }
         val value = JSONObject().put("enabled", preferences.enabled).put("start", preferences.quietStart)
             .put("end", preferences.quietEnd).put("zone", preferences.timeZone)
         check(prefs.edit().putString(id, value.toString()).commit()) { "主动联系设置保存失败" }

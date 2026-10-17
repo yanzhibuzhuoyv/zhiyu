@@ -39,7 +39,9 @@ class LocalSceneStock(context: Context,
         val snapshot = characters.read(chat)?.takeIf { it.identity.reference?.id == profile.referenceId && it.identity.reference?.visualVersion == profile.visualVersion }
         if(remoteDefault) {
             val selfieTargets = com.zhiyu.app.data.selfie.LocalSelfieBank(app).targets(chat, profile, plans.first())
-            return remotePhotos.prepare(chat, selfieTargets + LocalScenePrefetchRules.targets(plans,instant),profile,snapshot)
+            val borrowed = com.zhiyu.app.data.selfie.LocalPhotoBorrowStore(app)
+            val targets = LocalScenePrefetchRules.targets(plans,instant).map { borrowed.adjusted(chat, it) }
+            return remotePhotos.prepare(chat, selfieTargets + targets,profile,snapshot)
         }
         val pictureIdentity = snapshot?.let { OcCallCharacterRules.resolve(it.identity, it.identity.reference) }
         val native = backgrounds.hasInstalledPack()

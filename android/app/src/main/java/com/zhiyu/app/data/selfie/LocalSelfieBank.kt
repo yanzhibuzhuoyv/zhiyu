@@ -11,6 +11,9 @@ import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
 
+data class LocalSelfieIdentity(val scope: String, val original: OcAssetRef, val referenceSha: String,
+    val packageSha: String?, val framing: OcFramingPolicy?)
+
 /** Three durable opportunities per current OC/day/trajectory/crop. No credentials are stored here. */
 class LocalSelfieBank(context: Context) {
     private val app = context.applicationContext
@@ -20,7 +23,11 @@ class LocalSelfieBank(context: Context) {
     private val framing = OcFramingStore(app)
     private data class Lane(val generation: Int, val index: Int)
     private data class State(val scope: String, val lanes: List<Lane>, val usedSha: List<String> = emptyList())
-    private data class Snapshot(val scope: String, val original: OcAssetRef, val referenceSha: String)
+    private data class Snapshot(val scope: String, val original: OcAssetRef, val referenceSha: String,
+        val packageSha: String?, val framing: OcFramingPolicy?)
+
+    fun identity(chat: String, profile: VisualProfile, scene: LocalDailyScene): LocalSelfieIdentity? =
+        withSnapshot(chat, profile, scene) { it?.let { s -> LocalSelfieIdentity(s.scope, s.original, s.referenceSha, s.packageSha, s.framing) } }
 
     fun targets(chat: String, profile: VisualProfile, scene: LocalDailyScene): List<LocalScenePrefetchTarget> =
         withSnapshot(chat, profile, scene) { snapshot ->
@@ -120,7 +127,7 @@ class LocalSelfieBank(context: Context) {
             profile.visualVersion.toString(), profile.referenceId.orEmpty(), reference.sha256,
             source.id, source.sha256, identity?.packageSha.orEmpty(), policy?.let(OcFramingRules::hash).orEmpty())
         val scope = LocalMemoryCodec.sha(LocalMemoryCodec.bytes(buildString { fields.forEach { append(it.length).append(':').append(it) } }))
-        return Snapshot(scope, source, reference.sha256)
+        return Snapshot(scope, source, reference.sha256, identity?.packageSha, policy)
     }
 
     private fun state(chat: String, scope: String, scene: LocalDailyScene): State {

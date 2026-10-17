@@ -2,7 +2,6 @@ package com.zhiyu.app.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.zhiyu.app.domain.Message
@@ -30,15 +29,13 @@ class ResponseSegmentsUiTest {
         compose.onNodeWithTag("message_segments").assertExists()
     }
 
-    @Test fun copyStillReturnsTheCompleteAssistantOriginalIncludingLineBreaks() {
+    @Test fun originalStillHasAllItsSegmentsWithoutAnExplicitCopyButton() {
         val text = "嗯。\n\n  我听着呢🍎！"
-        var clipboard: androidx.compose.ui.platform.ClipboardManager? = null
         compose.setContent {
-            clipboard = LocalClipboardManager.current
             ZhiYuTheme { ChatMessageBubble(Message("copysegments", "assistant", text, emptyList(), "now")) }
         }
         compose.onNodeWithTag("message_segment_copysegments_1").assertExists()
-        compose.onNodeWithContentDescription("复制消息").performClick()
-        compose.runOnIdle { assertEquals(text, clipboard?.getText()?.text) }
+        compose.onNodeWithContentDescription("复制消息").assertDoesNotExist()
+        assertEquals(text, com.zhiyu.app.domain.ResponseSegments.split(text).joinToString("") { it.text })
     }
 }

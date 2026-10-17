@@ -10,6 +10,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -18,6 +20,11 @@ import kotlinx.coroutines.sync.withLock
 import android.util.Log
 import java.time.Instant
 import java.util.concurrent.TimeUnit
+import com.zhiyu.app.data.LocalProactivePreferencesStore
+import com.zhiyu.app.data.LocalProactiveService
+import com.zhiyu.app.data.appCredentialStore
+import com.zhiyu.app.domain.ProactivePreferences
+import com.zhiyu.app.domain.ProactiveService
 
 object ProactiveScheduler {
     const val UNIQUE_NAME = "zhiyu_companion_contact"
@@ -32,6 +39,62 @@ object ProactiveScheduler {
 
     fun schedule(context: Context, conversationId: String) {
         scheduleRequests(context, conversationId)
+        repairNetworkConstraints(context, conversationId)
+    }
+
+    /** An explicit settings repair is new user consent, unlike automatic lifecycle recovery. */
+    fun restoreContact(context: Context): Deferred<ProactivePreferences> = restoreContact(context, null)
+
+    internal fun restoreContact(context: Context, service: ProactiveService?): Deferred<ProactivePreferences> {
+        val app = context.applicationContext ?: context
+        return recoveryScope.async {
+            check(ProactiveNotifications.allowed(app)) { "请先在系统设置中允许知语通知" }
+            val id = boundContactChat(app) ?: error("请先返回原来的恋人聊天")
+            val preferences = LocalProactivePreferencesStore(app).read(id).copy(enabled = true)
+            ContactPreferenceWriter.submit(app, id, preferences,
+                service ?: LocalProactiveService(app, appCredentialStore(app))).await()
+        }
+    }
+
+    /** A new false-to-true grant requests one fresh policy check, without cancelling paid work. */
+    internal fun onContactGranted(context: Context, conversationId: String) {
+        val app = context.applicationContext ?: context
+        val state = ProactiveWorkStore(app)
+        state.requestFreshCheck(conversationId, Instant.now())
+        migrateLegacyNetworkRequests(app, conversationId)
+        val operations = scheduleRequests(app, conversationId) + listOfNotNull(resume(app, conversationId))
+        operations.forEach { it.result.get(5, TimeUnit.SECONDS) }
+    }
+
+    internal fun repairNetworkConstraints(context: Context, conversationId: String): Job = recoveryScope.launch {
+        try { migrateLegacyNetworkRequests(context.applicationContext ?: context, conversationId) }
+        catch (failure: Exception) {
+            if (failure is CancellationException) throw failure
+            Log.w("ZhiYuContact", "Legacy contact network repair deferred; durable intent is retained")
+        }
+    }
+
+    /** Own fixed input contracts only; updateWork preserves identity, attempts and enqueue time. */
+    private fun migrateLegacyNetworkRequests(context: Context, conversationId: String) {
+        val id = ProactiveRules.conversationId(conversationId)
+        val manager = WorkManager.getInstance(context)
+        val names = listOf(ProactiveSchedulePolicy.uniqueDueName(id) to true, RESUME_NAME to false)
+        names.forEach { (name, chain) ->
+            manager.getWorkInfosForUniqueWork(name).get(5, TimeUnit.SECONDS).filter { row ->
+                !row.state.isFinished && row.workerClassName == ProactiveWorker::class.java.name &&
+                    ProactiveNetwork.isLegacy(row.constraints)
+            }.forEach { row ->
+                val data = if (chain) workDataOf(CONVERSATION_INPUT to id, CHAIN_INPUT to true)
+                    else workDataOf(CONVERSATION_INPUT to id)
+                val request = OneTimeWorkRequestBuilder<ProactiveWorker>().setId(row.id)
+                    .setInputData(data).setInitialDelay(row.initialDelayMillis, TimeUnit.MILLISECONDS)
+                    .setConstraints(ProactiveNetwork.constraints(row.constraints))
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                    .apply { row.tags.forEach(::addTag) }.build()
+                // A RUNNING worker is updated for its next run, never cancelled mid-request.
+                manager.updateWork(request).get(5, TimeUnit.SECONDS)
+            }
+        }
     }
 
     private fun scheduleRequests(context: Context, conversationId: String): List<Operation> {
@@ -39,7 +102,7 @@ object ProactiveScheduler {
         ProactiveNotifications.createChannel(context)
         if (!ProactiveWorkStore(context).enabled(id) || !ProactiveNotifications.allowed(context)) return emptyList()
         val request = PeriodicWorkRequestBuilder<ProactiveWorker>(15, TimeUnit.MINUTES)
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(ProactiveNetwork.constraints())
             .setInputData(workDataOf(CONVERSATION_INPUT to ProactiveRules.conversationId(conversationId)))
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .addTag(WORK_TAG)
@@ -60,7 +123,7 @@ object ProactiveScheduler {
         if (!state.enabled(conversationId) || !ProactiveNotifications.allowed(context)) return null
         val due = ProactiveSchedulePolicy.nextCheck(now, state.lastRun(conversationId))
         val request = OneTimeWorkRequestBuilder<ProactiveWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(ProactiveNetwork.constraints())
             .setInputData(workDataOf(CONVERSATION_INPUT to ProactiveRules.conversationId(conversationId), CHAIN_INPUT to true))
             .setInitialDelay(ProactiveSchedulePolicy.delayMillis(now, due), TimeUnit.MILLISECONDS)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).addTag(WORK_TAG).build()
@@ -75,7 +138,7 @@ object ProactiveScheduler {
     private fun resume(context: Context, conversationId: String): Operation? {
         if (!ProactiveWorkStore(context).enabled(conversationId) || !ProactiveNotifications.allowed(context)) return null
         val request = OneTimeWorkRequestBuilder<ProactiveWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(ProactiveNetwork.constraints())
             .setInputData(workDataOf(CONVERSATION_INPUT to ProactiveRules.conversationId(conversationId)))
             .setInitialDelay(30, TimeUnit.SECONDS)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).addTag(WORK_TAG).build()
@@ -97,6 +160,7 @@ object ProactiveScheduler {
                 ProactiveNotifications.createChannel(app)
                 if (!ProactiveNotifications.allowed(app)) return@withLock
                 val chat = boundContactChat(app) ?: return@withLock
+                migrateLegacyNetworkRequests(app, chat)
                 val now = Instant.now()
                 if (!ProactiveWorkStore(app).releaseConnectionBackoff(chat, now)) return@withLock
                 val operations = scheduleRequests(app, chat) + listOfNotNull(
@@ -118,6 +182,7 @@ object ProactiveScheduler {
             if (!ProactiveNotifications.allowed(context)) return@withLock
             val chat = boundContactChat(context) ?: return@withLock
             if (!ProactiveWorkStore(context).enabled(chat)) return@withLock
+            migrateLegacyNetworkRequests(context, chat)
             // Repairing jobs is not a contact check. Keep the real last outcome and due intact.
             val operations = scheduleRequests(context, chat) + listOfNotNull(resume(context, chat))
             operations.forEach { it.result.get(5, TimeUnit.SECONDS) }

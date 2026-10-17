@@ -14,8 +14,8 @@ android {
         minSdk = 26
         targetSdk = 36
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
-        versionCode = 18
-        versionName = "0.2.12"
+        versionCode = 19
+        versionName = "0.2.13"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"https://local.zhiyu.invalid\"")
         buildConfigField("boolean", "USE_USB_BACKEND", "false")
@@ -274,4 +274,6 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    // Read-only WorkManager migration assertions; its existing Room runtime is a runtime-only dependency.
+    androidTestCompileOnly("androidx.room:room-runtime:2.7.0")
 }

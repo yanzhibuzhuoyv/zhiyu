@@ -85,4 +85,26 @@ class VoiceReplyPreparationNativeTest {
             assertFalse(File(File(test.context.filesDir, test.dir), "${test.suffix}.wav").exists())
         }
     }
+
+    @Test fun punctuationAddsOnlyBoundedNaturalPausesWithoutChangingTheArchivedOriginal() = runBlocking {
+        Fixture().use { test ->
+            val text = "嗯，我在。晚安！"
+            val id = (if (test.suffix.first() == 'c') "d" else "c") + test.suffix.drop(1)
+            test.original = test.original.copy(text = text, sha256 = LocalMemoryCodec.sha(LocalMemoryCodec.bytes(text)),
+                origin = VoiceMessageOrigins.reply(id))
+            test.store.prepareReply(id, "owner", "chat", "prosody", test.original.sha256, test.tuning)
+            test.original = test.original.copy(messageId = "prosody")
+            val spoken = mutableListOf<String>()
+            val preparation = VoiceReplyPreparation(test.store, { test.original }, { 10 to test.tuning },
+                { part, _, _, _ -> spoken.add(part); LocalVoiceAudio(FloatArray(160) { .25f }, 16000) })
+            preparation.run(id, "owner", "chat", "prosody", test.original.sha256)
+            assertEquals(listOf("嗯，", "我在。", "晚安！"), spoken)
+            assertEquals(text, spoken.joinToString(""))
+            val audio = test.store.read(id)
+            assertEquals(5600, audio.samples.size)
+            assertTrue(audio.samples.sliceArray(160 until 1760).all { it == 0f })
+            assertTrue(audio.samples.sliceArray(1920 until 5440).all { it == 0f })
+            assertEquals(test.original.sha256, test.store.find(id)!!.sourceSha)
+        }
+    }
 }

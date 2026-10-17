@@ -30,6 +30,9 @@ import com.zhiyu.app.notifications.CompanionBackgroundSetting
 import com.zhiyu.app.notifications.CompanionBackgroundStatus
 import com.zhiyu.app.notifications.ProactiveScheduler
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun CompanionBackgroundCard() {
@@ -49,6 +52,16 @@ fun CompanionBackgroundCard() {
     Column(Modifier.fillMaxWidth().testTag("companion_background_status"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("离开后也能收到消息", style = MaterialTheme.typography.titleMedium)
         Text(status?.let(::backgroundSummary) ?: "正在检查后台接收设置…", style = MaterialTheme.typography.bodyMedium)
+        status?.let { current ->
+            val checked = current.lastCheckedAt?.let(::localCheckTime) ?: "还没有后台检查"
+            val outcome = current.lastOutcome?.let(::backgroundOutcome)?.let { " · $it" }.orEmpty()
+            Text("上次检查：$checked$outcome", style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("background_last_check"))
+            current.nextCheckAt?.let { due ->
+                Text("下次检查安排：${localCheckTime(due)}（系统可能延迟）", style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.testTag("background_next_check"))
+            }
+        }
         Text("回到桌面后仍会检查消息；省电可能让消息晚些到。清理最近任务也可能被手机拦截，系统“强行停止”后需要重新打开知语。",
             style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -70,6 +83,20 @@ fun CompanionBackgroundCard() {
                 }
             }, enabled = !busy, modifier = Modifier.testTag("background_repair")) { Text("重新检查") }
         }
+        if (status?.notificationsAllowed == true && status?.contactEnabled == false) {
+            OutlinedButton(onClick = {
+                // Start process-owned persistence before screen-bound awaiting/presentation.
+                val repair = ProactiveScheduler.restoreContact(context)
+                busy = true; error = null
+                scope.launch {
+                    try { repair.await(); revision++ }
+                    catch (failure: Exception) {
+                        if (failure is CancellationException) throw failure
+                        error = failure.message?.take(160) ?: "主动联系未恢复，请重试。"
+                    } finally { busy = false }
+                }
+            }, enabled = !busy, modifier = Modifier.testTag("background_restore_contact")) { Text("恢复主动联系") }
+        }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("background_settings_error")) }
     }
 }
@@ -77,13 +104,28 @@ fun CompanionBackgroundCard() {
 private fun backgroundSummary(status: CompanionBackgroundStatus): String = when {
     !status.notificationsAllowed -> "通知还没开启，TA 发来的消息暂时无法提醒你。"
     status.backgroundRestricted == true -> "系统限制了知语的后台运行，请在系统设置中允许后台活动。"
-    status.contactEnabled == false -> "通知已允许，主动联系尚未恢复。返回聊天后会重新检查。"
+    status.migrationIssue == "legacy_conflict" -> "旧的主动联系设置不一致，已保留关闭。可点“恢复主动联系”。"
+    status.contactEnabled == false -> "通知已允许，主动联系目前关闭。你可以点“恢复主动联系”。"
     status.needsRefresh -> "后台接收状态暂时无法读取，可以重新检查。"
     status.contactEnabled == null -> "通知已开启，进入聊天后会检查后台接收安排。"
     status.hasScheduledWork == false && status.contactEnabled == true -> "后台接收安排需要恢复，请点“重新检查”。"
     status.lastOutcome == "needs_connection" -> "上次联系时连接没有成功，后台会继续重试；也可以返回聊天检查连接。"
     status.batteryUnrestricted == false -> "后台消息已安排，手机省电仍可能让提醒晚些到。"
     else -> "后台接收已安排；手机会按人物性格与实际情况来提醒你。"
+}
+
+private fun localCheckTime(instant: java.time.Instant): String = DateTimeFormatter
+    .ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault()).format(instant)
+
+private fun backgroundOutcome(outcome: String): String = when (outcome) {
+    "sent" -> "已生成主动消息"
+    "not_due" -> "未到联系时机，或仍在等待回复"
+    "foreground" -> "当时你在应用内"
+    "permission" -> "通知或联系权限未开放"
+    "disabled" -> "主动联系已关闭"
+    "retry" -> "连接暂未成功，等待重试"
+    "needs_connection" -> "需要检查 AI 连接"
+    else -> "状态暂时未知"
 }
 
 private fun openSettings(context: Context, setting: CompanionBackgroundSetting): String? = try {

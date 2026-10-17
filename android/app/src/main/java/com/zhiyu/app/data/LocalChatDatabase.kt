@@ -158,6 +158,35 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
         db.update("conversations", values("updated_at" to message.createdAt), "owner=? AND id=?", arrayOf(owner, id))
         message
     }
+    /** All originals and ordered membership commit before any UI submission callback or network call. */
+    internal fun appendQueuedTextBatch(owner: String, id: String, inputs: List<QueuedTextInput>,
+        commitGuard: () -> Unit): QueuedBatchOriginals = transaction(commitGuard) { db ->
+        val checked = QueuedTextBatchRules.check(inputs)
+        val fingerprint = queuedBatchFingerprint(checked)
+        val previous = checked.map { proactiveResult(owner, id, "outgoing-${it.requestId}") }
+        if (previous.any { it != null }) {
+            require(previous.all { it != null }) { "这组连续消息与已经发出的原话不一致" }
+            val users = checked.zip(previous.map { checkNotNull(it) }).map { (input, message) ->
+                require(message.role == "user" && message.origin == "reply" && message.content == input.content && message.mediaAttachments.isEmpty()) {
+                    "连续消息请求已用于不同原文"
+                }
+                QueuedTextSubmission(input.requestId, message)
+            }
+            val marker = proactiveResult(owner, id, "outgoing-batch-$fingerprint")
+            require(marker?.id == users.last().message.id && checked.all {
+                proactiveResult(owner, id, "outgoing-member-${it.requestId}")?.id == marker?.id
+            }) { "连续消息的顺序或成员已经改变，请发一条新消息" }
+            return@transaction QueuedBatchOriginals(users, true)
+        }
+        val users = checked.map { input -> QueuedTextSubmission(input.requestId,
+            append(owner, id, "user", input.content, requestId = "outgoing-${input.requestId}", commitGuard = commitGuard)) }
+        (listOf("outgoing-batch-$fingerprint") + checked.map { "outgoing-member-${it.requestId}" }).forEach { request ->
+            db.insertOrThrow("proactive_requests", null, values("request_id" to request, "owner" to owner,
+                "conversation_id" to id, "message_id" to users.last().message.id))
+        }
+        QueuedBatchOriginals(users, false)
+    }
+
     fun history(owner: String, id: String, before: String? = null, limit: Int = 100,
         includeCalls: Boolean = false): MessagePage {
         require(limit in 1..100)

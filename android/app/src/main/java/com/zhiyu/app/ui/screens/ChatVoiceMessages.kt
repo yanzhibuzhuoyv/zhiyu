@@ -77,6 +77,7 @@ import kotlinx.coroutines.*
     var playing by remember(clipId) { mutableStateOf(false) }
     var error by remember(clipId) { mutableStateOf<String?>(null) }
     var job by remember(clipId) { mutableStateOf<Job?>(null) }
+    var transcriptOpen by remember(clipId) { mutableStateOf(false) }
     LaunchedEffect(clipId) {
         repeat(300) {
             record = try { withContext(Dispatchers.IO) { store.find(clipId) } }
@@ -117,4 +118,10 @@ import kotlinx.coroutines.*
         })
     }
     error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+    val fallback = record?.state == VoiceClipState.FAILED || error != null
+    if (fallback || transcriptOpen) Text(message.content, style = chatTextStyle(com.zhiyu.app.ui.LocalChatTypography.current),
+        modifier = Modifier.testTag("voice_transcript_${message.id}"))
+    if (!fallback) TextButton({ transcriptOpen = !transcriptOpen }, modifier = Modifier.testTag("voice_transcript_toggle_${message.id}")) {
+        Text(if (transcriptOpen) "收起文字" else "查看文字")
+    }
 }

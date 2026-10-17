@@ -27,6 +27,9 @@ class LocalDailyShareWorker(context: Context, parameters: WorkerParameters) : Co
                 LocalDailyShareScheduler.next(applicationContext, id, continueChain = chain)
                 return@withContext Result.success()
             }
+            // API 26/27 has no platform network request; keep the same no-key/no-provider
+            // guarantee as proactive contact when the runtime network is actually absent.
+            if (!ProactiveNetwork.available(applicationContext)) return@withContext Result.retry()
             val credentials = appCredentialStore(applicationContext)
             val service = LocalDailyShareService(applicationContext, credentials)
             val pauses=ContactPauseStore(applicationContext)

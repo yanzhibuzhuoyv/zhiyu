@@ -171,24 +171,26 @@ class OutgoingCommitRecoveryNativeTest {
     }
 
     @Test fun missingOptionalOcReferenceMetadataDoesNotBlockThePrimaryPhoto(): Unit = runBlocking {
-        optionalDamageDoesNotBlockPrimaryPhoto { test, _, reference ->
+        optionalDamageDoesNotBlockPrimaryPhoto(expectReference = false) { test, _, reference ->
             val file = File(test.context.filesDir, "local_media/image/$reference.json")
             check(file.isFile && file.delete())
         }
     }
 
     @Test fun corruptOptionalCreatorManifestDoesNotBlockThePrimaryPhotoOrGetOverwritten(): Unit = runBlocking {
-        optionalDamageDoesNotBlockPrimaryPhoto { test, chat, _ ->
+        optionalDamageDoesNotBlockPrimaryPhoto(expectReference = true) { test, chat, _ ->
             val file = File(test.context.filesDir, "oc_identity_v1/${chat.id}.json")
             check(file.parentFile!!.mkdirs())
             file.writeText("synthetic corrupt optional creator manifest")
         }
     }
 
-    private suspend fun optionalDamageDoesNotBlockPrimaryPhoto(damage: (Fixture, Conversation, String) -> Unit) {
+    private suspend fun optionalDamageDoesNotBlockPrimaryPhoto(expectReference: Boolean,
+        damage: (Fixture, Conversation, String) -> Unit) {
         Fixture().use { test ->
             val chat = test.open()
-            val reference = LocalVisualRepository(test.context).import(chat.id, png(0xff883366.toInt()))
+            val referenceBytes = png(0xff883366.toInt())
+            val reference = LocalVisualRepository(test.context).import(chat.id, referenceBytes)
             val original = png(0xff2255aa.toInt())
             val draft = ChatPhotoStore(test.context).importBytes(original)
             damage(test, chat, checkNotNull(reference.referenceId))
@@ -199,12 +201,18 @@ class OutgoingCommitRecoveryNativeTest {
             assertArrayEquals(original, LocalMediaStore(test.context).download(draft.attachment.id, draft.attachment.sha256))
             assertEquals(1, test.calls.get())
             val outgoing = checkNotNull(test.lastChat).getJSONArray("messages")
-            val imageParts = (0 until outgoing.length()).sumOf { index ->
+            val imageUrls = (0 until outgoing.length()).flatMap { index ->
                 outgoing.getJSONObject(index).optJSONArray("content")?.let { parts ->
-                    (0 until parts.length()).count { parts.getJSONObject(it).getString("type") == "image_url" }
-                } ?: 0
+                    (0 until parts.length()).map { parts.getJSONObject(it) }
+                        .filter { it.getString("type") == "image_url" }
+                        .map { it.getJSONObject("image_url").getString("url") }
+                }.orEmpty()
             }
-            assertEquals("The usable user photo must still reach the synthetic vision provider", 1, imageParts)
+            val primaryUrl = ChatPhotoStore(test.context).payload(draft.attachment).dataUri()
+            assertEquals("The exact primary upload pixels must reach the provider once", 1, imageUrls.count { it == primaryUrl })
+            val comparison = OcReferencePhotoEncoder.encode(referenceBytes, OcPhotoIdentityContext.MAX_REFERENCE_BYTES)?.dataUri()
+            val expectedUrls = if (expectReference) listOf(checkNotNull(comparison), primaryUrl) else listOf(primaryUrl)
+            assertEquals("An intact confirmed OC remains available despite an optional corrupt creator manifest", expectedUrls, imageUrls)
             assertFalse(outgoing.getJSONObject(0).getString("content").contains("同一份原图"))
             val badCreator = File(test.context.filesDir, "oc_identity_v1/${chat.id}.json")
             if (badCreator.exists()) assertEquals("synthetic corrupt optional creator manifest", badCreator.readText())

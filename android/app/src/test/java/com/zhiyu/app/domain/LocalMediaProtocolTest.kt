@@ -24,6 +24,20 @@ class LocalMediaProtocolTest {
         val content = "今天想听你慢慢说。".repeat(1000)
         assertEquals(content, plan.parse(content).content)
     }
+    @Test fun preservingAMixedReplyCannotClaimAnUnavailablePhotoWasSent() {
+        val pending = "这会儿照片还没准备好，等我弄好了再给你看。"
+        val mixed = LocalMediaPlan("", emptyList(), "", selfieRequested = true,
+            unavailableMessage = pending, preserveGeneratedText = true)
+        listOf("照片已经发给你了。今晚先休息。", "已经发啦。今晚先休息。", "这张自拍发过去了。今晚先休息。")
+            .forEach { raw ->
+                val reply = mixed.parse(raw)
+                assertEquals(pending, reply.content)
+                assertTrue(reply.attachments.isEmpty())
+            }
+        listOf("你说“已经发啦”，我没看到。今晚先休息。", "照片还没发，等我弄好再给你。今晚先休息。",
+            "照片等我准备好再发给你。今晚先休息。", "我没有说已经发啦。今晚先休息。")
+            .forEach { truthful -> assertEquals(truthful, mixed.parse(truthful).content) }
+    }
     @Test fun malformedAndEmptyControlRepliesAreRejectedOrCleaned() {
         assertEquals("你好", plan.parse("你好[[ZHIYU_MEDIA_bad").content)
         assertThrows(IllegalArgumentException::class.java) { plan.parse("[[ZHIYU_MEDIA_fresh:$id]]") }

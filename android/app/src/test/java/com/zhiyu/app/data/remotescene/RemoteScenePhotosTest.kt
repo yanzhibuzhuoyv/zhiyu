@@ -24,10 +24,12 @@ class RemoteScenePhotosTest {
         var frozen = binding(); var outcome = LifePhotoReviewStatus.APPROVED
         var correction: String? = null; var failure: Exception? = null
         var reviewedSha: String? = null
+        var reviewReady = true
         var afterPrompt: () -> Unit = {}; var afterImage: () -> Unit = {}; var beforePublish: () -> Unit = {}
         val jobs = linkedMapOf<String, StoredImageJob>(); val candidates = linkedMapOf<String, RemoteSceneCandidate>()
         val imageBytes = mutableMapOf<String, ByteArray>(); val published = mutableListOf<RemoteSceneCandidate>()
         override fun configured() = true
+        override fun reviewConfigured() = reviewReady
         override suspend fun freeze(chat: String, target: LocalScenePrefetchTarget, profile: VisualProfile, snapshot: OcIdentitySnapshot?) = frozen
         override suspend fun unchanged(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget) = current
         override fun alreadyPrepared(chat: String, target: LocalScenePrefetchTarget, profile: VisualProfile) = published.any { it.slot == target.slot.time }
@@ -136,5 +138,27 @@ class RemoteScenePhotosTest {
         assertEquals(0, result.prepared); assertEquals(0, fake.publishes)
         assertEquals(1, fake.candidates.size)
         run(fake, listOf(selfie)); assertEquals(1, fake.imageCalls)
+    }
+    @Test fun knownUnavailablePixelReviewerStopsBeforeAnyNewPaidImageOpportunity() = runTest {
+        val fake = Fake().apply { reviewReady = false }
+        assertEquals("review_unavailable", run(fake).reason)
+        assertEquals(0, fake.imageCalls); assertEquals(0, fake.promptCalls); assertTrue(fake.jobs.isEmpty())
+    }
+    @Test fun reshootAfterBorrowHasANewStablePaidIdWithoutChangingTheActualTrajectory() {
+        val first = targets[1]
+        val next = first.copy(reshoot = LocalSceneReshoot("d".repeat(32), "e".repeat(64), "09:01"))
+        assertNotEquals(RemoteSceneRules.requestId(binding(), first, 0), RemoteSceneRules.requestId(binding(), next, 0))
+        assertEquals(RemoteSceneRules.requestId(binding(), next, 0), RemoteSceneRules.requestId(binding(), next, 0))
+        assertEquals(first.scene, next.scene); assertEquals(first.slot, next.slot)
+    }
+    @Test fun unknownBorrowReplacementNeverRepaysAfterImageCredentialChanges() = runTest {
+        val fake = Fake().apply { failure = ApiFailure(504, "synthetic timeout", "image_request_unknown") }
+        val target = LocalPhotoBorrowRules.replacement(targets[1], "d".repeat(32), "e".repeat(64))
+        assertEquals("unknown", run(fake, listOf(target)).reason)
+        fake.frozen = RemoteSceneBinding(chat, profile, fake.frozen.packageSha, fake.frozen.original,
+            "another-synthetic-key", "gpt-image-2", fake.frozen.connection, fake.frozen.companion, bytes)
+        fake.failure = null
+        run(fake, listOf(target))
+        assertEquals(1, fake.imageCalls); assertEquals(1, fake.jobs.size)
     }
 }

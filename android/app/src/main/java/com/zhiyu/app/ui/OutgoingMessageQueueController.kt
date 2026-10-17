@@ -13,6 +13,9 @@ internal class OutgoingMessageQueueController(
 ) {
     @Volatile private var epoch = 0L
     private var worker: Job? = null
+    private var openTextBatchId: String? = null
+    private var quietWindow: Job? = null
+    private var maximumWindow: Job? = null
 
     fun enqueue(voiceText: String? = null, voiceDraftId: String? = null): Boolean {
         val state = read()
@@ -24,12 +27,17 @@ internal class OutgoingMessageQueueController(
             val raw = voiceText ?: state.draft
             val text = if (image == null) ConnectionRules.message(raw) else raw
             require(voiceDraftId == null || Regex("[a-f0-9]{32}").matches(voiceDraftId)) { "语音尚未准备好，请重新录制" }
-            val item = OutgoingDraft(UUID.randomUUID().toString().replace("-", ""), chat.id, epoch,
-                state.serverUrl, state.providerId, state.model, text, image, voiceDraftId)
+            val id = UUID.randomUUID().toString().replace("-", "")
+            val plainText = voiceText == null && image == null && voiceDraftId == null
+            val textBatchId = if (plainText) openTextBatchId?.takeIf { canJoin(it, state, text) } ?: id else null
+            if (textBatchId != openTextBatchId) closeTextWindow()
+            val item = OutgoingDraft(id, chat.id, epoch, state.serverUrl, state.providerId, state.model,
+                text, image, voiceDraftId, textBatchId = textBatchId)
             update { current -> current.copy(pendingOutgoing = current.pendingOutgoing + item,
                 draft = if (voiceText == null && current.draft == state.draft) "" else current.draft,
                 draftImage = if (voiceText == null && current.draftImage?.attachment?.id == image?.attachment?.id) null else current.draftImage,
                 error = null, notice = null) }
+            if (textBatchId != null) openTextWindow(textBatchId)
             resume()
             return true
         } catch (failure: Exception) {
@@ -42,14 +50,16 @@ internal class OutgoingMessageQueueController(
 
     fun retry(id: String) {
         val state = read(); val item = state.pendingOutgoing.firstOrNull { it.id == id } ?: return
-        if (item.submittedMessageId != null) {
+        val group = if (item.textBatchId == null) listOf(item) else state.pendingOutgoing.filter { it.textBatchId == item.textBatchId }
+        if (group.any { it.submittedMessageId != null || it.phase == OutgoingPhase.SUBMITTED_NO_REPLY }) {
             update { it.copy(error = "这条消息已经发出，不用再发一遍；你可以接着说") }; return
         }
-        if (item.phase != OutgoingPhase.FAILED || !state.connected || !matchesTarget(item, state)) {
+        if (!state.connected || group.any { it.phase != OutgoingPhase.FAILED || !matchesTarget(it, state) }) {
             update { it.copy(error = "请先恢复原来的连接，再重试这条消息") }; return
         }
+        val ids = group.map { it.id }.toSet()
         update { it.copy(pendingOutgoing = it.pendingOutgoing.map { row ->
-            if (row.id == id) row.copy(phase = OutgoingPhase.QUEUED, connectionEpoch = epoch,
+            if (row.id in ids) row.copy(phase = OutgoingPhase.QUEUED, connectionEpoch = epoch,
                 attempt = row.attempt + 1, problem = null) else row
         }, error = null) }
         resume()
@@ -64,16 +74,21 @@ internal class OutgoingMessageQueueController(
 
     fun invalidate() {
         epoch++
-        update { it.copy(pendingOutgoing = it.pendingOutgoing.map { row -> row.copy(
-            phase = if (row.submittedMessageId == null) OutgoingPhase.FAILED else OutgoingPhase.SUBMITTED_NO_REPLY,
-            problem = "连接已改变，消息仍保留在这里；恢复原连接后再处理") }) }
+        closeTextWindow(start = false)
+        update { state ->
+            val committedGroups = state.pendingOutgoing.filter { it.submittedMessageId != null }.mapNotNull { it.textBatchId }.toSet()
+            state.copy(pendingOutgoing = state.pendingOutgoing.map { row ->
+                val submitted = row.submittedMessageId != null || row.textBatchId?.let(committedGroups::contains) == true
+                row.copy(phase = if (submitted) OutgoingPhase.SUBMITTED_NO_REPLY else OutgoingPhase.FAILED,
+                    problem = "连接已改变，消息仍保留在这里；恢复原连接后再处理")
+            })
+        }
         worker?.cancel()
     }
 
     fun resume() {
-        val state = read(); val first = state.pendingOutgoing.firstOrNull() ?: return
-        if (worker?.isActive == true || state.isBusy || !state.connected || state.restoring ||
-            first.phase != OutgoingPhase.QUEUED || !matches(first, state)) return
+        val state = read()
+        if (!scope.isActive || worker?.isActive == true || state.isBusy || nextItems(state).isEmpty()) return
         val next = scope.launch(start = CoroutineStart.LAZY) { drain() }
         worker = next
         next.start()
@@ -83,44 +98,96 @@ internal class OutgoingMessageQueueController(
         val owner = currentCoroutineContext().job
         try {
             while (true) {
-                val state = read(); val item = state.pendingOutgoing.firstOrNull() ?: return
-                if (item.phase != OutgoingPhase.QUEUED || !matches(item, state)) return
+                val items = nextItems(read()).takeIf { it.isNotEmpty() } ?: return
                 val token = begin("AI 正在输入") ?: return
-                try { deliver(item) }
+                try { deliver(items) }
                 finally { finish(token) }
-                if (read().pendingOutgoing.any { it.id == item.id }) return
+                if (read().pendingOutgoing.any { row -> items.any { it.id == row.id } }) return
             }
         } finally {
             if (worker === owner) { worker = null; resume() }
         }
     }
 
-    private suspend fun deliver(item: OutgoingDraft) {
-        change(item) { it.copy(phase = OutgoingPhase.SENDING) }
+    private suspend fun deliver(items: List<OutgoingDraft>) {
+        items.forEach { item -> change(item) { it.copy(phase = OutgoingPhase.SENDING) } }
         try {
-            val submitted: (Message) -> Unit = { message -> submitted(item, message) }
-            val pair = repository.sendQueuedMessage(item.chatId, item.content, item.id,
-                item.image?.attachment, item.voiceDraftId, submitted)
+            val result = if (items.size == 1) {
+                val item = items.single()
+                val pair = repository.sendQueuedMessage(item.chatId, item.content, item.id,
+                    item.image?.attachment, item.voiceDraftId) { submitted(item, it) }
+                QueuedTextBatchResult(listOf(QueuedTextSubmission(item.id, pair.first)), pair.second)
+            } else repository.sendQueuedTextBatch(items.first().chatId, items.map { QueuedTextInput(it.id, it.content) }) { id, message ->
+                val item = items.firstOrNull { it.id == id }
+                if (item != null) submitted(item, message)
+                else check(items.none { matches(it, read()) }) { "连续消息提交来源不一致，请刷新查看" }
+            }
             currentCoroutineContext().ensureActive()
-            require(pair.second.role == "assistant") { "回复结果不一致，请刷新查看" }
-            submitted(item, pair.first)
-            publish(item, listOf(pair.first, pair.second))
-            update { state -> if (!matches(item, state)) state else state.copy(
-                pendingOutgoing = state.pendingOutgoing.filterNot { it.id == item.id },
+            require(result.assistant.role == "assistant" && result.assistant.id.isNotBlank() &&
+                result.submitted.map { it.requestId } == items.map { it.id } &&
+                result.submitted.map { it.message.id }.distinct().size == items.size) { "连续消息回复结果不一致，请刷新查看" }
+            items.zip(result.submitted).forEach { (item, row) -> submitted(item, row.message) }
+            publish(items.first(), result.submitted.map { it.message } + result.assistant)
+            val ids = items.map { it.id }.toSet()
+            update { state -> if (!items.all { matches(it, state) }) state else state.copy(
+                pendingOutgoing = state.pendingOutgoing.filterNot { it.id in ids },
                 notice = (repository as? com.zhiyu.app.data.LocalChatRepository)?.lastCalendarNotice ?: state.notice) }
         } catch (failure: Exception) {
-            failed(item, failure)
+            val committed = read().pendingOutgoing.any { row -> row.submittedMessageId != null && items.any { it.id == row.id } }
+            items.forEach { failed(it, failure, committed) }
             if (failure is CancellationException) throw failure
         } finally {
-            val submitted = read().pendingOutgoing.firstOrNull { it.id == item.id }?.submittedMessageId
-            if (submitted != null || read().pendingOutgoing.none { it.id == item.id }) cleanup(item)
+            items.forEach { item ->
+                val submitted = read().pendingOutgoing.firstOrNull { it.id == item.id }?.submittedMessageId
+                if (submitted != null || read().pendingOutgoing.none { it.id == item.id }) cleanup(item)
+            }
         }
+    }
+
+    private fun canJoin(id: String, state: AppState, text: String): Boolean {
+        val tail = state.pendingOutgoing.lastOrNull() ?: return false
+        val group = state.pendingOutgoing.filter { it.textBatchId == id }
+        return tail.textBatchId == id && tail.phase == OutgoingPhase.QUEUED && tail.connectionEpoch == epoch &&
+            matchesTarget(tail, state) && group.size < QueuedTextBatchRules.MAX_INPUTS &&
+            group.sumOf { it.content.length.toLong() } + text.length <= QueuedTextBatchRules.MAX_CONTENT_CHARS
+    }
+
+    private fun openTextWindow(id: String) {
+        if (openTextBatchId != id) {
+            openTextBatchId = id
+            maximumWindow = scope.launch {
+                delay(OutgoingQueueRules.TEXT_MAX_WAIT_MILLIS)
+                closeTextWindow(id)
+            }
+        }
+        quietWindow?.cancel()
+        quietWindow = scope.launch {
+            delay(OutgoingQueueRules.TEXT_QUIET_MILLIS)
+            closeTextWindow(id)
+        }
+    }
+
+    private fun closeTextWindow(expected: String? = openTextBatchId, start: Boolean = true) {
+        if (expected == null || openTextBatchId != expected) return
+        openTextBatchId = null
+        quietWindow?.cancel(); quietWindow = null
+        maximumWindow?.cancel(); maximumWindow = null
+        if (start) resume()
+    }
+
+    private fun nextItems(state: AppState): List<OutgoingDraft> {
+        val first = state.pendingOutgoing.firstOrNull() ?: return emptyList()
+        if (!state.connected || state.restoring || first.phase != OutgoingPhase.QUEUED || !matches(first, state) ||
+            first.textBatchId != null && first.textBatchId == openTextBatchId) return emptyList()
+        if (first.textBatchId == null) return listOf(first)
+        return state.pendingOutgoing.takeWhile { it.textBatchId == first.textBatchId && it.phase == OutgoingPhase.QUEUED && matches(it, state) }
     }
 
     private fun submitted(item: OutgoingDraft, message: Message) {
         val current = read()
         if (!matches(item, current) || current.pendingOutgoing.none { it.id == item.id && it.phase == OutgoingPhase.SENDING }) return
         require(message.role == "user" && message.content == item.content && message.id.isNotBlank()) { "消息提交结果不一致，请刷新查看" }
+        if (item.textBatchId != null) require(message.mediaAttachments.isEmpty() && message.origin == "reply") { "连续文字提交来源不一致，请刷新查看" }
         if (item.image != null) require(message.mediaAttachments == listOf(item.image.attachment)) { "图片提交结果不一致，请刷新查看" }
         if (item.voiceDraftId != null) require(message.origin == "voice_user:${item.voiceDraftId}") { "语音提交结果不一致，请刷新查看" }
         change(item) { it.copy(submittedMessageId = message.id) }
@@ -136,17 +203,18 @@ internal class OutgoingMessageQueueController(
         }
     }
 
-    private fun failed(item: OutgoingDraft, failure: Exception) {
+    private fun failed(item: OutgoingDraft, failure: Exception, batchCommitted: Boolean) {
         update { state ->
             if (!matches(item, state)) state else {
                 val expired = failure is ApiFailure && failure.isSessionExpired
-                val message = if (expired) "API Key 暂时无法使用，请恢复连接后再继续" else "这条消息暂时没发出去，可以点重试"
+                val message = if (expired) "API Key 暂时无法使用，请恢复连接后再继续"
+                    else if (batchCommitted) "消息已经发出，这次回复没等到；不用再发一遍" else "这条消息暂时没发出去，可以点重试"
                 state.copy(connected = if (expired) false else state.connected,
                     memory = if (expired) MemoryPanelState() else state.memory, error = message,
                     pendingOutgoing = state.pendingOutgoing.map { row ->
                         if (row.id != item.id || row.connectionEpoch != item.connectionEpoch) row else
-                            row.copy(phase = if (row.submittedMessageId == null) OutgoingPhase.FAILED else OutgoingPhase.SUBMITTED_NO_REPLY,
-                                problem = if (row.submittedMessageId == null) message else "消息已经发出，这次回复没等到；不用再发一遍")
+                            row.copy(phase = if (row.submittedMessageId == null && !batchCommitted) OutgoingPhase.FAILED else OutgoingPhase.SUBMITTED_NO_REPLY,
+                                problem = if (row.submittedMessageId == null && !batchCommitted) message else "消息已经发出，这次回复没等到；不用再发一遍")
                     })
             }
         }

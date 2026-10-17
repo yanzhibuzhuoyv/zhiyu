@@ -10,10 +10,13 @@ data class OutgoingDraft(
     val phase: OutgoingPhase = OutgoingPhase.QUEUED,
     val submittedMessageId: String? = null, val problem: String? = null,
     val attempt: Long = 0,
+    val textBatchId: String? = null,
 )
 
 object OutgoingQueueRules {
     const val CAPACITY = 32
+    const val TEXT_QUIET_MILLIS = 750L
+    const val TEXT_MAX_WAIT_MILLIS = 2_000L
     fun matches(draft: OutgoingDraft, chatId: String?, serverUrl: String, providerId: String, model: String) =
         draft.chatId == chatId && draft.serverUrl == serverUrl && draft.providerId == providerId && draft.model == model
 }

@@ -41,7 +41,11 @@ fun AutoCompanionPermissions(active: Boolean, proactive: ProactiveController, ca
     val stillActive by rememberUpdatedState(active)
     val pending = rememberSaveable { mutableStateOf<String?>(null) }
     val state = remember(requests, lifecycle, pending) { PermissionHostState(lifecycle, pending) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        // Commit the notification grant inside its callback. The next lifecycle effect
+        // may never run if the user immediately leaves after accepting the dialog.
+        if (result[Manifest.permission.POST_NOTIFICATIONS] == true)
+            proactive.reconcileNotificationPermission(granted = true, freshGrant = true)
         state.inFlight = null
         state.revision++
     }
@@ -103,9 +107,7 @@ private suspend fun enableGrantedCapabilities(granted: Set<CompanionPermission>,
         withContext(Dispatchers.IO) { requests.markRequested(permission) }
         state.requested = state.requested + permission
     }
-    if (proactive.preferences.enabled != (CompanionPermission.CONTACT in granted)) {
-        proactive.toggle(CompanionPermission.CONTACT in granted)
-    }
+    proactive.reconcileNotificationPermission(CompanionPermission.CONTACT in granted).join()
     if (CompanionPermission.WEATHER in granted && !care.state.enabled) care.enable()
     if (CompanionPermission.WEATHER !in granted && care.state.enabled) care.disable()
     withContext(Dispatchers.IO) { calendar.setEnabled(CompanionPermission.CALENDAR in granted) }

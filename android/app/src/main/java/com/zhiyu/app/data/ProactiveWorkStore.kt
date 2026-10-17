@@ -10,12 +10,15 @@ import java.util.UUID
 /** Only opt-in flags, request IDs and notification IDs. API Keys and message text never enter this store. */
 class ProactiveWorkStore(context: Context, name: String = "proactive_delivery") : ProactiveWorkState {
     private val preferences = context.applicationContext.getSharedPreferences(name, Context.MODE_PRIVATE)
+    private val contactPreferences = if (name == "proactive_delivery") LocalProactivePreferencesStore(context) else null
     companion object { private val lock = Any() }
 
-    override fun enabled(conversationId: String) = preferences.getBoolean("enabled_${ProactiveRules.conversationId(conversationId)}", false)
+    override fun enabled(conversationId: String) = contactPreferences?.enabled(conversationId)
+        ?: preferences.getBoolean("enabled_${ProactiveRules.conversationId(conversationId)}", false)
 
     fun setEnabled(conversationId: String, enabled: Boolean) = synchronized(lock) {
-        check(preferences.edit().putBoolean("enabled_${ProactiveRules.conversationId(conversationId)}", enabled).commit()) { "主动联系设置未保存，请重试" }
+        if (contactPreferences != null) contactPreferences.setEnabled(conversationId, enabled)
+        else check(preferences.edit().putBoolean("enabled_${ProactiveRules.conversationId(conversationId)}", enabled).commit()) { "主动联系设置未保存，请重试" }
     }
 
     override fun requestId(conversationId: String): String = synchronized(lock) {
@@ -52,6 +55,13 @@ class ProactiveWorkStore(context: Context, name: String = "proactive_delivery") 
         val checked = preferences.getString(prefix + "checked", null) ?: return@synchronized null
         val outcome = preferences.getString(prefix + "outcome", null) ?: error("主动联系检查状态不完整")
         ProactiveRunRecord(Instant.parse(checked), outcome, preferences.getString(prefix + "next", null)?.let(Instant::parse))
+    }
+
+    /** Called only for a newly authorized false-to-true transition, never ordinary recovery. */
+    internal fun requestFreshCheck(conversationId: String, now: Instant) = synchronized(lock) {
+        if (enabled(conversationId)) lastRun(conversationId)?.let { record ->
+            recordRun(conversationId, record.copy(nextDue = now))
+        }
     }
 
     /** A verified connection invalidates only a provider-rejection deferral, never a contact interval. */
