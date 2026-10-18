@@ -13,6 +13,46 @@ import java.time.Instant
 import java.util.UUID
 
 class CurrentContextNativeTest {
+    @Test fun displayReceiptValidationDoesNotDependOnTheTwoMegabyteHistoryPage(): Unit = runBlocking {
+        Fixture().use { f ->
+            val chat = f.open()
+            val u1 = f.db.append(f.owner, chat.id, "user", "甲".repeat(5_000))
+            val a1 = f.db.append(f.owner, chat.id, "assistant", "乙".repeat(350_000))
+            val u2 = f.db.append(f.owner, chat.id, "user", "丙".repeat(5_000))
+            val a2 = f.db.append(f.owner, chat.id, "assistant", "丁".repeat(350_000))
+            val before = f.db.history(f.owner, chat.id)
+            assertTrue("Fixture must really exceed the history-page byte budget", before.messages.none { it.id == a1.id })
+            f.repo.recordReplyTurn(chat.id, listOf(u1.id, u2.id), listOf(a1.id, a2.id))
+            assertEquals(before, f.db.history(f.owner, chat.id))
+            assertEquals(listOf(u1.id, u2.id, a1.id, a2.id), ReplyTurnDisplayStore(f.context)
+                .order(chat.id, listOf(u1, a1, u2, a2)).map { it.id })
+        }
+    }
+    @Test fun continuousTurnDisplaySurvivesReloadWithoutChangingTheRawArchive(): Unit = runBlocking {
+        Fixture().use { f ->
+            val chat = f.open()
+            val first = f.repo.sendMessage(chat.id, "先说第一件事")
+            val next = f.repo.sendMessage(chat.id, "再补充第二件事")
+            val originals = f.db.history(f.owner, chat.id).messages
+            f.repo.recordReplyTurn(chat.id, listOf(first.first.id, next.first.id), listOf(first.second.id, next.second.id))
+            assertEquals(listOf("user", "user", "assistant", "assistant"), f.repo.history(chat.id).messages.map { it.role })
+            assertEquals(originals, f.db.history(f.owner, chat.id).messages)
+            val reloaded = ReplyTurnDisplayStore(f.context).order(chat.id, originals)
+            assertEquals(listOf(first.first.id, next.first.id, first.second.id, next.second.id), reloaded.map { it.id })
+        }
+    }
+    @Test fun standaloneClockQuestionDoesNotAskAModelToInventOrDenyTheTime(): Unit = runBlocking {
+        Fixture().use { f ->
+            val chat = f.open()
+            val first = f.repo.sendMessage(chat.id, "现在几点")
+            assertEquals("现在是21:07:09。", first.second.content)
+            f.now = f.now.plusSeconds(61)
+            val next = f.repo.sendMessage(chat.id, "现在几点")
+            assertEquals("现在是21:08:10。", next.second.content)
+            assertEquals(0, f.calls)
+            assertEquals(listOf("user", "assistant", "user", "assistant"), f.db.history(f.owner, chat.id).messages.map { it.role })
+        }
+    }
     @Test fun everyRequestUsesTheNewClockAndLastIntentWithoutErasingEarlierOriginals(): Unit = runBlocking {
         Fixture().use { f ->
             val chat = f.open()

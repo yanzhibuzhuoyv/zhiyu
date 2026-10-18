@@ -13,6 +13,8 @@ import com.zhiyu.app.ui.theme.ZhiYuTheme
 import kotlinx.coroutines.*
 import org.junit.*
 import org.junit.Assert.*
+import rig2d.planar.PlanarAnimation
+import rig2d.planar.PlanarMixer
 
 /** Synthetic isolated app files only; no API/provider/microphone/user database. */
 class PlanarWorkshopNativeTest {
@@ -23,7 +25,7 @@ class PlanarWorkshopNativeTest {
     private val controller=PlanarWorkshopController(context,scope)
     private val binding="synthetic-chat:"+"a".repeat(64)
     private fun photo()=Bitmap.createBitmap(64,64,Bitmap.Config.ARGB_8888).also {it.eraseColor(0xfff0dede.toInt())}
-    @After fun cleanup(){compose.runOnUiThread{controller.dispose();scope.cancel()};context.close()
+    @After fun cleanup(){compose.runOnUiThread{controller.dispose()};runBlocking {controller.awaitCheckpoint()};scope.cancel();context.close()
         val root=context.filesDir.canonicalFile;check(root.parentFile==base.filesDir.canonicalFile&&root.name.startsWith("v4_"));root.deleteRecursively()}
     private fun prepare(){
         compose.runOnIdle{controller.connect(binding)};compose.waitUntil(5000){!controller.busy}
@@ -55,7 +57,7 @@ class PlanarWorkshopNativeTest {
     @Test fun invalidAccessorySaveKeepsPreviousActiveAndDraftForCorrection(){
         prepare();compose.onNodeWithTag("planar_save").performClick();compose.waitUntil(10000){controller.active!=null&&!controller.busy}
         val saved=controller.active
-        compose.onNodeWithTag("planar_add_part").performClick();compose.onNodeWithTag("planar_save").performClick()
+        compose.onNodeWithTag("planar_add_part").performScrollTo().performClick();compose.onNodeWithTag("planar_save").performClick()
         compose.waitUntil(5000){controller.error!=null&&!controller.busy}
         assertSame(saved,controller.active);assertEquals(1,controller.draft!!.parts.size);assertTrue(controller.dirty)
         compose.onNodeWithTag("planar_undo").performClick();assertTrue(controller.draft!!.parts.isEmpty())
@@ -95,5 +97,38 @@ class PlanarWorkshopNativeTest {
         assertEquals(android.content.Intent.ACTION_OPEN_DOCUMENT,intent.action)
         assertTrue(intent.hasCategory(android.content.Intent.CATEGORY_OPENABLE));assertEquals("*/*",intent.type)
         assertArrayEquals(types,intent.getStringArrayExtra(android.content.Intent.EXTRA_MIME_TYPES))
+    }
+    @Test fun eyeAndMouthOnlyAnnotationsOfferUndoableHeadMotionWithoutOverwritingTheMask(){
+        prepare()
+        val stroke=PlanarBrushStroke(listOf(PlanarPoint(2.0,2.0)),1.0,false)
+        compose.runOnIdle{controller.edit(controller.draft!!.copy(subjectBrush=listOf(stroke)))}
+        val before=controller.draft!!
+        compose.onNodeWithTag("planar_add_head_motion").performScrollTo().performClick()
+        val next=controller.draft!!
+        assertEquals(before.anchors,next.anchors)
+        assertEquals(before.featureVisibility,next.featureVisibility)
+        assertEquals(before.subjectBrush,next.subjectBrush)
+        assertEquals(before.subjectMask,next.subjectMask)
+        assertEquals(1,next.parts.size)
+        assertEquals("face",next.parts.single().role)
+        assertTrue(controller.dirty)
+        assertNull("A suggestion must never silently replace the call character",controller.forBinding(binding))
+        compose.runOnIdle{controller.buildPreview()}
+        compose.waitUntil(10000){controller.previewDocument!=null&&!controller.busy}
+        val preview=controller.previewDocument!!
+        assertNull(controller.error)
+        val base=preview.layers.single {it.id=="base"}
+        val face=preview.layers.single {it.role=="face"}
+        val first=PlanarAnimation.sample(preview.contract,0.0,0f,true)
+        val later=PlanarAnimation.sample(preview.contract,1.5,0f,true)
+        assertArrayEquals(base.mesh.baseVertices(),PlanarMixer.vertices(base.mesh,later),0f)
+        assertFalse(PlanarMixer.vertices(face.mesh,first).contentEquals(PlanarMixer.vertices(face.mesh,later)))
+        compose.onNodeWithText("重画轮廓（可撤销）").performScrollTo().performClick()
+        assertTrue(controller.draft!!.parts.single().polygon.isEmpty())
+        compose.runOnIdle{controller.undo()}
+        assertEquals(24,controller.draft!!.parts.single().polygon.size)
+        compose.runOnIdle{controller.undo()}
+        assertTrue(controller.draft!!.parts.isEmpty())
+        assertEquals(before.subjectBrush,controller.draft!!.subjectBrush)
     }
 }

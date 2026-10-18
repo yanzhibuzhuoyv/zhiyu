@@ -5,8 +5,71 @@ import com.zhiyu.app.domain.*
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
+import java.time.Instant
 
 class SelfieBankNativeTest {
+    @Test fun explicitFailedRefillIsAnAtomicBoundedTicketAdvanceAtTheCurrentRealSlot() = runBlocking {
+        DailyShareNativeFixture().use { f ->
+            val profile = f.visual.import(f.chat, f.png())
+            val bank = LocalSelfieBank(f.context)
+            val originalScene = f.daily.scene(f.chat, profile.visualVersion, f.now)
+            val usedTarget = bank.targets(f.chat, profile, originalScene).last()
+            val used = f.image(labels = labels(f.chat, usedTarget), version = profile.visualVersion, color = 0xff254673.toInt())
+            assertTrue(bank.consume(f.chat, f.assets.details(used.id), profile, originalScene))
+            val later = f.daily.scene(f.chat, profile.visualVersion, f.now.plusSeconds(7 * 3600))
+            val before = bank.targets(f.chat, profile, later)
+            val ticket = checkNotNull(before.first().selfie)
+            val first = checkNotNull(bank.refillFailedLane(f.chat, profile, later, before, ticket))
+            assertEquals(ticket.copy(generation = 1), first.first().selfie)
+            assertEquals(later.current, first.first().slot)
+            assertEquals(before.drop(1), first.drop(1))
+            assertNull(bank.refillFailedLane(f.chat, profile, later, before, ticket))
+            repeat(127) {
+                val expected = bank.targets(f.chat, profile, later)
+                assertNotNull(bank.refillFailedLane(f.chat, profile, later, expected, checkNotNull(expected.first().selfie)))
+            }
+            val limit = bank.targets(f.chat, profile, later)
+            assertEquals(128, limit.first().selfie?.generation)
+            assertNull(bank.refillFailedLane(f.chat, profile, later, limit, checkNotNull(limit.first().selfie)))
+            assertEquals(limit, LocalSelfieBank(f.context).targets(f.chat, profile, later))
+            assertFalse(bank.acceptsPixels(f.chat, profile, limit.first(), used.sha256))
+            assertArrayEquals(f.png(), f.assets.download(checkNotNull(profile.referenceId)))
+        }
+    }
+    @Test fun readyStandaloneSelfieUsesAnActualAttachmentWithoutConsultingTheDenyingChatModel() = runBlocking {
+        DailyShareNativeFixture().use { f -> SelfieReplyNativeFixture(f.context, CompanionProfile(style = "playful")).use { r ->
+            val chat = r.open()
+            val profile = f.visual.import(chat.id, f.png())
+            val scene = f.daily.scene(chat.id, profile.visualVersion, Instant.now())
+            val bank = LocalSelfieBank(f.context)
+            val target = bank.targets(chat.id, profile, scene).first()
+            val image = f.image(labels = labels(chat.id, target), day = scene.dayId,
+                version = profile.visualVersion, color = 0xff254673.toInt())
+            r.database.append(r.owner, chat.id, "assistant", "照片还没弄好，我不能发给你。")
+            val reply = r.repo.sendMessage(chat.id, "给我拍张自拍").second
+            assertEquals(0, r.calls)
+            assertEquals(image.id, reply.mediaAttachments.single().id)
+            assertTrue(reply.content.length in 1..24)
+            listOf("不能", "没弄好", "催", "API", "Key", "系统").forEach { assertFalse(reply.content.contains(it)) }
+            assertEquals(1, bank.targets(chat.id, profile, scene).first().selfie!!.generation)
+            assertEquals(reply, r.database.history(r.owner, chat.id).messages.last())
+        } }
+    }
+
+    @Test fun aMixedSelfieRequestKeepsTheModelsOtherAnswerAlongsideItsRealPhoto() = runBlocking {
+        DailyShareNativeFixture().use { f -> SelfieReplyNativeFixture(f.context).use { r ->
+            val chat = r.open()
+            val profile = f.visual.import(chat.id, f.png())
+            val scene = f.daily.scene(chat.id, profile.visualVersion, Instant.now())
+            val target = LocalSelfieBank(f.context).targets(chat.id, profile, scene).first()
+            val image = f.image(labels = labels(chat.id, target), day = scene.dayId,
+                version = profile.visualVersion, color = 0xff254673.toInt())
+            r.failIfCalled = false
+            val reply = r.repo.sendMessage(chat.id, "给我拍张自拍，考试没发挥好怎么办").second
+            assertEquals(1, r.calls); assertEquals(r.answer, reply.content)
+            assertEquals(image.id, reply.mediaAttachments.single().id)
+        } }
+    }
     @Test fun threeDurableOpportunitiesKeepActualTrajectoryAndRefillOnlyConsumedLane() = runBlocking {
         DailyShareNativeFixture().use { f ->
             val profile = f.visual.import(f.chat, f.png())

@@ -11,6 +11,91 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ContinuousInputQueueTest {
+    @Test fun failedContinuationKeepsItsQueuedTailButCannotHideAnEarlierSuccessfulAnswer() = model { vm, repo ->
+        repo.replyGate = CompletableDeferred()
+        send(vm, "成功的第一段"); advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
+        send(vm, "随后会失败的第二段")
+        repo.replyGate!!.complete(Unit); runCurrent()
+        repo.replyGate = CompletableDeferred()
+        advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
+        assertEquals(2, repo.deliveries.size)
+        send(vm, "仍须保留的第三段")
+        repo.afterFailure = ApiFailure(503, "private failure")
+        repo.replyGate!!.complete(Unit); advanceUntilIdle()
+        assertEquals(1, vm.state.value.messages.count { it.role == "assistant" })
+        assertEquals(listOf(OutgoingPhase.SUBMITTED_NO_REPLY, OutgoingPhase.QUEUED), vm.state.value.pendingOutgoing.map { it.phase })
+        assertEquals("仍须保留的第三段", vm.state.value.pendingOutgoing.last().content)
+        val before = repo.historyCalls
+        vm.refresh(); advanceUntilIdle()
+        assertTrue(repo.historyCalls > before)
+        assertEquals(2, repo.deliveries.size)
+    }
+    @Test fun failedContinuationReleasesTheEarlierSuccessfulReplyAndAllowsHistoryRefresh() = model { vm, repo ->
+        repo.replyGate = CompletableDeferred()
+        send(vm, "第一段已经发出"); advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
+        send(vm, "第二段补充")
+        repo.replyGate!!.complete(Unit); runCurrent()
+        assertEquals(0, vm.state.value.messages.count { it.role == "assistant" })
+        repo.afterFailure = ApiFailure(503, "private failure")
+        advanceUntilIdle()
+        assertEquals(1, vm.state.value.messages.count { it.role == "assistant" })
+        assertEquals(OutgoingPhase.SUBMITTED_NO_REPLY, vm.state.value.pendingOutgoing.single().phase)
+        val before = repo.historyCalls
+        vm.refresh(); advanceUntilIdle()
+        assertTrue(repo.historyCalls > before)
+        assertEquals(2, repo.deliveries.size)
+        assertEquals(1, vm.state.value.messages.count { it.role == "assistant" })
+    }
+    @Test fun aNearlyFullDeferredTurnCannotPullAnotherThirtyTwoOriginalsAcrossItsLimit() = model { vm, repo ->
+        repo.replyGate = CompletableDeferred()
+        repeat(31) { send(vm, "第一组$it") }
+        advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
+        send(vm, "补充0"); repo.replyGate!!.complete(Unit); runCurrent()
+        repeat(31) { send(vm, "补充${it + 1}") }
+        advanceUntilIdle()
+        assertEquals(listOf(31, 1, 31), repo.deliveries.map { it.inputs.size })
+        assertEquals(listOf(32, 31), repo.turns.map { it.first.size })
+        assertEquals(63, repo.deliveries.flatMap { it.inputs }.map { it.requestId }.distinct().size)
+    }
+    @Test fun continuedKeystrokesDoNotResetTheAbsoluteTypingDeadline() = model { vm, repo ->
+        send(vm, "先发出的原话"); runCurrent()
+        vm.draft("继续写")
+        advanceTimeBy(10_000); vm.draft("还在慢慢继续写")
+        advanceTimeBy(4_999); runCurrent(); assertTrue(repo.deliveries.isEmpty())
+        advanceTimeBy(1); runCurrent()
+        assertEquals(1, repo.deliveries.size)
+        assertEquals("还在慢慢继续写", vm.state.value.draft)
+        assertEquals(1, vm.state.value.messages.count { it.role == "assistant" })
+    }
+    @Test fun refreshingWhileAContinuationIsPendingCannotRevealAnIntermediateAnswer() = model { vm, repo ->
+        repo.replyGate = CompletableDeferred()
+        send(vm, "先听我说"); advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
+        send(vm, "我还没说完")
+        repo.replyGate!!.complete(Unit); runCurrent()
+        assertEquals(0, vm.state.value.messages.count { it.role == "assistant" })
+        vm.refresh(); runCurrent()
+        assertEquals(0, vm.state.value.messages.count { it.role == "assistant" })
+        advanceUntilIdle()
+        assertEquals(listOf("user", "user", "assistant", "assistant"), vm.state.value.messages.map { it.role })
+    }
+    @Test fun actuallyTypingTheContinuationKeepsTheTurnOpenBeyondTheOldThreeSecondLimit() = model { vm, repo ->
+        send(vm, "我想说两句"); runCurrent()
+        advanceTimeBy(900); vm.draft("我还在写第二段")
+        advanceTimeBy(5_000); runCurrent()
+        assertEquals("Do not interrupt an actively composed continuation", 0, repo.deliveries.size)
+        vm.send(); advanceUntilIdle()
+        assertEquals(listOf(listOf("我想说两句", "我还在写第二段")), repo.deliveries.map { d -> d.inputs.map { it.content } })
+    }
+    @Test fun followupQueuedDuringGenerationKeepsEveryUserOriginalBeforeBothReplySegments() = model { vm, repo ->
+        repo.replyGate = CompletableDeferred()
+        send(vm, "第一段"); advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
+        send(vm, "补充第二段"); advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
+        repo.replyGate!!.complete(Unit); advanceUntilIdle()
+        assertEquals(listOf("user", "user", "assistant", "assistant"), vm.state.value.messages.map { it.role })
+        assertEquals("No HTTP cancellation or repost", 2, repo.deliveries.size)
+        assertFalse(repo.cancelled)
+        assertEquals(listOf("第一段", "补充第二段"), vm.state.value.messages.filter { it.role == "user" }.map { it.content })
+    }
     @Test fun twoNearbyOriginalsWaitForQuietThenReceiveOneSharedAnswer() = model { vm, repo ->
         send(vm, "下班啦"); runCurrent()
         assertTrue("The first text must leave time for a continuation", repo.deliveries.isEmpty())
@@ -18,6 +103,8 @@ class ContinuousInputQueueTest {
         vm.draft("还没发的第三句")
         advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS - 1); runCurrent(); assertTrue(repo.deliveries.isEmpty())
         advanceTimeBy(1); runCurrent()
+        assertTrue("An active continuation is still being composed", repo.deliveries.isEmpty())
+        advanceTimeBy(15_000 - OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
         assertEquals(listOf(listOf("下班啦", "其实先不聊工作，想吃面")), repo.deliveries.map { it.inputs.map(QueuedTextInput::content) })
         assertEquals("batch", repo.deliveries.single().kind)
         assertEquals(listOf("下班啦", "其实先不聊工作，想吃面"), vm.state.value.messages.filter { it.role == "user" }.map { it.content })
@@ -185,6 +272,11 @@ class ContinuousInputQueueTest {
 
 private data class Delivery(val kind: String, val inputs: List<QueuedTextInput>, val image: MediaAttachment? = null, val voiceId: String? = null)
 private class BatchRepository : ChatRepository {
+    var historyCalls = 0
+    val turns = mutableListOf<Pair<List<String>, List<String>>>()
+    override suspend fun recordReplyTurn(id: String, userIds: List<String>, assistantIds: List<String>) {
+        turns += userIds.toList() to assistantIds.toList()
+    }
     val binding = CompanionBinding("deepseek", "synthetic-model")
     var connection: SavedConnection? = SavedConnection("https://synthetic.invalid", binding.providerId, "synthetic-key", binding.model)
     val chat = Conversation("synthetic-chat", "与你", binding.model, true, "2026-10-16", "2026-10-16")
@@ -234,7 +326,10 @@ private class BatchRepository : ChatRepository {
     override suspend fun changeRag(id: String, enabled: Boolean) = chat.copy(useRag = enabled)
     override suspend fun deleteConversation(id: String) = error("Not used")
     override suspend fun messages(id: String) = rows.toList()
-    override suspend fun history(id: String, before: String?) = MessagePage(rows.toList().takeLast(100), false, null)
+    override suspend fun history(id: String, before: String?): MessagePage {
+        historyCalls++
+        return MessagePage(rows.toList().takeLast(100), false, null)
+    }
     override suspend fun memory(id: String, before: String?): MemoryPage = error("Not used")
     override suspend fun messageMemory(id: String, messageId: String): MemoryEntry = error("Not used")
     override suspend fun changeMemory(id: String, messageId: String, change: MemoryChange): MemoryEntry = error("Not used")

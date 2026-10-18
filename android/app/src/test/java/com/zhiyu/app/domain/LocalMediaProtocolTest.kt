@@ -38,6 +38,19 @@ class LocalMediaProtocolTest {
             "照片等我准备好再发给你。今晚先休息。", "我没有说已经发啦。今晚先休息。")
             .forEach { truthful -> assertEquals(truthful, mixed.parse(truthful).content) }
     }
+    @Test fun aReadySelfieCaptionRequiresASelectedImageAndDoesNotReplaceAMixedAnswer() {
+        val image = asset.copy(kind = "image")
+        val ready = LocalMediaPlan("", listOf(image), "", selfieRequested = true,
+            requiredAttachmentId = id, readyCaption = "喏，给你看这张。")
+        val reply = ready.parse("还没弄好，我不能发照片。")
+        assertEquals(ready.readyCaption, reply.content); assertEquals(listOf(image), reply.attachments)
+        val missing = ready.copy(candidates = emptyList(), unavailableMessage = "这会儿还没准备好。")
+            .parse("还没弄好。")
+        assertEquals("这会儿还没准备好。", missing.content); assertTrue(missing.attachments.isEmpty())
+        val compound = "考试没发挥好先别急。这张给你看看。"
+        assertEquals(compound, ready.copy(preserveGeneratedText = true).parse(compound).content)
+        assertEquals(compound, ready.copy(selfieRequested = false).parse(compound).content)
+    }
     @Test fun malformedAndEmptyControlRepliesAreRejectedOrCleaned() {
         assertEquals("你好", plan.parse("你好[[ZHIYU_MEDIA_bad").content)
         assertThrows(IllegalArgumentException::class.java) { plan.parse("[[ZHIYU_MEDIA_fresh:$id]]") }

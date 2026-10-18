@@ -6,6 +6,15 @@ import java.time.Instant
 import java.time.ZoneId
 
 class RuntimeDialogueContextTest {
+    @Test fun configuredPhotosAreAPresentCapabilityRatherThanAnOldDenialFromHistory() {
+        val prompt = RuntimeDialogueContext.render(ConversationRuntime(photoSharing = PhotoSharingRuntime(true, true, true)))
+        assertTrue(prompt.contains("photo_sharing_state=ready"))
+        assertTrue(prompt.contains("不能说没有发图能力"))
+        assertTrue(prompt.contains("只有本轮真实附带图片才说已发出"))
+        val unavailable = RuntimeDialogueContext.render(ConversationRuntime(photoSharing = PhotoSharingRuntime(true, true, false)))
+        assertTrue(unavailable.contains("photo_sharing_state=review_unavailable"))
+        assertFalse(unavailable.contains("photo_sharing_state=ready"))
+    }
     private val now = Instant.parse("2026-10-16T13:07:09Z")
     @Test fun theCurrentPhoneClockAndZoneWinOverAnOldOrUserReportedTime() {
         val prompt = RuntimeDialogueContext.render(ConversationRuntime(now, ZoneId.of("Asia/Shanghai"), "现在八点了"))

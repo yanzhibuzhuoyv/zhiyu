@@ -23,6 +23,7 @@ class RemoteScenePhotosTest {
         var current = true; var imageCalls = 0; var promptCalls = 0; var publishes = 0
         var frozen = binding(); var outcome = LifePhotoReviewStatus.APPROVED
         var correction: String? = null; var failure: Exception? = null
+        var generatedBytes = bytes
         var reviewedSha: String? = null
         var reviewReady = true
         var afterPrompt: () -> Unit = {}; var afterImage: () -> Unit = {}; var beforePublish: () -> Unit = {}
@@ -43,7 +44,7 @@ class RemoteScenePhotosTest {
             promptCalls++; afterPrompt(); return correction ?: "The same OC holding a cup in a morning room."
         }
         override suspend fun generate(binding: RemoteSceneBinding, prompt: String): AgnesGeneratedImage {
-            imageCalls++; failure?.let { throw it }; afterImage(); return AgnesGeneratedImage(bytes, "image/png")
+            imageCalls++; failure?.let { throw it }; afterImage(); return AgnesGeneratedImage(generatedBytes, "image/png")
         }
         override suspend fun review(binding: RemoteSceneBinding, target: LocalScenePrefetchTarget, prompt: String, image: AgnesGeneratedImage) =
             LifePhotoReview(outcome, "synthetic pixel review", reviewedSha ?: ChatPhotoRules.sha(image.bytes), correction)
@@ -138,6 +139,19 @@ class RemoteScenePhotosTest {
         assertEquals(0, result.prepared); assertEquals(0, fake.publishes)
         assertEquals(1, fake.candidates.size)
         run(fake, listOf(selfie)); assertEquals(1, fake.imageCalls)
+    }
+    @Test fun anUnknownSelfieLaneDoesNotStarveTheNextDurableLaneOrRepeatItsPaidRequest() = runTest {
+        val lanes = (0 until LocalSelfieRules.SIZE).map { lane -> targets.first().copy(
+            selfie = LocalSelfieTicket("a".repeat(64), lane, 0)) }
+        val fake = Fake().apply { failure = ApiFailure(504, "synthetic timeout", "image_request_unknown") }
+        assertEquals("unknown", run(fake, lanes.take(1)).reason)
+        val unknownId = RemoteSceneRules.requestId(fake.frozen, lanes[0], 0)
+        fake.failure = null; fake.generatedBytes = bytes + byteArrayOf(2)
+        assertEquals(1, run(fake, lanes).prepared)
+        assertEquals("unknown", fake.jobs.getValue(unknownId).job.state)
+        assertEquals(2, fake.imageCalls); assertEquals(2, fake.promptCalls)
+        assertEquals(2, fake.jobs.size); assertEquals(1, fake.publishes)
+        assertEquals(RemoteSceneRules.requestId(fake.frozen, lanes[1], 0), fake.published.single().requestId)
     }
     @Test fun knownUnavailablePixelReviewerStopsBeforeAnyNewPaidImageOpportunity() = runTest {
         val fake = Fake().apply { reviewReady = false }

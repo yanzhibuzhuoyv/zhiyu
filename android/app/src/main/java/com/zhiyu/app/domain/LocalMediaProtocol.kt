@@ -15,7 +15,7 @@ object LocalMediaFreshness {
 data class LocalMediaPlan(val prompt: String, val candidates: List<MediaAttachment>, val nonce: String,
     val selfieRequested: Boolean = false, val requiredAttachmentId: String? = null, val unavailableMessage: String? = null,
     val selfieStatus: String? = null, val borrowed: LocalBorrowedPhoto? = null,
-    val preserveGeneratedText: Boolean = false) {
+    val preserveGeneratedText: Boolean = false, val readyCaption: String? = null) {
     fun parse(raw: String): LocalMediaReply {
         val marks = Regex("\\[\\[ZHIYU_MEDIA_([^\\]\\r\\n]{1,160})\\]\\]").findAll(raw).toList()
         val one = marks.singleOrNull()
@@ -24,7 +24,8 @@ data class LocalMediaPlan(val prompt: String, val candidates: List<MediaAttachme
             ?.let { identifier -> candidates.singleOrNull { it.id == identifier } }
         val generated = raw.replace(Regex("\\[\\[ZHIYU_MEDIA_[^\\r\\n]*?(?:\\]\\]|$)"), "").trim()
         val falseSend = selfieRequested && selected == null && explicitlyClaimsPhotoSent(generated)
-        val content = if (preserveGeneratedText && !falseSend) generated else unavailableMessage ?:
+        val content = if (preserveGeneratedText && !falseSend) generated else
+            readyCaption?.takeIf { selfieRequested && selected != null } ?: unavailableMessage ?:
             if (falseSend) "这会儿照片还没准备好，等我弄好了再给你看。" else generated
         require(content.isNotBlank()) { "AI 这次没有返回文字，请稍后重试" }
         return LocalMediaReply(content, selected?.let(::listOf) ?: emptyList())

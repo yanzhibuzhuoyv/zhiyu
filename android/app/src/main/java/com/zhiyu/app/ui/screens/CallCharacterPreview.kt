@@ -78,6 +78,8 @@ private suspend fun prepareVisual(identity: OcIdentity, load: suspend (OcIdentit
 @Composable private fun CharacterContent(identity: OcIdentity?, published: PlanarDocument?, visual: CallVisual?,
     failed: Boolean, mouth: Float, onEdit: () -> Unit, modifier: Modifier, onFrame: (PlanarFrame) -> Unit) {
     val document = published ?: visual?.document
+    val expressionOnly = remember(document) { document?.let(PlanarMotionStatus::expressionOnly) == true }
+    val hasExpression = remember(document) { document?.let(PlanarMotionStatus::hasExpression) == true }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when {
@@ -90,8 +92,10 @@ private suspend fun prepareVisual(identity: OcIdentity, load: suspend (OcIdentit
                 else -> Text("正在准备人物动作…", style = MaterialTheme.typography.bodyMedium)
             }
         }
+        if(expressionOnly)Text(if(hasExpression)"当前只有眨眼和口型，头部还没有活动区域"else "当前形象还没有活动区域",
+            style=MaterialTheme.typography.bodySmall,modifier=Modifier.testTag("call_character_motion_status"))
         if (identity != null) TextButton(onClick = onEdit, modifier = Modifier.testTag("call_character_edit")) {
-            Text(if (document == null && visual != null) "标注人物，让 TA 动起来" else "调整人物动作")
+            Text(when {expressionOnly->"补充头部动作";document == null && visual != null->"标注人物，让 TA 动起来";else->"调整人物动作"})
         }
     }
 }

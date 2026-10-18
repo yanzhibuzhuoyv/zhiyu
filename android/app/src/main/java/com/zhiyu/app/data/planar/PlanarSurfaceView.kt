@@ -7,6 +7,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.View
+import android.util.Log
+import com.zhiyu.app.BuildConfig
 
 /** At most 30 idle frames per second, with no repeating requests while hidden or paused. */
 class PlanarSurfaceView(
@@ -30,6 +32,11 @@ class PlanarSurfaceView(
     private var loopPosted = false
     private var elapsed = 0.0
     private var lastTick = 0L
+    private var firstFrameSeen = false
+    private var currentDocument = document
+    private var clearColorArgb = 0
+    private var debugProbePosted = false
+    private var debugProbeDone = false
     private val renderer = PlanarGlRenderer(document,
         onFailure = { failure ->
             val epoch = callbackEpoch
@@ -46,10 +53,23 @@ class PlanarSurfaceView(
             main.post {
                 if (!released && drawingEnabled && epoch == callbackEpoch) {
                     failed = false
+                    firstFrameSeen = true
+                    if(BuildConfig.DEBUG&&(frame.number==1L||frame.number==30L))
+                        Log.d("ZhiyuPlanarState","frame surface=${System.identityHashCode(this)} generation=${frame.generation} number=${frame.number} size=${width}x$height")
                     onFrame(frame)
                 }
             }
         })
+    private val debugProbe = Runnable {
+        debugProbePosted = false
+        if(BuildConfig.DEBUG&&!released&&drawingEnabled&&!firstFrameSeen) {
+            debugProbeDone = true
+            Log.d("ZhiyuPlanarState","no-first-frame surface=${System.identityHashCode(this)} renderer=${System.identityHashCode(renderer)} resumed=$lifecycleResumed attached=$attached visibility=$windowVisibility shown=$isShown size=${width}x$height paused=$glPaused")
+            Thread.getAllStackTraces().entries.filter {it.key.name.startsWith("GLThread")}.take(4).forEach {(thread,stack)->
+                Log.d("ZhiyuPlanarState","GL-stack thread=${thread.name} state=${thread.state}\n${stack.take(30).joinToString("\n")}")
+            }
+        }
+    }
     private val tick = object : Runnable {
         override fun run() {
             loopPosted = false
@@ -78,6 +98,27 @@ class PlanarSurfaceView(
     }
 
     val isAnimationRunning: Boolean get() = loopPosted
+
+    fun updateDocument(next:PlanarDocument) {
+        requireMainThread()
+        if(released||currentDocument===next)return
+        currentDocument=next
+        callbackEpoch++
+        failed=false
+        firstFrameSeen=false
+        main.removeCallbacks(debugProbe);debugProbePosted=false;debugProbeDone=false
+        renderer.submitDocument(next)
+        syncSurface()
+        if(drawingEnabled)requestRender()
+    }
+
+    fun updateBackground(argb:Int) {
+        requireMainThread()
+        if(released||clearColorArgb==argb)return
+        clearColorArgb=argb
+        renderer.updateBackground(argb)
+        if(drawingEnabled)requestRender()
+    }
 
     fun update(mouth: Float, idle: Boolean) {
         requireMainThread()
@@ -108,6 +149,8 @@ class PlanarSurfaceView(
         requireMainThread()
         if (released) return
         released = true
+        main.removeCallbacks(debugProbe)
+        debugProbePosted = false
         callbackEpoch++
         drawingEnabled = false
         stopLoop()
@@ -145,6 +188,7 @@ class PlanarSurfaceView(
     private fun syncSurface() {
         if (!configured) return
         val active = !released && lifecycleResumed && attached && windowVisibility == VISIBLE && isShown
+        if(BuildConfig.DEBUG)Log.d("ZhiyuPlanarState","sync surface=${System.identityHashCode(this)} renderer=${System.identityHashCode(renderer)} released=$released resumed=$lifecycleResumed attached=$attached visibility=$windowVisibility shown=$isShown size=${width}x$height paused=$glPaused active=$active")
         if (active != drawingEnabled) callbackEpoch++
         drawingEnabled = active
         if (active && glPaused) {
@@ -157,6 +201,10 @@ class PlanarSurfaceView(
             stopLoop()
             super.onPause()
             glPaused = true
+        }
+        if(BuildConfig.DEBUG&&active&&!firstFrameSeen&&!debugProbePosted&&!debugProbeDone) {
+            debugProbePosted = true
+            main.postDelayed(debugProbe,2000)
         }
         if (shouldLoop()) startLoop() else stopLoop()
     }

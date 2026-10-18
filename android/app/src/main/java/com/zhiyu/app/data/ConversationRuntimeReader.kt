@@ -6,10 +6,18 @@ import android.os.Build
 import android.util.Log
 import com.zhiyu.app.domain.ProactiveContactRuntime
 import com.zhiyu.app.domain.ProactiveRules
+import com.zhiyu.app.domain.PhotoSharingRuntime
 import com.zhiyu.app.notifications.ProactiveNotifications
 
 /** Reads capability metadata, never a credential or a conversation body. */
 internal class ConversationRuntimeReader(private val context: Context) {
+    fun photos(hasReference: Boolean): PhotoSharingRuntime? = try {
+        val scenes = com.zhiyu.app.data.remotescene.RemoteScenePhotos(context)
+        PhotoSharingRuntime(hasReference, scenes.configured(), scenes.reviewConfigured())
+    } catch (_: Exception) {
+        Log.w("ZhiYuImages", "Photo capability snapshot unavailable; no configured state inferred")
+        null
+    }
     fun proactive(id: String): ProactiveContactRuntime? {
         ProactiveRules.conversationId(id)
         return try {

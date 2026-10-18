@@ -86,6 +86,19 @@ class PlanarPhotoBuilder {
                 PlanarBasisFactory.create(rectangle, spec.role, draft.anchors, spec.pivot, spec.strength,
                     plane.width, plane.height, contract, mode))
         } }.sortedWith(compareBy({ it.z }, { it.id }))
+        val suggestedIndex = specs.indexOfFirst { it.id == PlanarHeadMotionSuggestion.ID && it.role == "face" }
+        val suggested = layers.firstOrNull { it.id == PlanarHeadMotionSuggestion.ID && it.role == "face" }
+        if (suggested != null) {
+            val faceMesh = PlanarLocalHeadMotion.create(suggested.mesh, specs[suggestedIndex].strength)
+            return layers.map { layer ->
+                when {
+                    layer.id == suggested.id -> layer.copy(mesh = faceMesh)
+                    (1..3).any { plane.parents[it] == suggestedIndex && specs[it].id == layer.id } ->
+                        layer.copy(mesh = PlanarLocalHeadMotion.inherit(layer.mesh, faceMesh))
+                    else -> layer
+                }
+            } to repaired
+        }
         return layers to repaired
     }
 

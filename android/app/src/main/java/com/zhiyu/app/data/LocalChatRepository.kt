@@ -28,7 +28,7 @@ class LocalChatRepository(
     private val semanticEncoder: LocalSemanticEncoder = BgeLocalSemanticEncoder(context),
     private val daily: LocalDailyRepository? = if (database.isMainArchive) LocalDailyRepository(context) else null,
     private val dailyNow: () -> Instant = Instant::now,
-    private val runtimeNow: () -> Instant = Instant::now,
+    private val runtimeNow: () -> Instant = PhoneClock::now,
     private val runtimeZone: () -> java.time.ZoneId = java.time.ZoneId::systemDefault,
 ) : ChatRepository {
     companion object {
@@ -43,10 +43,13 @@ class LocalChatRepository(
     private val calendar = CompanionCalendarStore(appContext)
     private val photos = ChatPhotoStore(appContext)
     private val photoHistory = LocalPhotoPromptHistory(photos, OcPhotoIdentityContext(appContext))
+    private val replyDisplay = ReplyTurnDisplayStore(appContext)
     private val voiceMessages = com.zhiyu.app.data.voicemessages.VoiceMessageStore(appContext)
     private val ocIdentityStore = OcCreatorStore(appContext)
     private val photoAnalyzer = ChatPhotoAnalyzer(OcrChatPhotoReader(), AgnesVisionClient(credentials = { AgnesCredentialStore(appContext).read() }))
     var lastCalendarNotice: String? = null
+        private set
+    internal var lastPhotoStatus: String? = null
         private set
     var lastCallNotice: String? = null
         private set
@@ -153,7 +156,21 @@ class LocalChatRepository(
     override suspend fun messages(id: String): List<Message> = history(id).messages
     override suspend fun history(id: String, before: String?): MessagePage = withContext(Dispatchers.IO) {
         val owner = currentOwner()
-        database.history(owner, id, before).also { page -> page.messages.forEach { enqueueReplyVoice(owner, id, it) } }
+        database.history(owner, id, before).let { page ->
+            page.messages.forEach { enqueueReplyVoice(owner, id, it) }
+            page.copy(messages = replyDisplay.order(id, page.messages))
+        }
+    }
+    override suspend fun recordReplyTurn(id: String, userIds: List<String>, assistantIds: List<String>) = withContext(Dispatchers.IO) {
+        connection(); val owner = currentOwner()
+        val ids = userIds + assistantIds
+        ReplyTurnOrder.apply(emptyList(), listOf(ids))
+        val placeholders = ids.joinToString(",") { "?" }
+        val originals = database.readableDatabase.rawQuery("SELECT id,role FROM messages WHERE owner=? AND conversation_id=? AND id IN ($placeholders)",
+            (listOf(owner, id) + ids).toTypedArray()).use { rows -> buildMap { while (rows.moveToNext()) put(rows.getString(0), rows.getString(1)) } }
+        require(userIds.isNotEmpty() && assistantIds.isNotEmpty() && userIds.all { originals[it] == "user" } &&
+            assistantIds.all { originals[it] == "assistant" }) { "连续消息归属已变化" }
+        replyDisplay.save(id, userIds + assistantIds)
     }
     override suspend fun documents(): List<Document> = withContext(Dispatchers.IO) { database.documents(currentOwner()) }
     override suspend fun upload(file: UploadedFile): Document = serial.withLock { withContext(Dispatchers.IO) {
@@ -225,6 +242,7 @@ class LocalChatRepository(
         call: Boolean = false, voiceDraftId: String? = null, queuedId: String? = null,
         textBatch: List<QueuedTextInput>? = null, onBatchSubmitted: (String, Message) -> Unit = { _, _ -> }): Pair<Message, Message> = serial.withLock {
         lastCalendarNotice = null; lastCallNotice = null
+        lastPhotoStatus = null
         if (textBatch == null) {
             if (photo == null) ConnectionRules.message(content) else LocalMemoryCodec.bytes(content)
             require(content.length <= 16000) { "单条原文不能超过16000个字符" }
@@ -278,24 +296,31 @@ class LocalChatRepository(
         val boundedRecent = promptContext.messages
         val conversation = withContext(Dispatchers.IO) { database.conversation(owner, id) }
         val actionText = textBatch?.let { RuntimeDialogueContext.actionText(it.map { item -> item.content }) } ?: text
+        val clockQuestion = photo == null && textBatch == null && LocalClockReply.respond(actionText, runtimeNow(), runtimeZone()) != null
         val voicePlanned = !call && VoiceMessagePolicy.reply(actionText, voiceDraftId != null, conversation.profile?.style, user.id)
         val ocSnapshot = withContext(Dispatchers.IO) { currentOcPhotoIdentity(id) }
         val recentOnly = call && CallTurnPolicy.recentOnly(text)
         val retrieval = when {
+            clockQuestion -> LocalSemanticRetrieval(emptyList(), "trusted_clock", null, LocalRetrievalStatus.NOT_SEARCHED)
             recentOnly -> LocalSemanticRetrieval(emptyList(), "call_recent_only", null, LocalRetrievalStatus.NOT_SEARCHED)
             conversation.useRag -> semantic.retrieve(owner,id,actionText,promptContext.completeMessageIds)
             else -> LocalSemanticRetrieval(emptyList(),"disabled",null)
         }
         lastRetrievalRoute = retrieval
         val recalled = retrieval.originals
-        val sources = if (conversation.useRag && !recentOnly) withContext(Dispatchers.IO) { database.documentSources(owner, actionText) } else emptyList()
-        val plan = if (call) LocalMediaPlan("", emptyList(), "") else media.prepare(id, conversation.profile, recent, userText = actionText)
+        val sources = if (conversation.useRag && !recentOnly && !clockQuestion) withContext(Dispatchers.IO) { database.documentSources(owner, actionText) } else emptyList()
+        val plan = if (call || clockQuestion) LocalMediaPlan("", emptyList(), "") else media.prepare(id, conversation.profile, recent, userText = actionText)
             .let { if ((textBatch?.size ?: 0) > 1 || it.selfieRequested && !LocalSelfieRules.standaloneRequest(actionText))
                 it.copy(preserveGeneratedText = true) else it }
         val calendarPlan = prepareCalendar(actionText)
+        lastPhotoStatus = plan.selfieStatus
         val photoNotice = when (plan.selfieStatus) {
             "review_model_unavailable" -> "照片尚未发布：当前聊天模型不支持图片审核。图像服务 Key 已保留，没有启动新的付费生成。"
             "image_service_unconfigured" -> "请在“照片生成服务”配置图像 Key，恋人的外观和聊天已保留。"
+            "image_auth_failed" -> "图像服务拒绝了当前 Key，请在“照片生成服务”检查授权；原图和聊天已保留。"
+            "image_balance_insufficient" -> "图像服务返回余额不足，补足后再准备照片；原图和聊天已保留。"
+            "provider_auth_failed" -> "写图像提示词或审图时，AI 公司拒绝了当前聊天 Key，请检查授权。"
+            "provider_balance_insufficient" -> "写图像提示词或审图时，AI 公司返回余额不足，请检查当前聊天 Key 的额度。"
             else -> null
         }
         val pictureContext = withContext(Dispatchers.IO) { photoHistory.build(boundedRecent, saved.providerId, saved.model,
@@ -303,7 +328,8 @@ class LocalChatRepository(
         val system = LocalCompanionPrompt.build(conversation.profile, recalled, sources, careContext(), retrieval.status, boundedRecent.size,
             interactionToken = "$id:${user.id}", runtime = ConversationRuntime(runtimeNow(), runtimeZone(),
                 textBatch?.last()?.content ?: text, call || voicePlanned, ocSnapshot != null,
-                proactiveContact = withContext(Dispatchers.IO) { ConversationRuntimeReader(appContext).proactive(id) })) + "\n" + plan.prompt +
+                proactiveContact = withContext(Dispatchers.IO) { ConversationRuntimeReader(appContext).proactive(id) },
+                photoSharing = withContext(Dispatchers.IO) { ConversationRuntimeReader(appContext).photos(ocSnapshot != null) })) + "\n" + plan.prompt +
             (if (textBatch == null) "" else "\n这是用户短时间的连续输入，下面多条用户原文属于同一轮。统一回应最新意图，不逐条机械分别作答；可自然分段，不能忽略其相关的前一句。") +
             interruptedContext(boundedRecent) +
             pictureContext.evidence.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty() +
@@ -312,7 +338,12 @@ class LocalChatRepository(
         val generated = StringBuilder()
         val committed = java.util.concurrent.atomic.AtomicBoolean(false)
         try {
-        val raw = if (plan.unavailableMessage != null && !plan.preserveGeneratedText) plan.unavailableMessage
+        val raw = if (clockQuestion) checkNotNull(LocalClockReply.respond(actionText, runtimeNow(), runtimeZone())).also { answer ->
+                if (onDelta != null) { generated.append(answer); onDelta(answer) }
+            }
+            else if (plan.selfieRequested && !plan.preserveGeneratedText && plan.readyCaption != null &&
+                plan.candidates.singleOrNull { it.id == plan.requiredAttachmentId }?.kind == "image") plan.readyCaption
+            else if (plan.unavailableMessage != null && !plan.preserveGeneratedText) plan.unavailableMessage
             else if (onDelta == null) provider.complete(saved.providerId, saved.apiKey, saved.model, context, outputBudget())
             else {
                 val speech = CallSpeechFilter()

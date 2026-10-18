@@ -16,6 +16,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.zhiyu.app.domain.planar.*
 import com.zhiyu.app.ui.PlanarWorkshopController
+import com.zhiyu.app.data.planar.PlanarHeadMotionSuggestion
 import java.util.UUID
 
 internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
@@ -64,6 +65,14 @@ internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
                     Text("背景保持原样。建议位置供你确认：框选可见的眼口，点击定位头颈；侧脸、遮脸可关闭看不到的部位。",style=MaterialTheme.typography.bodySmall)
                     if(animated)Text("预览使用当前标注；保存后通话才会使用。",style=MaterialTheme.typography.bodySmall)
                     if(draft!=null) {
+                        if(PlanarHeadMotionSuggestion.available(draft)) {
+                            Text("当前还没有头部活动区域；仅框选眼口，不会产生头部微动。",style=MaterialTheme.typography.bodySmall)
+                            OutlinedButton({
+                                controller.addHeadMotion()
+                                controller.draft?.parts?.firstOrNull {it.id==PlanarHeadMotionSuggestion.ID}?.let {selected=it.id;tool="polygon"}
+                            },enabled=enabled,modifier=Modifier.testTag("planar_add_head_motion")){Text("补充头部微动")}
+                        }
+                        if(draft.subjectBrush.isNotEmpty())Text("人物活动范围的擦除仍会限制眼口和头部；若动作被擦掉，用“画保留”恢复相应位置。",style=MaterialTheme.typography.bodySmall)
                         Row {listOf("eyeLeft" to "左眼","eyeRight" to "右眼","mouth" to "嘴巴").forEach {(id,label)->
                             TextButton({selected=id},enabled=enabled){Text(label+(if(selected==id)" ✓"else ""))}}}
                         Row {listOf("head" to "头部","neck" to "颈部").forEach {(id,label)->TextButton({selected=id},enabled=enabled){Text(label)}}
@@ -95,9 +104,9 @@ internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
                         }
                         if(p!=null||selected=="subject") {
                             Row {if(p!=null)TextButton({
-                                if(p.baseMaskPng!=null)partChange {it.copy(baseMaskPng=null,polygon=emptyList(),brush=emptyList())}
+                                if(p.baseMaskPng!=null||p.polygon.isNotEmpty())partChange {it.copy(baseMaskPng=null,polygon=emptyList(),brush=emptyList())}
                                 tool="polygon"
-                            },enabled=enabled){Text(if(p.baseMaskPng!=null)"重画轮廓（可撤销）"else "点选轮廓")}
+                            },enabled=enabled){Text(if(p.baseMaskPng!=null||p.polygon.isNotEmpty())"重画轮廓（可撤销）"else "点选轮廓")}
                                 TextButton({tool="keep"},enabled=enabled){Text("画保留")};TextButton({tool="erase"},enabled=enabled){Text("擦除")}}
                             if(p!=null)TextButton({if(p.polygon.size>=3)partChange {it.copy(pivot=PlanarPoint(it.polygon.map {q->q.x}.average(),it.polygon.map {q->q.y}.average()))}},enabled=enabled&&p.polygon.size>=3){Text("完成轮廓")}
                             Text("画笔半径：${effectiveRadius.toInt()} 像素",style=MaterialTheme.typography.bodySmall)

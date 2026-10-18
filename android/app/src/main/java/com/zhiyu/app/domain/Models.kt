@@ -86,6 +86,8 @@ interface ChatRepository {
         val pair = sendQueuedMessage(id, input.content, input.requestId, onSubmitted = { onSubmitted(input.requestId, it) })
         return QueuedTextBatchResult(listOf(QueuedTextSubmission(input.requestId, pair.first)), pair.second)
     }
+    /** Persist only the display order of a continuous turn; never rewrite raw message contents or their RAG order. */
+    suspend fun recordReplyTurn(id: String, userIds: List<String>, assistantIds: List<String>): Unit = Unit
     suspend fun sendCallMessage(id: String, content: String, onDelta: suspend (String) -> Unit): Pair<Message, Message> =
         sendMessage(id, content).also { onDelta(it.second.content) }
     suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment): Pair<Message, Message> =

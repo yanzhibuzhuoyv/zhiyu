@@ -45,7 +45,7 @@ class LifePhotoPromptClientTest {
         assertTrue(instruction.contains("pose")); assertTrue(instruction.contains("unseen body"))
         assertFalse(instruction.contains("background-only")); assertFalse(instruction.contains("never generate a person"))
         assertTrue(provider.messages.last().content.contains(scene.sceneId))
-        assertTrue(provider.messages.all { it.photos.isEmpty() })
+        assertArrayEquals(png, provider.messages.flatMap { it.photos }.single().bytes)
         assertFalse(provider.messages.any { it.content.contains("synthetic-chat-key") })
     }
     @Test fun reviewSendsBothActualPixelPayloadsAndApprovalNeverClaimsCertainIdentity() = runTest {
@@ -107,5 +107,29 @@ class LifePhotoPromptClientTest {
         assertTrue(metadata.contains("\"time\":\"${target.slot.time}\""))
         assertTrue(metadata.contains(LocalDailyRules.revision(scene)))
         assertTrue(provider.messages.first().content.contains("distinct", ignoreCase = true))
+    }
+
+    @Test fun visualPromptAuthorReceivesTheCurrentOriginalPixelsRatherThanGuessingAppearanceFromText() = runTest {
+        val store = Store(); val provider = Provider("{\"prompt\":\"The same OC sitting by the window.\"}")
+        client(store, provider).create(binding(store), target)
+        val image = provider.messages.flatMap { it.photos }.single()
+        assertArrayEquals(png, image.bytes)
+        assertEquals(ChatPhotoRules.sha(png), image.originalSha256)
+        assertTrue(provider.messages.first().content.contains("fixed appearance"))
+        assertFalse(provider.messages.any { it.content.contains("synthetic-image-key") })
+        assertEquals(1, provider.calls)
+    }
+
+    @Test fun sceneryPromptsAndReviewDoNotRequireAnOcFigureButKeepItsImageStyle() = runTest {
+        val store = Store(); val provider = Provider("{\"prompt\":\"A quiet landscape in the reference artwork style.\"}")
+        val landscape = target.copy(index = 0)
+        val prompt = client(store, provider).create(binding(store), landscape)
+        assertTrue(prompt.contains("scenery-only", ignoreCase = true))
+        assertFalse(prompt.contains("Preserve the same original OC identity, face, clothes"))
+        assertTrue(prompt.contains("reference image style"))
+        provider.answer = "{\"approved\":true,\"reason\":\"No person, matching artwork style\",\"correction\":\"\",$checks}"
+        client(store, provider).review(binding(store), landscape, prompt, AgnesGeneratedImage(png + byteArrayOf(2), "image/png"))
+        assertTrue(provider.messages.first().content.contains("absence of the OC is required"))
+        assertTrue(provider.messages.first().content.contains("identity check"))
     }
 }

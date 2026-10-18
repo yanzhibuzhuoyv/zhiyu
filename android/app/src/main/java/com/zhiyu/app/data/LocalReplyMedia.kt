@@ -23,6 +23,7 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     private val characters = OcCreatorStore(appContext)
     private val borrower = com.zhiyu.app.data.selfie.LocalPhotoBorrower(appContext)
     private val borrowed = com.zhiyu.app.data.selfie.LocalPhotoBorrowStore(appContext)
+    private data class SelfiePreparation(val image: LocalMediaDetails? = null, val safeFailureReason: String? = null)
     suspend fun prepare(id: String, profile: CompanionProfile?, recent: List<Message>, userText: String = ""): LocalMediaPlan {
         withContext(Dispatchers.IO) { NativeSeedImporter(appContext).install() }
         val visualProfile = visual.profile(id)
@@ -32,7 +33,11 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
         val dailyPrompt = LocalDailyRepository(appContext).use { it.prompt(daily) }
         val recentSha = recent.takeLast(20).flatMap { it.mediaAttachments }.map { it.sha256 }.toSet()
         if (LocalSelfieRules.requested(userText)) return withContext(Dispatchers.IO) {
-            try { selfiePlan(id, visualProfile, daily, dailyPrompt, recentSha) }
+            try { selfiePlan(id, visualProfile, daily, dailyPrompt, recentSha).let { plan ->
+                SelfieReadyCaption.content(plan, profile)?.let { caption -> plan.copy(readyCaption = caption,
+                    prompt = plan.prompt + "\n本轮已经备好当前恋人的照片，提交时会附上这张实际图片。旧对话中的待备、没有照片或不能发图只属于当时，" +
+                        "不能覆盖本轮已备好的状态；不要一边附图一边说仍没弄好或责怪对方催促。若还有其他问题，完整回应后自然带出本轮照片。") } ?: plan
+            } }
             catch (failure: Exception) {
                 if (!localSelfieFailure(failure)) throw failure
                 LocalMediaPlan("$dailyPrompt\n暂时没有可发的自拍，自然说明还没准备好，不得声称已发送或提及系统实现。", emptyList(), "", true,
@@ -118,12 +123,15 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
             listOf(early.attachment.copy(dayId = scene.dayId)), "", true, early.attachment.id,
             unavailableMessage = BORROW_CAPTION, selfieStatus = "borrowed_preview", borrowed = early)
         val photos = RemoteScenePhotos(appContext)
+        var generationProblem: String? = null
         if (SelfieOnDemandRules.shouldGenerate(
                 profile.mode in setOf("import", "generate") && profile.referenceId != null,
                 photos.configured(), photos.reviewConfigured())) {
             // Exactly one explicit request may create one new selfie; the ledger in
             // RemoteScenePhotos prevents an unknown/duplicate paid attempt from being replayed.
-            val generated = generateSelfieNow(chat, profile, scene)
+            val preparation = generateSelfieNow(chat, profile, scene)
+            generationProblem = preparation.safeFailureReason
+            val generated = preparation.image
             if (generated != null) return LocalMediaPlan("$dailyPrompt\n对方明确索要自拍。这次已生成一张当前 OC 的自拍素材，系统会附图。" +
                 "自然回应即可，不声称实时相机或真实拍摄。", listOf(generated.attachment), "", true, generated.attachment.id)
         }
@@ -131,7 +139,7 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
             profile.mode == "none" || profile.referenceId == null -> "oc_missing"
             !photos.configured() -> "image_service_unconfigured"
             !photos.reviewConfigured() -> "review_model_unavailable"
-            else -> "inventory_pending"
+            else -> generationProblem ?: "inventory_pending"
         }
         return LocalMediaPlan("$dailyPrompt\n对方索要自拍，这次还没准备好合适的照片。自然说明，不得声称已发图或提及系统实现。" +
             "若还有其他问题，完整回应其他问题并自然说明照片等准备好再给。",
@@ -139,23 +147,28 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     }
 
     /** One explicit selfie request may create at most one reviewed selfie on demand. */
-    private suspend fun generateSelfieNow(chat: String, profile: VisualProfile, scene: LocalDailyScene): LocalMediaDetails? = try {
+    private suspend fun generateSelfieNow(chat: String, profile: VisualProfile, scene: LocalDailyScene): SelfiePreparation = try {
         withTimeoutOrNull(180_000) {
-            val target = selfies.targets(chat, profile, scene).firstOrNull() ?: return@withTimeoutOrNull null
-            val result = RemoteScenePhotos(appContext).prepare(chat, listOf(target), profile, characters.read(chat))
-            if (result.prepared <= 0) return@withTimeoutOrNull null
-            assets.list("image", profile.visualVersion, 1000, scene.dayId).asSequence()
+            // An unknown first lane must not starve other already-authorized daily opportunities.
+            // The remote queue skips its existing paid ID and still creates at most one new image.
+            val targets = selfies.targets(chat, profile, scene).takeIf { it.isNotEmpty() } ?: return@withTimeoutOrNull SelfiePreparation()
+            val result = RemoteScenePhotos(appContext).prepare(chat, targets, profile, characters.read(chat), allowFailedRetry = true,
+                refillExhausted = { expected, ticket -> selfies.refillFailedLane(chat, profile, scene, expected, ticket) })
+            if (result.prepared <= 0) return@withTimeoutOrNull SelfiePreparation(
+                safeFailureReason = SelfieOnDemandRules.safeFailureReason(result.reason))
+            val image = assets.list("image", profile.visualVersion, 1000, scene.dayId).asSequence()
                 .map { assets.details(it.id) }
                 .filter { "selfie_stock" in it.tags }
                 .filter { selfies.eligible(chat, it, profile, scene) }
                 .firstOrNull { item ->
                     runCatching { assets.download(item.attachment.id, item.attachment.sha256) }.isSuccess
                 }
-        }
+            SelfiePreparation(image)
+        } ?: SelfiePreparation()
     } catch (failure: Exception) {
         if (failure is CancellationException) throw failure
         android.util.Log.w("ZhiYuSelfies", "On-demand selfie was not published; no unknown request is replayed")
-        null
+        SelfiePreparation(safeFailureReason = SelfieOnDemandRules.safeFailureReason((failure as? ApiFailure)?.errorCode))
     }
 
     private fun pendingMessage(status: String): String = when (status) {
@@ -186,7 +199,7 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
             if (plan.borrowed != null) {
                 val image = borrower.validate(id, plan.borrowed, current, scene)
                 return if (image == null) LocalMediaReply(SELFIE_PENDING, emptyList())
-                    else LocalMediaReply(if (plan.preserveGeneratedText) reply.content else BORROW_CAPTION, listOf(image))
+                    else LocalMediaReply(if (plan.preserveGeneratedText) reply.content else plan.readyCaption ?: BORROW_CAPTION, listOf(image))
             }
             val selected = reply.attachments.mapNotNull { asset ->
                 try { assets.download(asset.id,asset.sha256); assets.details(asset.id) }
@@ -232,4 +245,24 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
 internal object SelfieOnDemandRules {
     fun shouldGenerate(ocReady: Boolean, generationReady: Boolean, reviewReady: Boolean): Boolean =
         ocReady && generationReady && reviewReady
+
+    fun safeFailureReason(reason: String?): String? = reason?.takeIf { it in setOf(
+        "image_auth_failed", "image_balance_insufficient", "provider_auth_failed", "provider_balance_insufficient") }
+}
+
+/** Ready captions describe the attached photo without relying on old model capability claims. */
+internal object SelfieReadyCaption {
+    fun content(plan: LocalMediaPlan, profile: CompanionProfile?): String? {
+        if (!plan.selfieRequested || plan.preserveGeneratedText) return null
+        val selected = plan.requiredAttachmentId?.let { id -> plan.candidates.singleOrNull { it.id == id && it.kind == "image" } }
+            ?: return null
+        if (runCatching { MediaRules.check(selected) }.isFailure) return null
+        return when (profile?.takeIf { it.mode == "preset" }?.style) {
+            "playful" -> "喏，给你看这张。"
+            "anxious" -> "给你看，我想让你看看我。"
+            "distant" -> "这张。"
+            "gentle", "warm_v1", "warm_v2" -> "这张给你，慢慢看。"
+            else -> "给你，看看这张。"
+        }
+    }
 }

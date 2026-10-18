@@ -10,30 +10,31 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
+import java.time.Instant
 
 /** Approved synthetic pixels and a real local source ledger; no key or network request is used. */
 class SelfieBorrowNativeTest {
     private data class Future(val target: LocalScenePrefetchTarget, val image: MediaAttachment, val request: String)
-    private fun future(f: DailyShareNativeFixture, profile: VisualProfile, reviewed: Boolean = true): Future {
-        val scene = f.daily.horizon(f.chat, profile.visualVersion, f.now)[1]
+    private fun future(f: DailyShareNativeFixture, profile: VisualProfile, reviewed: Boolean = true, chat: String = f.chat): Future {
+        val scene = f.daily.horizon(chat, profile.visualVersion, f.now)[1]
         val target = LocalScenePrefetchTarget(scene, 1, scene.slots[1], true)
         val source = f.assets.details(profile.referenceId!!).attachment
-        val identity = OcCreatorStore(f.context).read(f.chat)?.takeIf { it.identity.confirmed &&
+        val identity = OcCreatorStore(f.context).read(chat)?.takeIf { it.identity.confirmed &&
             it.identity.reference?.id == profile.referenceId && it.identity.reference?.visualVersion == profile.visualVersion }
-        val framing = com.zhiyu.app.data.ocexpansion.OcFramingStore(f.context).active(f.chat, profile)
+        val framing = com.zhiyu.app.data.ocexpansion.OcFramingStore(f.context).active(chat, profile)
         val original = framing?.let(OcFramingRules::reference) ?: identity?.identity?.photoSource
             ?: OcAssetRef(source.id, source.sha256, source.visualVersion)
-        val binding = RemoteSceneBinding(f.chat, profile, identity?.packageSha, original,
+        val binding = RemoteSceneBinding(chat, profile, identity?.packageSha, original,
             "synthetic-image-key", Image2Protocol.DEFAULT_MODEL,
             SavedConnection("local://phone", "deepseek", "synthetic-chat-key", "deepseek-v4-flash"),
             CompanionBinding("deepseek", "deepseek-v4-flash"), f.assets.download(original.id, original.sha256), framingPolicy = framing)
         val request = RemoteSceneRules.requestId(binding, target, 0)
         val bytes = f.png(0xff3c5279.toInt())
         LocalImageJobStore(f.context).use { ledger ->
-            ledger.reserve(LocalGenerationJob(request, f.chat, "scene", profile.visualVersion, scene.dayId,
+            ledger.reserve(LocalGenerationJob(request, chat, "scene", profile.visualVersion, scene.dayId,
                 RemoteSceneRules.metadataHash(request), "reserved"))
             ledger.finish(request, "running")
-            RemoteSceneCandidateStore(f.context).write(RemoteSceneCandidate(request, f.chat, RemoteSceneRules.bindingSha(binding),
+            RemoteSceneCandidateStore(f.context).write(RemoteSceneCandidate(request, chat, RemoteSceneRules.bindingSha(binding),
                 ChatPhotoRules.sha(bytes), "image/png", "The same OC in a new portrait by the window.", 0, scene.dayId,
                 target.slot.time, LocalDailyRules.revision(scene),
                 if (reviewed) LifePhotoReviewStatus.APPROVED else LifePhotoReviewStatus.UNKNOWN,
@@ -42,11 +43,26 @@ class SelfieBorrowNativeTest {
             ledger.finish(request, "success")
         }
         val tags = target.slot.tags + listOf("daily_stock", "decoded_final", "remote_generated", "contains_person",
-            "remote_chat_${f.chat.take(24)}", "slot_${target.slot.time.replace(":", "")}",
+            "remote_chat_${chat.take(24)}", "slot_${target.slot.time.replace(":", "")}",
             "trajectory_${LocalDailyRules.revision(scene).take(24)}") + (framing?.let(OcFramingStockRules::tags) ?: emptyList()) +
             if (reviewed) listOf("composite_reviewed") else emptyList()
         val image = f.assets.ingest("image", bytes, "合成审核生活照", profile.visualVersion, scene.dayId, target.slot.activity, tags)
         return Future(target, image, request)
+    }
+    @Test fun aReadyBorrowedPortraitSkipsTheChatModelAndRetainsItsRealSourceReceipt() = runBlocking {
+        DailyShareNativeFixture().use { f -> SelfieReplyNativeFixture(f.context).use { r ->
+            f.now = Instant.now()
+            val chat = r.open()
+            val profile = f.visual.import(chat.id, f.png())
+            val future = future(f, profile, chat = chat.id)
+            val reply = r.repo.sendMessage(chat.id, "发张照片给我").second
+            assertEquals(0, r.calls)
+            assertEquals(future.image.id, reply.mediaAttachments.single().id)
+            assertEquals(LocalDailyRules.dayId(f.now), reply.mediaAttachments.single().dayId)
+            assertTrue(LocalPhotoBorrowStore(f.context).borrowed(chat.id, future.image.sha256))
+            assertEquals(future.target.scene.dayId, f.assets.details(future.image.id).attachment.dayId)
+            assertFalse(reply.content.contains("没弄好")); assertFalse(reply.content.contains("不能"))
+        } }
     }
     @Test fun approvedTomorrowPortraitCanBeBorrowedWithoutClaimingItsFutureEventAlreadyHappened() = runBlocking {
         DailyShareNativeFixture().use { f ->

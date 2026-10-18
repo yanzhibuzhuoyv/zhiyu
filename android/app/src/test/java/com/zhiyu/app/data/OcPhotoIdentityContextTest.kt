@@ -112,4 +112,34 @@ class OcPhotoIdentityContextTest {
         val empty = OcPhotoIdentityContext().build(null, current.sha256, false, 0)
         assertEquals(OcPhotoIdentityMatch.NONE, empty.match); assertEquals("", empty.evidence)
     }
+
+    @Test fun aTextConversationKeepsTheCurrentConfirmedAppearanceAsBoundedIndependentPixels() {
+        var calls = 0
+        val result = OcPhotoIdentityContext({ ref -> calls++; assertEquals(reference, ref); referenceBytes }) { raw, budget ->
+            assertTrue(budget in 1..OcPhotoIdentityContext.MAX_REFERENCE_BYTES); payload(raw)
+        }.appearance(snapshot(), nativeVision = true)
+        assertEquals(1, calls)
+        assertEquals(OcPhotoIdentityMatch.APPEARANCE_REFERENCE, result.match)
+        assertEquals(snapshot(), result.snapshot)
+        assertArrayEquals(referenceBytes, result.reference?.bytes)
+        assertTrue(result.evidence.contains("固定外貌"))
+        assertTrue(result.evidence.contains("不是用户新消息"))
+        assertFalse(result.evidence.contains("同一份原图"))
+    }
+
+    @Test fun appearanceAnchorCannotInventPixelsForTextOnlyOrBrokenReference() {
+        var loads = 0
+        val text = OcPhotoIdentityContext({ loads++; referenceBytes }) { raw, _ -> payload(raw) }
+            .appearance(snapshot(), nativeVision = false)
+        assertEquals(0, loads); assertNull(text.reference)
+        assertTrue(text.evidence.contains("不要编造"))
+        val broken = OcPhotoIdentityContext({ png(4) }) { raw, _ -> payload(raw) }
+            .appearance(snapshot(), nativeVision = true)
+        assertNull(broken.reference)
+        assertFalse(broken.evidence.contains("本次附带"))
+        assertThrows(CancellationException::class.java) {
+            OcPhotoIdentityContext({ throw CancellationException("cancel") }).appearance(snapshot(), true)
+        }
+    }
+
 }

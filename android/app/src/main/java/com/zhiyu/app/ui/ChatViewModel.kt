@@ -86,7 +86,7 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
     }
     fun apiKey(value: String) { mutableState.update { it.copy(apiKey = value, error = null) } }
     fun model(value: String) { if (mutableState.value.binding == null) mutableState.update { it.copy(model = value, error = null) } }
-    fun draft(value: String) { mutableState.update { it.copy(draft = value) } }
+    fun draft(value: String) { mutableState.update { it.copy(draft = value) }; outgoing.composerChanged(value) }
     // A completed picker import must survive an unrelated refresh or an older send.
     fun draftImage(value: ChatImageDraft?) { mutableState.update { it.copy(draftImage = value) } }
     fun dismissError() { mutableState.update { it.copy(error = null, notice = null) } }
@@ -162,11 +162,11 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         }
         profileEdited = false
     }
-    fun refresh() = action("刷新") {
+    fun refresh() = if (outgoing.hasPendingReplies()) null else action("刷新") {
         loadConversations()
         mutableState.update { it.copy(documents = repository.documents()) }
     }
-    fun loadOlder() = action("读取更早的消息") {
+    fun loadOlder() = if (outgoing.hasPendingReplies()) null else action("读取更早的消息") {
         val current = mutableState.value
         val id = current.selectedId ?: return@action
         val before = current.nextBefore ?: return@action

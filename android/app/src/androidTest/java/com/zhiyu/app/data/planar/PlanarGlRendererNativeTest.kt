@@ -98,6 +98,31 @@ class PlanarGlRendererNativeTest {
         } finally { renderer.release(); egl.close() }
     }
 
+    @Test fun latestPendingDocumentWinsAndFailedReloadCanRecoverBeforeStopDiscardsPendingWork() = withEgl(32,32) {
+        val red=document(listOf(layer("solid",0,solid(0xffff0000.toInt()),quad())))
+        val green=document(listOf(layer("solid",0,solid(0xff00ff00.toInt()),quad())))
+        val blue=document(listOf(layer("solid",0,solid(0xff0000ff.toInt()),quad())))
+        val frames=mutableListOf<PlanarFrame>()
+        val failures=mutableListOf<RuntimeException>()
+        val renderer=PlanarGlRenderer(red,failures::add,frames::add)
+        try {
+            renderer.initialize();renderer.resize(32,32);renderer.drawAt(0.0)
+            val initialGeneration=frames.last().generation
+            renderer.submitDocument(green);renderer.submitDocument(blue);renderer.onDrawFrame(null)
+            assertColor(0,0,255,255,pixels(32,32).color(16,16))
+            assertTrue(frames.last().generation>initialGeneration)
+            renderer.submitDocument(red.copy(layers=emptyList()));renderer.onDrawFrame(null)
+            assertEquals(1,failures.size)
+            val failedCount=frames.size
+            renderer.submitDocument(green);renderer.onDrawFrame(null)
+            assertEquals(failedCount+1,frames.size)
+            assertColor(0,255,0,255,pixels(32,32).color(16,16))
+            val stoppedCount=frames.size
+            renderer.stop();renderer.submitDocument(blue);renderer.onDrawFrame(null)
+            assertEquals(stoppedCount,frames.size)
+        } finally {renderer.release()}
+    }
+
     private fun layer(id: String, z: Int, texture: ByteArray, mesh: PlanarMesh) = PlanarLayer(id, "body", z.toDouble(), texture, mesh)
     private fun document(layers: List<PlanarLayer>) = PlanarDocument(32, 32, "renderer", solid(-1), layers, "{}", contract)
     private fun quad() = mesh(floatArrayOf(0f, 0f, 32f, 0f, 32f, 32f, 0f, 32f), intArrayOf(0, 1, 2, 0, 2, 3))

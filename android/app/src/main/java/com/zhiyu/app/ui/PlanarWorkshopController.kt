@@ -118,6 +118,17 @@ import kotlin.math.roundToInt
     fun undo(){if(!busy&&history?.undo()==true){draft=history!!.value;dirty=true;previewOverride=null;error=null;persist()}}
     fun redo(){if(!busy&&history?.redo()==true){draft=history!!.value;dirty=true;previewOverride=null;error=null;persist()}}
 
+    fun addHeadMotion() {
+        if(busy)return
+        val current=draft?:return
+        val photo=source?:return
+        try {
+            val part=PlanarHeadMotionSuggestion.create(current,photo.width,photo.height)
+            edit(current.copy(parts=current.parts+part))
+            notice="已补充头部微动建议，可调整轮廓或撤销；预览满意后再保存。原有活动范围仍会限制动作。"
+        } catch(failure:IllegalArgumentException) {error=failure.message?:"请先检查头部标记"}
+    }
+
     /** Render the current, possibly unsaved annotations; the call page still uses only the saved package. */
     fun buildPreview() {
         if(busy)return

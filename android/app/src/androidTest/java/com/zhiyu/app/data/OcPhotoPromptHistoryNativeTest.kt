@@ -81,4 +81,44 @@ class OcPhotoPromptHistoryNativeTest {
             assertFalse(result.evidence.contains("同一份原图"))
         }
     }
+
+    @Test fun referenceSurvivesTextOnlyTurnsAfterTheUploadedPhotoLeavesTheRecentWindow() = runBlocking {
+        NativeV4Context(base).use { context ->
+            val referenceBytes = png(0xff884466.toInt())
+            val profile = LocalVisualRepository(context).import("d".repeat(32), referenceBytes)
+            val assets = LocalMediaStore(context)
+            val snapshot = OcPhotoIdentitySnapshot.capture(profile, assets.details(checkNotNull(profile.referenceId)))
+            val photos = ChatPhotoStore(context)
+            val draft = photos.importBytes(png(0xff2255aa.toInt()))
+            val history = listOf(message(draft.attachment)) + (1..13).map { index ->
+                Message(index.toString().padStart(32, '0'), "user", "普通文字 $index", emptyList(), "2026-10-18T12:00:00+08:00")
+            }
+            val result = LocalPhotoPromptHistory(photos, OcPhotoIdentityContext(context))
+                .build(history, "deepseek", "deepseek-flash", ocIdentity = snapshot)
+            assertEquals(snapshot, result.ocIdentity)
+            assertEquals(1, result.messages.sumOf { it.photos.size })
+            assertEquals(snapshot?.reference?.sha256, result.messages.first().photos.single().originalSha256)
+            assertTrue(result.messages.first().content.contains("不是用户新消息"))
+            assertFalse(result.evidence.contains("最近用户图片"))
+            assertEquals(history.filter { it.content.isNotBlank() }.map { it.content }, result.messages.drop(1).map { it.content })
+            assertArrayEquals(referenceBytes, assets.download(checkNotNull(profile.referenceId), checkNotNull(snapshot).reference.sha256))
+        }
+    }
+
+    @Test fun textOnlyCurrentReferenceStaysOutOfModelsWithoutVisionAndRespectsMessageLimit() = runBlocking {
+        NativeV4Context(base).use { context ->
+            val profile = LocalVisualRepository(context).import("e".repeat(32), png(0xff884466.toInt()))
+            val assets = LocalMediaStore(context)
+            val snapshot = OcPhotoIdentitySnapshot.capture(profile, assets.details(checkNotNull(profile.referenceId)))
+            val photos = ChatPhotoStore(context)
+            val history = (1..100).map { Message(it.toString().padStart(32, '0'), "user", "文字 $it", emptyList(), "2026-10-18T12:00:00+08:00") }
+            val builder = LocalPhotoPromptHistory(photos, OcPhotoIdentityContext(context))
+            val text = builder.build(history.take(1), "deepseek", "deepseek-v4-pro", ocIdentity = snapshot)
+            assertEquals(snapshot, text.ocIdentity); assertEquals(0, text.messages.sumOf { it.photos.size })
+            assertTrue(text.evidence.contains("不要编造"))
+            val crowded = builder.build(history, "deepseek", "deepseek-flash", ocIdentity = snapshot)
+            assertEquals(100, crowded.messages.size)
+            assertEquals(0, crowded.messages.sumOf { it.photos.size })
+        }
+    }
 }

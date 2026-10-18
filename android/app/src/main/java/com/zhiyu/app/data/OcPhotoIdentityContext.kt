@@ -20,7 +20,7 @@ internal data class OcPhotoIdentitySnapshot(val visualVersion: Int, val referenc
     }
 }
 
-internal enum class OcPhotoIdentityMatch { NONE, EXACT_REFERENCE, REFERENCE_COMPARISON, USER_CONFIRMED, UNVERIFIED }
+internal enum class OcPhotoIdentityMatch { NONE, EXACT_REFERENCE, REFERENCE_COMPARISON, APPEARANCE_REFERENCE, USER_CONFIRMED, UNVERIFIED }
 
 /** Explicit user attribution only; a possessive "你的…" or a question does not confirm an OC. */
 internal object SelfPortraitAttribution {
@@ -36,6 +36,19 @@ internal class OcPhotoIdentityContext(
     private val normalizeReference: (ByteArray, Int) -> ChatPhotoPayload? = OcReferencePhotoEncoder::encode,
 ) {
     constructor(context: Context): this(loadReference = { ref -> LocalMediaStore(context).download(ref.id, ref.sha256) })
+    /** The configured appearance remains available when a text conversation outlives photo history. */
+    fun appearance(snapshot: OcPhotoIdentitySnapshot?, nativeVision: Boolean,
+        allowReferencePixels: Boolean = true): OcPhotoIdentityEvidence {
+        if (snapshot == null) return OcPhotoIdentityEvidence(null, OcPhotoIdentityMatch.NONE, "")
+        val reference = if (nativeVision && allowReferencePixels) reference(snapshot, MAX_REFERENCE_BYTES) else null
+        val evidence = "$BASE\n当前已确认的恋人固定外貌来自独立的 OC 设定，不随聊天轮次或临时故事改变。" +
+            if (reference == null) "本次没有可用的外貌像素；保持已确认设定，不要编造未知发色、服装、外形或新的自画像。"
+            else "本次附带当前固定外貌的参考像素，不是用户新消息、照片分享或事实记忆。描述自己的外貌时以它为准，" +
+                "保留人物、发色、服装和附件特征，不把背景当成自己的身体，不从背景编造现实经历。"
+        return OcPhotoIdentityEvidence(snapshot,
+            if (reference == null) OcPhotoIdentityMatch.UNVERIFIED else OcPhotoIdentityMatch.APPEARANCE_REFERENCE,
+            evidence, reference)
+    }
     fun build(snapshot: OcPhotoIdentitySnapshot?, photoSha: String, nativeVision: Boolean,
         currentImageBytes: Int, allowReferencePixels: Boolean = true, userConfirmedSelf: Boolean = false): OcPhotoIdentityEvidence {
         ChatPhotoRules.digest(photoSha)
@@ -48,8 +61,14 @@ internal class OcPhotoIdentityContext(
         if (userConfirmedSelf) return OcPhotoIdentityEvidence(snapshot, OcPhotoIdentityMatch.USER_CONFIRMED, "$BASE\n$CONFIRMED")
         val budget = minOf(MAX_REFERENCE_BYTES, ChatPhotoRules.MAX_UPLOAD_BYTES - currentImageBytes)
         if (!nativeVision || !allowReferencePixels || budget <= 0) return unverified(snapshot)
-        val payload = try {
-            val raw = loadReference?.invoke(snapshot.reference) ?: return unverified(snapshot)
+        val payload = reference(snapshot, budget)
+        return if (payload == null) unverified(snapshot)
+            else OcPhotoIdentityEvidence(snapshot, OcPhotoIdentityMatch.REFERENCE_COMPARISON, "$BASE\n$COMPARE", payload)
+    }
+
+    private fun reference(snapshot: OcPhotoIdentitySnapshot, budget: Int): ChatPhotoPayload? {
+        return try {
+            val raw = loadReference?.invoke(snapshot.reference) ?: return null
             require(raw.size in 1..ChatPhotoRules.MAX_ORIGINAL_BYTES && ChatPhotoRules.sha(raw) == snapshot.reference.sha256)
             normalizeReference(raw, budget)?.also {
                 require(it.originalSha256 == snapshot.reference.sha256 && it.byteCount <= budget)
@@ -58,8 +77,6 @@ internal class OcPhotoIdentityContext(
             if (failure is CancellationException) throw failure
             null
         }
-        return if (payload == null) unverified(snapshot)
-            else OcPhotoIdentityEvidence(snapshot, OcPhotoIdentityMatch.REFERENCE_COMPARISON, "$BASE\n$COMPARE", payload)
     }
 
     private fun unverified(snapshot: OcPhotoIdentitySnapshot) = OcPhotoIdentityEvidence(snapshot,

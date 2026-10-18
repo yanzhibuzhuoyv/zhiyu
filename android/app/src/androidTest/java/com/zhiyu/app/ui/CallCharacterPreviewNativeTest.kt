@@ -13,6 +13,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.zhiyu.app.data.planar.*
 import com.zhiyu.app.domain.*
 import com.zhiyu.app.domain.planar.DetectedFaceRegion
+import com.zhiyu.app.domain.planar.PlanarDraft
 import com.zhiyu.app.ui.screens.CallCharacterPreview
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
@@ -81,5 +82,19 @@ class CallCharacterPreviewNativeTest {
             val center = pixels[pixels.width / 2, pixels.height / 2]
             assertEquals(1f, center.blue, .01f); assertEquals(0f, center.red, .01f)
         } finally { gate.complete(Unit) }
+    }
+
+    @Test fun savedEyesAndMouthOnlyPackageExplainsWhyHeadIsStillAndOffersItsRepairEntry() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val contract=PlanarPackageReader(context.assets.open("planar/contract.json").bufferedReader().use {it.readText()}).contract
+        val source=photo()
+        val saved=try {PlanarPhotoBuilder().build(source,PlanarDraft.suggest(320,480).copy(suggestionsConfirmed=true),
+            "合成眼口形象",contract)} finally {source.recycle()}
+        var edits=0
+        compose.setContent {CallCharacterPreview(identity('a'),saved,0f,
+            {throw AssertionError("Saved package must win")},{edits++},Modifier.fillMaxSize())}
+        compose.onNodeWithTag("call_character_motion_status").assertTextEquals("当前只有眨眼和口型，头部还没有活动区域")
+        compose.onNodeWithText("补充头部动作").performClick()
+        assertEquals(1,edits)
     }
 }

@@ -22,7 +22,7 @@ class LocalSelfieBank(context: Context) {
     private val characters = OcCreatorStore(app)
     private val framing = OcFramingStore(app)
     private data class Lane(val generation: Int, val index: Int)
-    private data class State(val scope: String, val lanes: List<Lane>, val usedSha: List<String> = emptyList())
+    private data class State(val scope: String, val lanes: List<Lane>, val usedSha: List<String> = emptyList(), val failedRefills: Int = 0)
     private data class Snapshot(val scope: String, val original: OcAssetRef, val referenceSha: String,
         val packageSha: String?, val framing: OcFramingPolicy?)
 
@@ -32,6 +32,24 @@ class LocalSelfieBank(context: Context) {
     fun targets(chat: String, profile: VisualProfile, scene: LocalDailyScene): List<LocalScenePrefetchTarget> =
         withSnapshot(chat, profile, scene) { snapshot ->
             if (snapshot == null) emptyList() else opportunities(scene, state(chat, snapshot.scope, scene))
+        }
+
+    internal fun refillFailedLane(chat: String, profile: VisualProfile, scene: LocalDailyScene,
+        expected: List<LocalScenePrefetchTarget>, ticket: LocalSelfieTicket): List<LocalScenePrefetchTarget>? =
+        withSnapshot(chat, profile, scene) { snapshot ->
+            if (snapshot == null || snapshot.scope != ticket.scope) return@withSnapshot null
+            LocalSelfieRules.check(ticket)
+            val before = state(chat, snapshot.scope, scene)
+            if (before.failedRefills >= MAX_FAILED_REFILLS || before.usedSha.size >= 128 ||
+                opportunities(scene, before) != expected || expected.none { it.selfie == ticket } ||
+                ticket.generation >= 1_000_000) return@withSnapshot null
+            val current = scene.slots.indexOf(scene.current).also { require(it >= 0) }
+            val lanes = before.lanes.mapIndexed { index, lane ->
+                if (index == ticket.lane) Lane(ticket.generation + 1, current) else lane
+            }
+            val updated = before.copy(lanes = lanes, failedRefills = before.failedRefills + 1)
+            write(chat, updated)
+            opportunities(scene, updated)
         }
 
     fun current(chat: String, profile: VisualProfile, target: LocalScenePrefetchTarget): Boolean =
@@ -172,12 +190,14 @@ class LocalSelfieBank(context: Context) {
         require(used.length() in 0..128) { "自拍消费记录无效" }
         val usedSha = (0 until used.length()).map { used.getString(it).also(ChatPhotoRules::digest) }
         require(usedSha.distinct().size == usedSha.size) { "自拍消费记录重复" }
-        return State(scope, lanes, usedSha)
+        val refills = if (value.has("failed_refills")) integer(value, "failed_refills") else 0
+        require(refills <= MAX_FAILED_REFILLS) { "自拍补充次数无效，原记录已保留" }
+        return State(scope, lanes, usedSha, refills)
     }
     private fun write(chat: String, state: State) {
         val value = JSONObject().put("schema", 1).put("chat", chat).put("scope", state.scope)
             .put("lanes", JSONArray(state.lanes.map { JSONObject().put("generation", it.generation).put("index", it.index) }))
-            .put("used_sha", JSONArray(state.usedSha))
+            .put("used_sha", JSONArray(state.usedSha)).put("failed_refills", state.failedRefills)
         val payload = value.toString()
         val envelope = JSONObject().put("payload", payload).put("sha", LocalMemoryCodec.sha(LocalMemoryCodec.bytes(payload)))
         LocalMediaStore.write(path(chat), envelope.toString().toByteArray(Charsets.UTF_8))
@@ -191,4 +211,5 @@ class LocalSelfieBank(context: Context) {
     }
     private fun sceneInstant(scene: LocalDailyScene) = LocalDate.parse(scene.dayId).atTime(java.time.LocalTime.parse(scene.current.time))
         .atZone(ZoneId.of(LocalDailyRules.TIMEZONE)).toInstant()
+    private companion object { const val MAX_FAILED_REFILLS = 128 }
 }

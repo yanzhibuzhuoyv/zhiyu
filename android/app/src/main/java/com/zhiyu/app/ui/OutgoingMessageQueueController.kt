@@ -16,6 +16,28 @@ internal class OutgoingMessageQueueController(
     private var openTextBatchId: String? = null
     private var quietWindow: Job? = null
     private var maximumWindow: Job? = null
+    private var typingDeadline: Job? = null
+    private var composingContinuation = false
+    private data class DeferredReply(val item: OutgoingDraft, val result: QueuedTextBatchResult)
+    private var deferredReplies: List<DeferredReply> = emptyList()
+    fun hasPendingReplies() = deferredReplies.isNotEmpty()
+
+    fun composerChanged(value: String) {
+        if (read().pendingOutgoing.none(::plainText) && deferredReplies.isEmpty()) return
+        composingContinuation = value.isNotBlank() && read().draftImage == null
+        if (composingContinuation) {
+            if (typingDeadline?.isActive != true) typingDeadline = scope.launch {
+                delay(15_000)
+                composingContinuation = false
+                closeTextWindow()
+                flushReplies()
+            }
+        } else {
+            typingDeadline?.cancel(); typingDeadline = null
+            openTextBatchId?.let(::openTextWindow)
+            scope.launch { flushReplies() }
+        }
+    }
 
     fun enqueue(voiceText: String? = null, voiceDraftId: String? = null): Boolean {
         val state = read()
@@ -29,6 +51,7 @@ internal class OutgoingMessageQueueController(
             require(voiceDraftId == null || Regex("[a-f0-9]{32}").matches(voiceDraftId)) { "语音尚未准备好，请重新录制" }
             val id = UUID.randomUUID().toString().replace("-", "")
             val plainText = voiceText == null && image == null && voiceDraftId == null
+            composingContinuation = false; typingDeadline?.cancel(); typingDeadline = null
             val textBatchId = if (plainText) openTextBatchId?.takeIf { canJoin(it, state, text) } ?: id else null
             if (textBatchId != openTextBatchId) closeTextWindow()
             val item = OutgoingDraft(id, chat.id, epoch, state.serverUrl, state.providerId, state.model,
@@ -68,12 +91,13 @@ internal class OutgoingMessageQueueController(
     fun discard(id: String) {
         val item = read().pendingOutgoing.firstOrNull { it.id == id && it.phase != OutgoingPhase.SENDING } ?: return
         update { it.copy(pendingOutgoing = it.pendingOutgoing.filterNot { row -> row.id == id }) }
-        scope.launch { cleanup(item) }
+        scope.launch { cleanup(item); flushReplies() }
         resume()
     }
 
     fun invalidate() {
         epoch++
+        composingContinuation = false; typingDeadline?.cancel(); deferredReplies = emptyList()
         closeTextWindow(start = false)
         update { state ->
             val committedGroups = state.pendingOutgoing.filter { it.submittedMessageId != null }.mapNotNull { it.textBatchId }.toSet()
@@ -127,15 +151,18 @@ internal class OutgoingMessageQueueController(
                 result.submitted.map { it.requestId } == items.map { it.id } &&
                 result.submitted.map { it.message.id }.distinct().size == items.size) { "连续消息回复结果不一致，请刷新查看" }
             items.zip(result.submitted).forEach { (item, row) -> submitted(item, row.message) }
-            publish(items.first(), result.submitted.map { it.message } + result.assistant)
+            if (items.all(::plainText)) deferredReplies = deferredReplies + DeferredReply(items.first(), result)
+            else publish(items.first(), result.submitted.map { it.message } + result.assistant)
             val ids = items.map { it.id }.toSet()
             update { state -> if (!items.all { matches(it, state) }) state else state.copy(
                 pendingOutgoing = state.pendingOutgoing.filterNot { it.id in ids },
                 notice = (repository as? com.zhiyu.app.data.LocalChatRepository)?.lastCalendarNotice ?: state.notice) }
+            flushReplies()
         } catch (failure: Exception) {
             val committed = read().pendingOutgoing.any { row -> row.submittedMessageId != null && items.any { it.id == row.id } }
             items.forEach { failed(it, failure, committed) }
             if (failure is CancellationException) throw failure
+            flushReplies()
         } finally {
             items.forEach { item ->
                 val submitted = read().pendingOutgoing.firstOrNull { it.id == item.id }?.submittedMessageId
@@ -157,13 +184,13 @@ internal class OutgoingMessageQueueController(
             openTextBatchId = id
             maximumWindow = scope.launch {
                 delay(OutgoingQueueRules.TEXT_MAX_WAIT_MILLIS)
-                closeTextWindow(id)
+                if (!composingContinuation) closeTextWindow(id)
             }
         }
         quietWindow?.cancel()
         quietWindow = scope.launch {
             delay(OutgoingQueueRules.TEXT_QUIET_MILLIS)
-            closeTextWindow(id)
+            if (!composingContinuation) closeTextWindow(id)
         }
     }
 
@@ -180,7 +207,46 @@ internal class OutgoingMessageQueueController(
         if (!state.connected || state.restoring || first.phase != OutgoingPhase.QUEUED || !matches(first, state) ||
             first.textBatchId != null && first.textBatchId == openTextBatchId) return emptyList()
         if (first.textBatchId == null) return listOf(first)
+        if (deferredReplies.isNotEmpty()) {
+            if (state.pendingOutgoing.any { it.textBatchId == openTextBatchId && openTextBatchId != null }) return emptyList()
+            val remaining = (32 - deferredReplies.sumOf { it.result.submitted.size }).coerceAtLeast(1)
+            return state.pendingOutgoing.takeWhile { plainText(it) && it.phase == OutgoingPhase.QUEUED && matches(it, state) }
+                .runningFold(emptyList<OutgoingDraft>()) { group, item -> group + item }
+                .last { group -> group.size <= minOf(remaining, QueuedTextBatchRules.MAX_INPUTS) &&
+                    group.sumOf { it.content.length.toLong() } <= QueuedTextBatchRules.MAX_CONTENT_CHARS }
+        }
         return state.pendingOutgoing.takeWhile { it.textBatchId == first.textBatchId && it.phase == OutgoingPhase.QUEUED && matches(it, state) }
+    }
+
+    private fun plainText(item: OutgoingDraft) = item.image == null && item.voiceDraftId == null && item.textBatchId != null
+    private fun continuationPending() = read().pendingOutgoing
+        .takeWhile { it.phase in setOf(OutgoingPhase.QUEUED, OutgoingPhase.SENDING) }.any(::plainText)
+    private suspend fun flushReplies() {
+        val atLimit = deferredReplies.sumOf { it.result.submitted.size } >= 32
+        if (deferredReplies.isEmpty() || !atLimit && (composingContinuation || continuationPending())) return
+        val replies = deferredReplies
+        val first = replies.first().item
+        val stamp = epoch
+        val users = replies.flatMap { it.result.submitted }.map { it.message }
+        val answers = replies.map { it.result.assistant }
+        val order = users.map { it.id } + answers.map { it.id }
+        try { repository.recordReplyTurn(first.chatId, users.map { it.id }, answers.map { it.id }) }
+        catch (failure: Exception) {
+            if (failure is CancellationException) throw failure
+            update { it.copy(notice = "消息已保存，连续消息的显示顺序暂时没能保存") }
+        }
+        if (stamp != epoch || deferredReplies != replies || !atLimit && (composingContinuation || continuationPending())) return
+        deferredReplies = emptyList()
+        update { state ->
+            if (stamp != epoch || !matchesTarget(first, state)) state else {
+                val rows = ((if (state.viewingOlder) emptyList() else state.messages) + users + answers).distinctBy { it.id }
+                val ordered = ReplyTurnOrder.apply(rows, listOf(order))
+                val recent = ordered.takeLast(100)
+                val older = state.hasOlder || state.viewingOlder || ordered.size > recent.size
+                state.copy(messages = recent, hasOlder = older, viewingOlder = false,
+                    nextBefore = if (older) recent.firstOrNull()?.id else null)
+            }
+        }
     }
 
     private fun submitted(item: OutgoingDraft, message: Message) {
