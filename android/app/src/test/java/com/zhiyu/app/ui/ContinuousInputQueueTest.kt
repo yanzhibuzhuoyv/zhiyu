@@ -16,7 +16,7 @@ class ContinuousInputQueueTest {
         assertTrue("The first text must leave time for a continuation", repo.deliveries.isEmpty())
         advanceTimeBy(400); send(vm, "其实先不聊工作，想吃面"); runCurrent()
         vm.draft("还没发的第三句")
-        advanceTimeBy(749); runCurrent(); assertTrue(repo.deliveries.isEmpty())
+        advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS - 1); runCurrent(); assertTrue(repo.deliveries.isEmpty())
         advanceTimeBy(1); runCurrent()
         assertEquals(listOf(listOf("下班啦", "其实先不聊工作，想吃面")), repo.deliveries.map { it.inputs.map(QueuedTextInput::content) })
         assertEquals("batch", repo.deliveries.single().kind)
@@ -25,22 +25,31 @@ class ContinuousInputQueueTest {
         assertEquals("还没发的第三句", vm.state.value.draft)
     }
 
-    @Test fun continuedTypingCannotPostponeTheFirstWindowBeyondTwoSeconds() = model { vm, repo ->
+    @Test fun continuedTypingCannotPostponeTheFirstWindowBeyondThreeSeconds() = model { vm, repo ->
         repeat(4) { index ->
             if (index > 0) advanceTimeBy(600)
             send(vm, "接着说$index"); runCurrent()
             assertTrue(repo.deliveries.isEmpty())
         }
-        advanceTimeBy(199); runCurrent(); assertTrue(repo.deliveries.isEmpty())
+        advanceTimeBy(OutgoingQueueRules.TEXT_MAX_WAIT_MILLIS - 1_800 - 1); runCurrent(); assertTrue(repo.deliveries.isEmpty())
         advanceTimeBy(1); runCurrent()
         assertEquals((0..3).map { "接着说$it" }, repo.deliveries.single().inputs.map { it.content })
     }
 
+    @Test fun aOneAndAHalfSecondGapStillBecomesOneTurn() = model { vm, repo ->
+        send(vm, "第一段"); runCurrent()
+        advanceTimeBy(1_500); send(vm, "第二段"); runCurrent()
+        assertEquals("The first turn must still be open at 1.5 s", 0, repo.deliveries.size)
+        advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
+        assertEquals(listOf(listOf("第一段", "第二段")), repo.deliveries.map { delivery -> delivery.inputs.map { it.content } })
+        assertEquals("batch", repo.deliveries.single().kind)
+    }
+
     @Test fun alreadyStartedHttpIsNeverCancelledOrRepostedWhenMoreTextArrives() = model { vm, repo ->
         repo.replyGate = CompletableDeferred()
-        send(vm, "这一轮先发"); advanceTimeBy(750); runCurrent()
+        send(vm, "这一轮先发"); advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
         val originalId = repo.deliveries.single().inputs.single().requestId
-        send(vm, "再补一句"); advanceTimeBy(300); send(vm, "还有一句"); advanceTimeBy(750); runCurrent()
+        send(vm, "再补一句"); advanceTimeBy(300); send(vm, "还有一句"); advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
         assertEquals(1, repo.deliveries.size)
         assertFalse(repo.cancelled)
         repo.replyGate!!.complete(Unit); advanceUntilIdle()
@@ -66,8 +75,8 @@ class ContinuousInputQueueTest {
     @Test fun separateQuietWindowsStaySeparateWhileAnEarlierPhotoHttpIsPending() = model { vm, repo ->
         repo.replyGate = CompletableDeferred()
         vm.draftImage(image('a')); send(vm, "先发图片"); runCurrent()
-        send(vm, "第一段文字"); advanceTimeBy(1_000); runCurrent()
-        send(vm, "隔了一会儿的新话"); advanceTimeBy(750); runCurrent()
+        send(vm, "第一段文字"); advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
+        send(vm, "隔了一会儿的新话"); advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS); runCurrent()
         assertEquals(1, repo.deliveries.size)
         repo.replyGate!!.complete(Unit); advanceUntilIdle()
         assertEquals(listOf("photo", "single", "single"), repo.deliveries.map { it.kind })

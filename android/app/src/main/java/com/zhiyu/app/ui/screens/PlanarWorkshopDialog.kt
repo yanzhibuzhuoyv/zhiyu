@@ -58,11 +58,11 @@ internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
                     TextButton(controller::undo,enabled=enabled&&controller.canUndo,modifier=Modifier.testTag("planar_undo")){Text("撤销")}
                     TextButton(controller::redo,enabled=enabled&&controller.canRedo,modifier=Modifier.testTag("planar_redo")){Text("重做")}
                     TextButton({original=!original;animated=false},enabled=!controller.busy&&!gesture&&photo!=null){Text(if(original)"返回编辑"else "原图对照")}
-                    TextButton({animated=!animated;original=false},enabled=!controller.busy&&!gesture&&controller.previewDocument!=null){Text(if(animated)"返回标注"else "动画预览")}
+                    TextButton({if(!animated)controller.buildPreview();animated=!animated;original=false},enabled=!controller.busy&&!gesture&&photo!=null&&draft!=null,modifier=Modifier.testTag("planar_preview")){Text(if(animated)"返回标注"else "动画预览")}
                 }
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                     Text("背景保持原样。建议位置供你确认：框选可见的眼口，点击定位头颈；侧脸、遮脸可关闭看不到的部位。",style=MaterialTheme.typography.bodySmall)
-                    if(animated&&controller.dirty)Text("当前预览是上次保存的形象，保存后会更新。",style=MaterialTheme.typography.bodySmall)
+                    if(animated)Text("预览使用当前标注；保存后通话才会使用。",style=MaterialTheme.typography.bodySmall)
                     if(draft!=null) {
                         Row {listOf("eyeLeft" to "左眼","eyeRight" to "右眼","mouth" to "嘴巴").forEach {(id,label)->
                             TextButton({selected=id},enabled=enabled){Text(label+(if(selected==id)" ✓"else ""))}}}

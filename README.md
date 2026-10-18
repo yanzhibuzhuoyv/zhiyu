@@ -61,7 +61,7 @@ ABI 分包已启用（`splits.abi`），产物在 `android/app/build/outputs/apk
 
 | 目录 | 内容 | 来源 |
 |------|------|------|
-| `artifacts/native-voice/` | sherpa-onnx 1.13.8 AAR、zipformer 中英流式 ASR、vits-icefall-zh-aishell3 中文 TTS | `scripts/prepare_native_voice.py`（从 k2-fsa/sherpa-onnx 官方 release 固定版本下载） |
+| `artifacts/native-voice/` | sherpa-onnx 1.13.8 AAR、multi-zh 流式 ASR（int8 encoder 66.9MB）、vits-icefall-zh-aishell3 中文 TTS | `scripts/prepare_native_voice.py`（从 k2-fsa/sherpa-onnx 官方 release 固定版本下载） |
 | `artifacts/portrait-models/` | `u2netp.onnx` 人像分割 | `backend/prepare_portrait_model.py`（固定 URL + SHA） |
 | `artifacts/semantic-models/` | `bge-small-zh-v1.5-int8.onnx` + 词表 + manifest | `backend/prepare_semantic_model.py`（BAAI/bge-small-zh-v1.5，固定 revision） |
 | `artifacts/native-media-seed/` | 打包进 APK 的示例素材 | `scripts/prepare_native_media.py` |
@@ -83,7 +83,7 @@ ABI 分包已启用（`splits.abi`），产物在 `android/app/build/outputs/apk
 | `prepareQwenAssets` | Qwen 模型包 `manifest.json` |
 | `preparePortraitAssets` | `u2netp.onnx` + 示例素材（仅允许 2 张图入包） |
 | `prepareSemanticAssets` | BGE int8 onnx、`vocab.txt`、`config.json`、`tokenizer_config.json`、`manifest.json` |
-| `prepareVoiceAssets` | 13 个语音模型文件 + sherpa AAR |
+| `prepareVoiceAssets` | 12 个语音模型文件 + sherpa AAR |
 | `prepareQwenTestAssets` | 公开测试 checkpoint（长度 262288 字节） |
 | `verifyCompanionContract` | 执行 `python shared/generate_companion_contract.py --check`，保证两端契约一致 |
 

@@ -22,6 +22,26 @@ class OcPhotoIdentityContextTest {
     private fun png(seed: Int) = byteArrayOf(-119,80,78,71,13,10,26,10) + ByteArray(16) { (seed + it).toByte() }
     private fun payload(raw: ByteArray) = ChatPhotoPayload(ChatPhotoRules.sha(raw), ChatPhotoRules.sha(raw), "image/png", raw)
 
+    @Test fun explicitUserAttributionConfirmsOwnOcEvenForATextOnlyModel() {
+        var loads = 0
+        val result = OcPhotoIdentityContext({ loads++; referenceBytes }) { raw, _ -> payload(raw) }
+            .build(snapshot(), ChatPhotoRules.sha(png(3)), false, 0, userConfirmedSelf = true)
+        assertEquals(OcPhotoIdentityMatch.USER_CONFIRMED, result.match)
+        assertNull(result.reference); assertEquals(0, loads)
+        assertTrue(result.evidence.contains("明确说明"))
+        assertTrue(result.evidence.contains("不要否认"))
+        assertTrue(result.evidence.contains("不是现实人物身份"))
+    }
+
+    @Test fun onlyExplicitAttributionConfirmsASelfPortrait() {
+        assertTrue(SelfPortraitAttribution.confirmed("这是你"))
+        assertTrue(SelfPortraitAttribution.confirmed("这张像你"))
+        assertTrue(SelfPortraitAttribution.confirmed("给你画的"))
+        assertFalse(SelfPortraitAttribution.confirmed("这是你吗"))
+        assertFalse(SelfPortraitAttribution.confirmed("这是你的猫"))
+        assertFalse(SelfPortraitAttribution.confirmed("不像你"))
+    }
+
     @Test fun exactImportedOriginalIsKnownAsOwnOcEvenForATextOnlyModel() {
         var loads = 0
         val context = OcPhotoIdentityContext({ loads++; referenceBytes }) { raw, _ -> payload(raw) }

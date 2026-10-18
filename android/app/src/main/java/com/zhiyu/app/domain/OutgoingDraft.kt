@@ -15,8 +15,9 @@ data class OutgoingDraft(
 
 object OutgoingQueueRules {
     const val CAPACITY = 32
-    const val TEXT_QUIET_MILLIS = 750L
-    const val TEXT_MAX_WAIT_MILLIS = 2_000L
+    /** A 1.8 s pause lets the user's usual 1–1.5 s follow-up join the same turn. */
+    const val TEXT_QUIET_MILLIS = 1_800L
+    const val TEXT_MAX_WAIT_MILLIS = 3_000L
     fun matches(draft: OutgoingDraft, chatId: String?, serverUrl: String, providerId: String, model: String) =
         draft.chatId == chatId && draft.serverUrl == serverUrl && draft.providerId == providerId && draft.model == model
 }

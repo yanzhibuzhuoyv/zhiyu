@@ -3,8 +3,11 @@ package com.zhiyu.app.data
 import android.content.Context
 import com.zhiyu.app.domain.*
 import com.zhiyu.app.data.ocexpansion.OcFramingStore
+import com.zhiyu.app.data.remotescene.RemoteScenePhotos
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -98,7 +101,7 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
         }
     }
 
-    private fun selfiePlan(chat: String, profile: VisualProfile, scene: LocalDailyScene, dailyPrompt: String,
+    private suspend fun selfiePlan(chat: String, profile: VisualProfile, scene: LocalDailyScene, dailyPrompt: String,
         recentSha: Set<String>): LocalMediaPlan {
         val selected = assets.list("image", profile.visualVersion, 1000, scene.dayId).asSequence()
             .filter { it.sha256 !in recentSha && borrowed.available(chat, it) }.map { assets.details(it.id) }.filter { "selfie_stock" in it.tags }
@@ -114,7 +117,16 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
             "不把图中活动说成当前刚经历的事。若还有其他问题，完整回应其他问题并自然带出照片。",
             listOf(early.attachment.copy(dayId = scene.dayId)), "", true, early.attachment.id,
             unavailableMessage = BORROW_CAPTION, selfieStatus = "borrowed_preview", borrowed = early)
-        val photos = com.zhiyu.app.data.remotescene.RemoteScenePhotos(appContext)
+        val photos = RemoteScenePhotos(appContext)
+        if (SelfieOnDemandRules.shouldGenerate(
+                profile.mode in setOf("import", "generate") && profile.referenceId != null,
+                photos.configured(), photos.reviewConfigured())) {
+            // Exactly one explicit request may create one new selfie; the ledger in
+            // RemoteScenePhotos prevents an unknown/duplicate paid attempt from being replayed.
+            val generated = generateSelfieNow(chat, profile, scene)
+            if (generated != null) return LocalMediaPlan("$dailyPrompt\n对方明确索要自拍。这次已生成一张当前 OC 的自拍素材，系统会附图。" +
+                "自然回应即可，不声称实时相机或真实拍摄。", listOf(generated.attachment), "", true, generated.attachment.id)
+        }
         val status = when {
             profile.mode == "none" || profile.referenceId == null -> "oc_missing"
             !photos.configured() -> "image_service_unconfigured"
@@ -123,7 +135,34 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
         }
         return LocalMediaPlan("$dailyPrompt\n对方索要自拍，这次还没准备好合适的照片。自然说明，不得声称已发图或提及系统实现。" +
             "若还有其他问题，完整回应其他问题并自然说明照片等准备好再给。",
-            emptyList(), "", true, unavailableMessage = SELFIE_PENDING, selfieStatus = status)
+            emptyList(), "", true, unavailableMessage = pendingMessage(status), selfieStatus = status)
+    }
+
+    /** One explicit selfie request may create at most one reviewed selfie on demand. */
+    private suspend fun generateSelfieNow(chat: String, profile: VisualProfile, scene: LocalDailyScene): LocalMediaDetails? = try {
+        withTimeoutOrNull(180_000) {
+            val target = selfies.targets(chat, profile, scene).firstOrNull() ?: return@withTimeoutOrNull null
+            val result = RemoteScenePhotos(appContext).prepare(chat, listOf(target), profile, characters.read(chat))
+            if (result.prepared <= 0) return@withTimeoutOrNull null
+            assets.list("image", profile.visualVersion, 1000, scene.dayId).asSequence()
+                .map { assets.details(it.id) }
+                .filter { "selfie_stock" in it.tags }
+                .filter { selfies.eligible(chat, it, profile, scene) }
+                .firstOrNull { item ->
+                    runCatching { assets.download(item.attachment.id, item.attachment.sha256) }.isSuccess
+                }
+        }
+    } catch (failure: Exception) {
+        if (failure is CancellationException) throw failure
+        android.util.Log.w("ZhiYuSelfies", "On-demand selfie was not published; no unknown request is replayed")
+        null
+    }
+
+    private fun pendingMessage(status: String): String = when (status) {
+        "oc_missing" -> "我还没有确认自己的形象，现在还不能准备自拍。先在“更多设置 → 恋人外观”导入并确认一张图。"
+        "image_service_unconfigured" -> "照片生成服务还没配置 Key；当前不会发起新的生图。"
+        "review_model_unavailable" -> "当前聊天模型不能看图审图。换一个支持识图的模型，或配置独立的图片识别 Key，我才能发布照片。"
+        else -> SELFIE_PENDING
     }
 
     private fun consumeSelfie(chat: String, item: LocalMediaDetails, profile: VisualProfile, scene: LocalDailyScene): Boolean =
@@ -187,4 +226,10 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
         private const val SELFIE_PENDING = "这会儿还没准备好合适的自拍，等我弄好了再给你看。"
         private const val BORROW_CAPTION = "这张我挺喜欢的，先给你看看。"
     }
+}
+
+/** On-demand generation is only allowed after stock and borrowing both failed. */
+internal object SelfieOnDemandRules {
+    fun shouldGenerate(ocReady: Boolean, generationReady: Boolean, reviewReady: Boolean): Boolean =
+        ocReady && generationReady && reviewReady
 }

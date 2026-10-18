@@ -14,7 +14,8 @@ DOWNLOADS = (
     ("sherpa-onnx-static-link-onnxruntime-1.13.8.aar", "v1.13.8/", 38691998,
      "b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471"),
     ("vits-icefall-zh-aishell3.tar.bz2", "tts-models/", 31559701, None),
-    ("sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23.tar.bz2", "asr-models/", 74004050, None),
+    ("sherpa-onnx-streaming-zipformer-multi-zh-hans-int8-2023-12-13.tar.bz2", "asr-models/", 62041550,
+     "1a6a02447bc3e7904ff285e40446ca8f368a951f0c64ae435d389a3592faaea1"),
 )
 
 
@@ -64,7 +65,10 @@ def unpack(path: Path) -> list[dict]:
                 continue
             if relative.name.endswith(".onnx") and "zipformer" in relative.parts[0]:
                 if relative.name not in {"encoder-epoch-99-avg-1.int8.onnx", "decoder-epoch-99-avg-1.onnx",
-                                         "joiner-epoch-99-avg-1.int8.onnx"}:
+                                         "joiner-epoch-99-avg-1.int8.onnx",
+                                         "encoder-epoch-20-avg-1-chunk-16-left-128.int8.onnx",
+                                         "decoder-epoch-20-avg-1-chunk-16-left-128.onnx",
+                                         "joiner-epoch-20-avg-1-chunk-16-left-128.int8.onnx"}:
                     continue
             if relative.suffix not in {".onnx", ".txt", ".fst", ".md"} and relative.name not in {"LICENSE", "NOTICE"}:
                 continue

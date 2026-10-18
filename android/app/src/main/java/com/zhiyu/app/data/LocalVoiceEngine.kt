@@ -16,7 +16,7 @@ class LocalVoiceEngine(context: Context) : AutoCloseable {
     private val sessions = mutableSetOf<LocalVoiceRecognition>()
     private var closed = false
     companion object {
-        private const val ASR = "voice/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23"
+        private const val ASR = "voice/sherpa-onnx-streaming-zipformer-multi-zh-hans-int8-2023-12-13"
         private const val TTS = "voice/vits-icefall-zh-aishell3"
     }
 
@@ -25,10 +25,11 @@ class LocalVoiceEngine(context: Context) : AutoCloseable {
         val model = recognizer ?: OnlineRecognizer(assets, OnlineRecognizerConfig(
             featConfig = FeatureConfig(sampleRate = LocalVoiceRules.ASR_SAMPLE_RATE, featureDim = 80),
             modelConfig = OnlineModelConfig(transducer = OnlineTransducerModelConfig(
-                // Match official getModelConfig(9): quantized encoder/joiner, full-precision decoder.
-                encoder = "$ASR/encoder-epoch-99-avg-1.int8.onnx", decoder = "$ASR/decoder-epoch-99-avg-1.onnx",
-                joiner = "$ASR/joiner-epoch-99-avg-1.int8.onnx"), tokens = "$ASR/tokens.txt",
-                numThreads = 2, provider = "cpu", modelType = "zipformer", debug = false),
+                // Larger multi-Chinese streaming model; same quantized encoder/joiner contract.
+                encoder = "$ASR/encoder-epoch-20-avg-1-chunk-16-left-128.int8.onnx",
+                decoder = "$ASR/decoder-epoch-20-avg-1-chunk-16-left-128.onnx",
+                joiner = "$ASR/joiner-epoch-20-avg-1-chunk-16-left-128.int8.onnx"), tokens = "$ASR/tokens.txt",
+                numThreads = 2, provider = "cpu", modelType = "zipformer2", debug = false),
             enableEndpoint = true, decodingMethod = "greedy_search",
         )).also { recognizer = it }
         LocalVoiceRecognition(model, model.createStream(), lock) { sessions.remove(it) }.also { sessions.add(it) }

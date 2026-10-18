@@ -79,6 +79,16 @@ class PlanarWorkshopNativeTest {
         compose.runOnIdle{controller.export(Uri.parse("content://unused/stale"),token)}
         assertEquals("形象已更新，请重新选择导出位置",controller.error);assertNull(controller.forBinding(binding))
     }
+    @Test fun livePreviewBuildsFromUnsavedAnnotationsWithoutPublishingToCalls(){
+        prepare()
+        val moved=controller.draft!!.anchors.copy(head=PlanarPoint(31.0,17.0))
+        compose.runOnIdle{controller.edit(controller.draft!!.copy(anchors=moved))}
+        compose.onNodeWithTag("planar_preview").performClick()
+        compose.waitUntil(10000){controller.previewDocument!=null&&!controller.busy}
+        assertNull(controller.error)
+        assertNotNull(controller.previewDocument)
+        assertNull("Unsaved preview must not become the call character",controller.forBinding(binding))
+    }
     @Test fun packagePickerRequestsAnOpenableDocument(){
         val types=arrayOf("application/zip","application/octet-stream")
         val intent=PlanarDocumentPicker().createIntent(context,types)

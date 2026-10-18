@@ -14,8 +14,8 @@ android {
         minSdk = 26
         targetSdk = 36
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
-        versionCode = 19
-        versionName = "0.2.13"
+        versionCode = 20
+        versionName = "0.2.14"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"https://local.zhiyu.invalid\"")
         buildConfigField("boolean", "USE_USB_BACKEND", "false")
@@ -225,11 +225,10 @@ val prepareVoiceAssets = tasks.register("prepareVoiceAssets") {
         "vits-icefall-zh-aishell3/new_heteronym.fst" to "ca14b2127e27baa571664e4bb791e143e7425f56a6bc29db08d74f97e6aa4e29",
         "vits-icefall-zh-aishell3/phone.fst" to "1ac2b6fa56b1442320c4de7db08353bab8963a2b57f365eebcdd3a2d3562f8d7",
         "vits-icefall-zh-aishell3/tokens.txt" to "50b45a7b7de1752fd3c7b4755661c285f1547f59186eca2281089a81307ad953",
-        "sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/tokens.txt" to "8b294db9045d6e5f94647f4c1eec1af4da143a75053c399611444b378ff966ac",
-        "sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/encoder-epoch-99-avg-1.int8.onnx" to "1c556ea57cec304e55ec4b72e52c1cc098bb01476ed7d90f3de939fe126487b1",
-        "sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/decoder-epoch-99-avg-1.onnx" to "5ee0f03a2768ff1d5c83ef3a493243c7935d316cd41280037b14783a3467cc78",
-        "sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/README.md" to "515751f07faad368f0863ae41773ff09635eba5920122d549abb8e45d5c88282",
-        "sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/joiner-epoch-99-avg-1.int8.onnx" to "a7cf9d82757bdcf786059454495a9ca95e4bd7347f72473fc08d794475c36169",
+        "sherpa-onnx-streaming-zipformer-multi-zh-hans-int8-2023-12-13/tokens.txt" to "6722bd1585f46f84456b29c3550a343a3cc375b971645773c02ed8e0b4e2405c",
+        "sherpa-onnx-streaming-zipformer-multi-zh-hans-int8-2023-12-13/encoder-epoch-20-avg-1-chunk-16-left-128.int8.onnx" to "d6380c74c75aaf37a739061a9197440fc5ca3f73ee339e588268eff2e9d3bf84",
+        "sherpa-onnx-streaming-zipformer-multi-zh-hans-int8-2023-12-13/decoder-epoch-20-avg-1-chunk-16-left-128.onnx" to "93f0df50c2834fe225bbabd664d59fc2488b15736fbc6acaabddec3188dea9b4",
+        "sherpa-onnx-streaming-zipformer-multi-zh-hans-int8-2023-12-13/joiner-epoch-20-avg-1-chunk-16-left-128.int8.onnx" to "7fa442b8b35b1ab217dbceadb57a7da5388ee445c6c722eab576a57071e0dcea",
     )
     val aar = source.resolve("sherpa-onnx-static-link-onnxruntime-1.13.8.aar")
     inputs.files(checks.keys.map { source.resolve(it) } + aar)
@@ -238,7 +237,9 @@ val prepareVoiceAssets = tasks.register("prepareVoiceAssets") {
         fun sha(file: java.io.File) = MessageDigest.getInstance("SHA-256").digest(file.readBytes())
             .joinToString("") { "%02x".format(it) }
         require(sha(aar) == "b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471") { "Voice runtime SHA mismatch" }
-        destination.get().file("sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23/decoder-epoch-99-avg-1.int8.onnx").asFile.delete()
+        listOf("sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23",
+            "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30")
+            .forEach { destination.get().asFile.resolve(it).deleteRecursively() }
         checks.forEach { (name, expected) ->
             val original = source.resolve(name)
             require(sha(original) == expected) { "Voice model SHA mismatch: $name" }

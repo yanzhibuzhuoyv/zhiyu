@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.NoiseSuppressor
 import com.zhiyu.app.domain.ApiFailure
@@ -16,6 +17,7 @@ internal class AndroidVoiceCaptureInput(context: Context) : VoiceCaptureInput {
     private val app = context.applicationContext ?: context
     private val record = AtomicReference<AudioRecord?>()
     private var suppression: NoiseSuppressor? = null
+    private var echo: AcousticEchoCanceler? = null
     override fun start() {
         require(app.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { "请允许麦克风后再说话" }
         val minimum = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
@@ -28,11 +30,18 @@ internal class AndroidVoiceCaptureInput(context: Context) : VoiceCaptureInput {
         suppression = try {
             if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(created.audioSessionId) else null
         } catch (_: RuntimeException) { null }
+        echo = try {
+            if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(created.audioSessionId) else null
+        } catch (_: RuntimeException) { null }
         val enabled = suppression?.let {
             try { it.hasControl() && it.setEnabled(true) == AudioEffect.SUCCESS && it.enabled }
             catch (_: RuntimeException) { false }
         } ?: false
-        android.util.Log.d("ZhiYuVoice", if (enabled) "Platform recording noise suppression enabled" else "Platform recording noise suppression unavailable")
+        val echoEnabled = echo?.let {
+            try { it.hasControl() && it.setEnabled(true) == AudioEffect.SUCCESS && it.enabled }
+            catch (_: RuntimeException) { false }
+        } ?: false
+        android.util.Log.d("ZhiYuVoice", "Recording effects: ns=$enabled aec=$echoEnabled")
         created.startRecording()
         require(created.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "录音未开始，请检查麦克风权限" }
     }
@@ -51,8 +60,13 @@ internal class AndroidVoiceCaptureInput(context: Context) : VoiceCaptureInput {
         val current = record.getAndSet(null) ?: return
         try { if (current.recordingState == AudioRecord.RECORDSTATE_RECORDING) current.stop() }
         finally {
+            try {
+            try { echo?.release() }
+            finally { echo = null }
+        } finally {
             try { suppression?.release() }
             finally { suppression = null; current.release() }
+        }
         }
     }
 }

@@ -52,6 +52,9 @@ class ChatVoiceRecordingNativeTest {
         fun waves() = File(context.filesDir, "voice_messages").listFiles()?.filter { it.extension == "wav" }.orEmpty()
         suspend fun close() {
             withContext(Dispatchers.Main) { controller.cancel() }
+            // The production cleanup worker is process-scoped; let its queued SQLite discard finish
+            // before deleting the isolated root, otherwise it can recreate a database file mid-delete.
+            UnsentVoiceCleanup.awaitIdle()
             scope.coroutineContext[Job]!!.cancelAndJoin()
             context.close()
             val root = context.filesDir.canonicalFile

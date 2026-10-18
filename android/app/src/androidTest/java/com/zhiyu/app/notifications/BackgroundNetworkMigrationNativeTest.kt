@@ -196,7 +196,9 @@ class BackgroundNetworkMigrationNativeTest {
         Fixture().use { test ->
             val input = workDataOf("chat" to test.chat, "day" to test.day, "version" to test.version)
             val legacy = OneTimeWorkRequestBuilder<LocalSceneStockWorker>().setInputData(input)
-                .setInitialDelay(0, TimeUnit.SECONDS)
+                // A future delay proves identity-preserving migration without letting the real
+                // worker run and increment attempts during the assertion window.
+                .setInitialDelay(1, TimeUnit.HOURS)
                 .setConstraints(legacy(Constraints.Builder().setRequiresBatteryNotLow(true).build()))
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build()
             test.manager.enqueueUniqueWork(test.stockName, ExistingWorkPolicy.KEEP, legacy).result.get(5, TimeUnit.SECONDS)

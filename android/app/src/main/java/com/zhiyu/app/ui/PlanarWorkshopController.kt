@@ -33,6 +33,7 @@ import kotlin.math.roundToInt
     private var history:PlanarEditHistory<PlanarDraft>?=null
     private var fixedBackground=false
     var active by mutableStateOf<PlanarDocument?>(null);private set
+    var previewOverride by mutableStateOf<PlanarDocument?>(null);private set
     var source by mutableStateOf<Bitmap?>(null);private set
     var draft by mutableStateOf<PlanarDraft?>(null);private set
     var busy by mutableStateOf(false);private set
@@ -42,7 +43,8 @@ import kotlin.math.roundToInt
     val canUndo get()=history?.canUndo==true
     val canRedo get()=history?.canRedo==true
     val bindingRevision get()=epoch
-    val previewDocument:PlanarDocument? get()=if(fixedBackground)active else null
+    private val savedDocument:PlanarDocument? get()=if(fixedBackground)active else null
+    val previewDocument:PlanarDocument? get()=previewOverride?:savedDocument
     fun checkpoint() {persist(immediate=true)}
     suspend fun awaitCheckpoint() {checkpointJob?.await()}
     fun discardDraft() {
@@ -50,12 +52,12 @@ import kotlin.math.roundToInt
         val target=draftStore?:return
         task {
             journalRevision=PlanarDraftPersistence.clear(target);checkpointJob=null
-            source?.recycle();source=null;sourcePng=null;draft=null;history=null;dirty=false
+            source?.recycle();source=null;sourcePng=null;draft=null;history=null;dirty=false;previewOverride=null
             notice="未保存的修改已放弃，已保存形象仍保留。"
         }
     }
-    fun forBinding(binding:String?):PlanarDocument? = if(binding!=null&&binding==key)previewDocument else null
-    private fun adopt(document:PlanarDocument?) {fixedBackground=document?.let(PlanarCallReadiness::fixedBackground)==true;active=document}
+    fun forBinding(binding:String?):PlanarDocument? = if(binding!=null&&binding==key)savedDocument else null
+    private fun adopt(document:PlanarDocument?) {fixedBackground=document?.let(PlanarCallReadiness::fixedBackground)==true;active=document;previewOverride=null}
     fun connect(binding:String?,recoveryBinding:String?=binding) {
         if(disposed||(binding==key&&recoveryBinding==recoveryKey))return
         checkpoint()
@@ -95,7 +97,7 @@ import kotlin.math.roundToInt
                     else PlanarDraft.suggest(owned.width,owned.height)
                 val edits=PlanarEditHistory(initial,PlanarDraftCodec::measure)
                 sourcePng=withContext(Dispatchers.Default){png(owned)}
-                source=owned;history=edits;draft=initial;dirty=document==null;adopted=true
+                source=owned;history=edits;draft=initial;dirty=document==null;adopted=true;previewOverride=null
                 notice="建议位置可自行调整；确认后保存，用于通话。"
                 if(dirty&&!restoreFailed)persist()
             } finally {if(!adopted)owned.recycle()}
@@ -110,11 +112,30 @@ import kotlin.math.roundToInt
     }
     fun edit(next:PlanarDraft) {
         if(busy)return
-        try {if(history?.update(next)==true){draft=history!!.value;dirty=true;notice="修改会自动暂存，确认后保存用于通话";error=null;persist()}}
+        try {if(history?.update(next)==true){draft=history!!.value;dirty=true;previewOverride=null;notice="修改会自动暂存，确认后保存用于通话";error=null;persist()}}
         catch(failure:IllegalArgumentException){error=failure.message?:"这次修改太大，请缩小范围"}
     }
-    fun undo(){if(!busy&&history?.undo()==true){draft=history!!.value;dirty=true;error=null;persist()}}
-    fun redo(){if(!busy&&history?.redo()==true){draft=history!!.value;dirty=true;error=null;persist()}}
+    fun undo(){if(!busy&&history?.undo()==true){draft=history!!.value;dirty=true;previewOverride=null;error=null;persist()}}
+    fun redo(){if(!busy&&history?.redo()==true){draft=history!!.value;dirty=true;previewOverride=null;error=null;persist()}}
+
+    /** Render the current, possibly unsaved annotations; the call page still uses only the saved package. */
+    fun buildPreview() {
+        if(busy)return
+        val photo=source?:return
+        val current=draft?:return
+        task {
+            val owned=checkNotNull(photo.copy(Bitmap.Config.ARGB_8888,false)){"原图暂时无法读取"}
+            try {
+                val document=withContext(Dispatchers.Default){
+                    PlanarPhotoBuilder().build(owned,current.copy(suggestionsConfirmed=true),"当前标注预览",reader.contract)
+                }
+                previewOverride=document;error=null
+            } catch(failure:Exception){
+                if(failure is CancellationException)throw failure
+                error=failure.message?:"当前标注还不能生成预览，请检查眼口和头颈"
+            } finally {owned.recycle()}
+        }
+    }
     fun import(uri:Uri,expectedBinding:Long=epoch) {
         if(expectedBinding!=epoch){error="形象已更新，请重新选择角色包";return}
         if(busy||key==null)return
@@ -128,7 +149,7 @@ import kotlin.math.roundToInt
             try {
                 val initial=PlanarDraftCodec.decode(document.definitionJson,bitmap.width,bitmap.height)
                 val edits=PlanarEditHistory(initial,PlanarDraftCodec::measure)
-                source?.recycle();source=bitmap;sourcePng=document.sourcePng;draft=initial;history=edits;adopted=true
+                source?.recycle();source=bitmap;sourcePng=document.sourcePng;draft=initial;history=edits;adopted=true;previewOverride=null
                 dirty=true;notice="已打开角色包，请确认后保存。";persist()
             } finally {if(!adopted)bitmap.recycle()}
         }
@@ -189,7 +210,7 @@ import kotlin.math.roundToInt
                 require(bounds.outWidth==saved.width&&bounds.outHeight==saved.height){"草稿原图尺寸无效"}
                 checkNotNull(BitmapFactory.decodeByteArray(saved.sourcePng,0,saved.sourcePng.size))
             }
-            source=bitmap;bitmap=null;sourcePng=saved.sourcePng;draft=initial;history=edits;dirty=true
+            source=bitmap;bitmap=null;sourcePng=saved.sourcePng;draft=initial;history=edits;dirty=true;previewOverride=null
             notice="已恢复未保存的修改，请确认后保存；原图和背景保持原样。";true
         }catch(failure:Exception){if(failure is CancellationException)throw failure;false}
         finally {bitmap?.recycle()}
@@ -198,6 +219,6 @@ import kotlin.math.roundToInt
         check(bitmap.compress(Bitmap.CompressFormat.PNG,100,it)){"原图暂存失败"};it.toByteArray()
     }
     private fun sha(bytes:ByteArray)=MessageDigest.getInstance("SHA-256").digest(bytes).joinToString(""){"%02x".format(it)}
-    fun closeEditor(){if(!busy){checkpoint();source?.recycle();source=null;sourcePng=null;draft=null;history=null;dirty=false}}
+    fun closeEditor(){if(!busy){checkpoint();source?.recycle();source=null;sourcePng=null;draft=null;history=null;dirty=false;previewOverride=null}}
     fun dispose(){if(disposed)return;checkpoint();disposed=true;epoch++;job?.cancel();source?.recycle();source=null;sourcePng=null;draft=null;history=null;active=null}
 }

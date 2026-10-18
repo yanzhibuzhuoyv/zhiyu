@@ -22,7 +22,8 @@ internal class LocalPhotoPromptHistory(private val photos: ChatPhotoStore,
         val picture = readPicture(pictured, image, native, currentId, currentPayload, currentAnalysis)
         val originalMessages = historyMessages(history, pictured, picture.payload)
         val ownership = identityContext.build(ocIdentity.takeIf { picture.readable }, image.sha256, native,
-            picture.payload?.byteCount ?: 0, allowReferencePixels = originalMessages.size < 99)
+            picture.payload?.byteCount ?: 0, allowReferencePixels = originalMessages.size < 99,
+            userConfirmedSelf = SelfPortraitAttribution.confirmed(pictured.content))
         val comparison = ownership.reference?.let { DirectChatMessage("user",
             "[应用附带的当前恋人OC参考图，仅供与随后用户图片对照；不是用户新消息或记忆]", listOf(it)) }
         val messages = if (comparison == null) originalMessages else originalMessages.toMutableList().apply {
