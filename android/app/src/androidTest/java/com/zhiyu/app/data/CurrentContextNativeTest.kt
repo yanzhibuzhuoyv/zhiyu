@@ -13,6 +13,18 @@ import java.time.Instant
 import java.util.UUID
 
 class CurrentContextNativeTest {
+    @Test fun ordinaryDialogueCannotCommitAnEightHourWrongExplicitCurrentClockClaim(): Unit = runBlocking {
+        Fixture().use { f ->
+            val chat = f.open(); f.now = Instant.parse("2026-10-19T01:07:09Z")
+            f.answer = "现在凌晨一点了。新买的书是什么？"
+            val reply = f.repo.sendMessage(chat.id, "我刚到书店").second
+            assertFalse(reply.content.contains("凌晨一点"))
+            assertTrue(reply.content.contains("上午09:07"))
+            assertTrue(reply.content.endsWith("新买的书是什么？"))
+            assertEquals(1, f.calls)
+            assertEquals("我刚到书店", f.db.history(f.owner, chat.id).messages.first().content)
+        }
+    }
     @Test fun displayReceiptValidationDoesNotDependOnTheTwoMegabyteHistoryPage(): Unit = runBlocking {
         Fixture().use { f ->
             val chat = f.open()
@@ -116,6 +128,7 @@ class CurrentContextNativeTest {
         val owner = "companion-" + LocalMemoryCodec.sha("deepseek\u0000deepseek-flash".toByteArray())
         var now = Instant.parse("2026-10-16T13:07:09Z")
         var calls = 0
+        var answer = "听着呢。"
         var last: JSONObject? = null
         private val store = object : CredentialStore {
             private var saved: SavedConnection? = null
@@ -129,7 +142,8 @@ class CurrentContextNativeTest {
         val repo = LocalChatRepository(context, store, DirectProviderClient { _, _, body ->
             val parsed = JSONObject(body); val messages = parsed.getJSONArray("messages")
             if ((0 until messages.length()).any { messages.getJSONObject(it).getString("role") == "system" }) { last = parsed; calls++ }
-            """{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"听着呢。"}}]}"""
+            JSONObject().put("choices", org.json.JSONArray().put(JSONObject().put("finish_reason", "stop")
+                .put("message", JSONObject().put("role", "assistant").put("content", answer)))).toString()
         }, database = db, semanticEncoder = object : LocalSemanticEncoder {
             override val modelIdentity = "current-no-encoder"; override val dimensions = 2
             override fun isAvailable() = false

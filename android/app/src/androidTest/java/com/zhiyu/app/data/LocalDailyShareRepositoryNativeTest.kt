@@ -12,6 +12,17 @@ import java.util.UUID
 
 /** Real repository/SQLite and real provider JSON carrying image pixels; responses are synthetic. */
 class LocalDailyShareRepositoryNativeTest {
+    @Test fun dailySharingAndProactiveMessagesUseTheSameCurrentClockAsDirectChat() = runBlocking {
+        withRepository { f, repo, client, _ ->
+            client.reply = "现在凌晨一点了。想和你说说刚才的事。"
+            val daily = repo.sendDailyShare(f.chat, f.event.requestId, f.event, f.image())
+            assertFalse(daily.content.contains("凌晨一点")); assertTrue(daily.content.contains("上午09:07"))
+            assertTrue(client.requests.single().getJSONArray("messages").getJSONObject(0).getString("content").contains("2026-10-19 09:07:09"))
+            val proactive = repo.sendProactive(f.chat, UUID.randomUUID().toString())
+            assertFalse(proactive.content.contains("凌晨一点")); assertTrue(proactive.content.contains("上午09:07"))
+            assertEquals(2, client.requests.size)
+        }
+    }
     private val profile = CompanionProfile(mode = "custom", name = "测试恋人", instructions = "说话简短，喜欢分享日常")
 
     @Test fun originalDispatchRevisionCannotBeReplacedAfterPauseAndResume()=runBlocking {
@@ -191,7 +202,8 @@ class LocalDailyShareRepositoryNativeTest {
         }
         val state = Store(saved, binding)
         return Triple(LocalChatRepository(f.context, state, DirectProviderClient(client), database = archive,
-            daily = f.daily, dailyNow = { f.now }), archive, state)
+            daily = f.daily, dailyNow = { f.now }, runtimeNow = { java.time.Instant.parse("2026-10-19T01:07:09Z") },
+            runtimeZone = { java.time.ZoneId.of("Asia/Shanghai") }), archive, state)
     }
 
     private suspend fun failure(block: suspend () -> Unit): Throwable {

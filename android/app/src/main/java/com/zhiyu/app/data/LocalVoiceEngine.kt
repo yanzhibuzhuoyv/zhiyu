@@ -4,6 +4,7 @@ import android.content.Context
 import com.k2fsa.sherpa.onnx.*
 import com.zhiyu.app.domain.LocalMemoryCodec
 import com.zhiyu.app.domain.VoiceTuningSettings
+import com.zhiyu.app.data.voicemessages.VoicePcmProsody
 
 data class LocalVoiceAudio(val samples: FloatArray, val sampleRate: Int)
 
@@ -50,7 +51,7 @@ class LocalVoiceEngine(context: Context) : AutoCloseable {
         val audio = model.generateWithCallback(text, voiceId, tuning.speed, LocalVoiceTtsCallback(active))
         if (!active()) throw kotlinx.coroutines.CancellationException()
         LocalVoiceRules.checkAudio(audio.samples, audio.sampleRate)
-        LocalVoiceAudio(audio.samples, audio.sampleRate)
+        LocalVoiceAudio(VoicePcmProsody.apply(audio.samples, audio.sampleRate, text, active), audio.sampleRate)
     }
 
     fun speakerCount(): Int = synchronized(lock) {

@@ -17,6 +17,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.zhiyu.app.domain.planar.*
 import com.zhiyu.app.ui.PlanarWorkshopController
 import com.zhiyu.app.data.planar.PlanarHeadMotionSuggestion
+import com.zhiyu.app.data.planar.PlanarMotionStatus
 import java.util.UUID
 
 internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
@@ -64,6 +65,9 @@ internal class PlanarDocumentPicker:ActivityResultContracts.OpenDocument() {
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(5.dp)) {
                     Text("背景保持原样。建议位置供你确认：框选可见的眼口，点击定位头颈；侧脸、遮脸可关闭看不到的部位。",style=MaterialTheme.typography.bodySmall)
                     if(animated)Text("预览使用当前标注；保存后通话才会使用。",style=MaterialTheme.typography.bodySmall)
+                    if(animated&&controller.previewDocument?.let(PlanarMotionStatus::expressionOnly)==true)
+                        Text("当前没有可见的头部微动。请检查头部轮廓、人物活动范围和随动幅度；眼口动作仍独立保留。",
+                            style=MaterialTheme.typography.bodySmall,modifier=Modifier.testTag("planar_no_head_motion"))
                     if(draft!=null) {
                         if(PlanarHeadMotionSuggestion.available(draft)) {
                             Text("当前还没有头部活动区域；仅框选眼口，不会产生头部微动。",style=MaterialTheme.typography.bodySmall)

@@ -88,6 +88,26 @@ class CallChatCancellationNativeTest {
             } finally { transport.gate?.complete(Unit); sending.cancelAndJoin() }
         }
     }
+    @Test fun aBufferedClockClaimIsArchivedAsIncompleteWithoutBeingSpokenAfterCancellation(): Unit = runBlocking {
+        archiveFixture { repo, chat, transport, database ->
+            transport.gate = CompletableDeferred()
+            transport.firstText = "现在凌晨一点"
+            val heard = mutableListOf<String>()
+            val sending = async { repo.sendCallMessage(chat.id, "我刚进书店") { heard.add(it) } }
+            try {
+                withTimeout(10_000) { transport.started.await() }
+                assertTrue(heard.isEmpty())
+                sending.cancelAndJoin()
+                val rows = database.history(owner(repo), chat.id, includeCalls = true).messages
+                assertEquals(listOf("user", "assistant"), rows.map { it.role })
+                assertEquals("call_interrupted", rows.last().origin)
+                assertTrue(rows.last().content.isNotBlank())
+                transport.gate!!.complete(Unit)
+                assertTrue(heard.isEmpty())
+                assertEquals(rows, database.history(owner(repo), chat.id, includeCalls = true).messages)
+            } finally { transport.gate!!.complete(Unit); sending.cancelAndJoin() }
+        }
+    }
     @Test fun interruptedStreamKeepsGeneratedPrefixWithExplicitIncompleteState(): Unit = runBlocking {
         archiveFixture { repo, chat, transport, database ->
             transport.gate = CompletableDeferred()

@@ -10,6 +10,26 @@ import org.junit.After
 import java.util.concurrent.atomic.AtomicInteger
 
 class CareCancellationTest {
+    @Test fun failedUiRefreshCannotRollBackANewerWeatherPublishedByAChatQuestion() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val store = CarePreferences(context)
+        val old = snapshot().copy(fetchedAt = System.currentTimeMillis() / 1000 - 1000,
+            observedAt = System.currentTimeMillis() / 1000 - 1000, temperatureC = 5.0)
+        val recent = snapshot().copy(temperatureC = 18.0)
+        store.save(CarePreferenceState(true, old))
+        val controller = withContext(Dispatchers.Main) {
+            CareController(context, scope, NativeWeatherService { throw IllegalStateException("synthetic unavailable") },
+                CareLocationSource { ApproximateLocation(30.0, 120.0) }, { true })
+        }
+        try {
+            withContext(Dispatchers.Main) { controller.restore().join() }
+            withTimeout(3000) { while (controller.busy) delay(10) }
+            store.save(CarePreferenceState(true, recent))
+            withContext(Dispatchers.Main) { controller.refresh() }
+            withTimeout(3000) { while (controller.busy || controller.error == null) delay(10) }
+            assertEquals(recent, store.load().state.weather)
+        } finally { scope.cancel(); store.save(CarePreferenceState()) }
+    }
     private val context = CareTestContext(InstrumentationRegistry.getInstrumentation().targetContext)
     @After fun cleanup() { context.cleanup() }
     private fun snapshot(): WeatherSnapshot {

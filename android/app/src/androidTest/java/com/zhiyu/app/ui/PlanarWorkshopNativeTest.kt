@@ -131,4 +131,40 @@ class PlanarWorkshopNativeTest {
         assertTrue(controller.draft!!.parts.isEmpty())
         assertEquals(before.subjectBrush,controller.draft!!.subjectBrush)
     }
+
+    @Test fun aManuallyRedrawnHeadKeepsItsStrengthAfterPreviewSaveAndReopen(){
+        prepare()
+        compose.runOnIdle {
+            controller.addHeadMotion()
+            val d=controller.draft!!
+            val original=d.parts.single()
+            // Replacing/recreating a head must not select another motion engine merely by ID.
+            val replacement=original.copy(id="manual_head",polygon=listOf(
+                PlanarPoint(10.0,8.0),PlanarPoint(52.0,8.0),PlanarPoint(52.0,48.0),PlanarPoint(10.0,48.0)),strength=0.0)
+            controller.edit(d.copy(parts=listOf(replacement)))
+            controller.buildPreview()
+        }
+        compose.waitUntil(10000){controller.previewDocument!=null&&!controller.busy}
+        assertNull(controller.error)
+        fun assertZero(document:com.zhiyu.app.data.planar.PlanarDocument){
+            val head=document.layers.single {it.id=="manual_head"}
+            for(channel in listOf("headX","headY","tilt","breath","sway"))
+                assertTrue("User-selected zero head strength must survive $channel",head.mesh.deltas().getValue(channel).all {it==0f})
+        }
+        assertZero(controller.previewDocument!!)
+        compose.runOnIdle {controller.save("手动头部")}
+        compose.waitUntil(10000){controller.active!=null&&!controller.busy}
+        assertNull(controller.error)
+        assertZero(checkNotNull(controller.forBinding(binding)))
+        val reopened=PlanarWorkshopController(context,scope)
+        try {
+            compose.runOnIdle {reopened.connect(binding)}
+            compose.waitUntil(5000){reopened.active!=null&&!reopened.busy}
+            assertZero(checkNotNull(reopened.forBinding(binding)))
+            compose.runOnIdle {reopened.open {throw AssertionError("Persisted original required")}}
+            compose.waitUntil(5000){reopened.draft!=null&&!reopened.busy}
+            assertEquals("manual_head",reopened.draft!!.parts.single().id)
+            assertEquals(0.0,reopened.draft!!.parts.single().strength,0.0)
+        } finally {compose.runOnUiThread {reopened.dispose()}}
+    }
 }

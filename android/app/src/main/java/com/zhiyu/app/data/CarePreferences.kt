@@ -14,9 +14,20 @@ data class CareLoadResult(val state: CarePreferenceState, val warning: String? =
 /** Stores only current weather facts and the opt-in switch; coordinates are never persisted. */
 class CarePreferences(context: Context) {
     private val preferences = (context.applicationContext ?: context).getSharedPreferences("weather_care", Context.MODE_PRIVATE)
+    internal fun publishWeatherIfEnabled(snapshot: WeatherSnapshot, now: Long, allowed: () -> Boolean): Boolean = synchronized(lock) {
+        val before = load()
+        if (before.warning != null || !before.state.enabled || !allowed() || !CareRules.fresh(snapshot, now)) return@synchronized false
+        if ((before.state.weather?.fetchedAt ?: 0) > snapshot.fetchedAt) return@synchronized false
+        save(before.state.copy(weather = snapshot))
+        true
+    }
+    internal fun setEnabled(enabled: Boolean): CarePreferenceState = synchronized(lock) {
+        val next = if (enabled) load().state.copy(enabled = true) else CarePreferenceState()
+        save(next); next
+    }
 
-    fun load(): CareLoadResult {
-        return try {
+    fun load(): CareLoadResult = synchronized(lock) {
+        try {
             val enabled = preferences.getBoolean("enabled", false)
             val weather = if (!enabled || !preferences.contains("observed_at")) null else CareRules.weather(WeatherSnapshot(
                 preferences.getLong("observed_at", 0), preferences.getLong("fetched_at", 0),
@@ -32,7 +43,7 @@ class CarePreferences(context: Context) {
         }
     }
 
-    fun save(state: CarePreferenceState) {
+    fun save(state: CarePreferenceState) = synchronized(lock) {
         state.weather?.let(CareRules::weather)
         val editor = preferences.edit().clear().putBoolean("enabled", state.enabled)
         state.weather?.takeIf { state.enabled }?.let {
@@ -43,6 +54,7 @@ class CarePreferences(context: Context) {
         }
         check(editor.commit()) { "天气设置没有保存成功，请重试" }
     }
+    private companion object { val lock = Any() }
 }
 
 class NativeCareContext(context: Context, private val now: () -> Long = { System.currentTimeMillis() / 1000 }) {
@@ -53,7 +65,7 @@ class NativeCareContext(context: Context, private val now: () -> Long = { System
         val allowed = ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val loaded = preferences.load()
         if (loaded.warning != null) return ""
-        return CareRules.prompt(loaded.state, now(), allowed)
+        return com.zhiyu.app.domain.WeatherRuntimeContext.render(loaded.state, now(), allowed)
     }
 }
 

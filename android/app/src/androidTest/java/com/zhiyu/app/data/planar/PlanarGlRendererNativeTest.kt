@@ -3,11 +3,14 @@ package com.zhiyu.app.data.planar
 import android.graphics.Bitmap
 import android.opengl.EGL14
 import android.opengl.GLES20
+import com.zhiyu.app.domain.planar.*
 import org.junit.Assert.*
 import org.junit.Test
 import rig2d.planar.ParameterRange
 import rig2d.planar.PlanarContract
 import rig2d.planar.PlanarMesh
+import rig2d.planar.PlanarAnimation
+import rig2d.planar.PlanarMixer
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 
@@ -121,6 +124,42 @@ class PlanarGlRendererNativeTest {
             renderer.stop();renderer.submitDocument(blue);renderer.onDrawFrame(null)
             assertEquals(stoppedCount,frames.size)
         } finally {renderer.release()}
+    }
+
+    @Test fun redrawnHeadWithAHollowCenterMovesVisiblePixelsAfterPackageRoundTripWithoutMovingTheBackground() = withEgl(128,128) {
+        val source=Bitmap.createBitmap(IntArray(128*128) {index->
+            val x=index%128;val y=index/128
+            if((x+y)%2==0) 0xffeeaa44.toInt() else 0xff221166.toInt()
+        },128,128,Bitmap.Config.ARGB_8888)
+        try {
+            val draft=PlanarDraft.suggest(128,128)
+            // A real manual redraw can leave the old ellipse centre outside the selected face.
+            val contour=listOf(3 to 3,29 to 3,29 to 8,9 to 8,9 to 24,29 to 24,29 to 29,3 to 29)
+                .map {(x,y)->PlanarPoint(x*4.0,y*4.0)}
+            val face=PlanarPart("auto_face","重画头部","face",20.0,contour,PlanarPoint(24.0,64.0))
+            val edited=draft.copy(parts=listOf(face),featureVisibility=PlanarFeatureVisibility(false,false,false),suggestionsConfirmed=true)
+            val reader=PlanarPackageReader(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                .targetContext.assets.open("planar/contract.json").bufferedReader().use {it.readText()})
+            val built=PlanarPhotoBuilder().build(source,edited,"手修测试",reader.contract)
+            val reopened=reader.read(reader.write(built).inputStream())
+            assertArrayEquals(built.sourcePng,reopened.sourcePng)
+            val moving=reopened.layers.single {it.role=="face"}
+            val base=reopened.layers.single {it.id=="base"}
+            val later=PlanarAnimation.sample(reader.contract,2.7,0f,true)
+            assertArrayEquals(base.mesh.baseVertices(),PlanarMixer.vertices(base.mesh,later),0f)
+            val renderer=PlanarGlRenderer(reopened)
+            try {
+                renderer.initialize();renderer.resize(128,128);renderer.update(0f,true)
+                renderer.drawAt(0.0);val before=pixels(128,128)
+                renderer.drawAt(2.7);val after=pixels(128,128)
+                val changed=(16..28).sumOf {x->(40..84).count {y->
+                    before.color(x,y).zip(after.color(x,y)).any {(a,b)->kotlin.math.abs(a-b)>=12}
+                }}
+                assertTrue("Manually retained face pixels must visibly move, not only transparent vertices ($changed)",changed>=4)
+                for(x in 56..96)for(y in 48..76)assertArrayEquals("Unselected background must stay fixed",before.color(x,y),after.color(x,y))
+                assertTrue(moving.mesh.deltas().getValue("headX").any {it!=0f})
+            } finally {renderer.release()}
+        } finally {source.recycle()}
     }
 
     private fun layer(id: String, z: Int, texture: ByteArray, mesh: PlanarMesh) = PlanarLayer(id, "body", z.toDouble(), texture, mesh)

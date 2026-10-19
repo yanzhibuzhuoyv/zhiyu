@@ -42,6 +42,13 @@ class OcPhotoIdentityContextTest {
         assertFalse(SelfPortraitAttribution.confirmed("不像你"))
     }
 
+    @Test fun identityQuestionsNegationsAndReportedClaimsAreNotUserConfirmation() {
+        for (text in listOf("这不是你，这是别人的自画像", "你的画像在哪儿？", "他说这是你，但我不这么认为",
+            "你看这像你吗", "这是你？", "朋友说这就是你", "如果这是你会怎么样", "不是你的画像")) {
+            assertFalse(text, SelfPortraitAttribution.confirmed(text))
+        }
+    }
+
     @Test fun exactImportedOriginalIsKnownAsOwnOcEvenForATextOnlyModel() {
         var loads = 0
         val context = OcPhotoIdentityContext({ loads++; referenceBytes }) { raw, _ -> payload(raw) }

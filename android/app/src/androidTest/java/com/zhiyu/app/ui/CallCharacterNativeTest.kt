@@ -74,16 +74,22 @@ class CallCharacterNativeTest {
         compose.setContent { ZhiYuTheme {
             CharacterPreview(controller.callIdentity, OcMotion(), controller::source, Modifier.size(200.dp).testTag("call_photo_preview"))
         } }
-        waitForPhoto()
+        waitForPhoto(color)
         compose.onNodeWithText("先设定恋人的形象").assertDoesNotExist()
         val pixels = compose.onNodeWithTag("call_photo_preview").captureToImage().toPixelMap()
         assertEquals(color, pixels[pixels.width / 2, pixels.height / 2].toArgb())
     }
-    private fun waitForPhoto() {
+    private fun waitForPhoto(expectedColor: Int = color) {
         compose.waitUntil(10_000) { compose.onAllNodesWithText("形象准备中…").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithText("先设定恋人的形象").assertDoesNotExist()
         compose.onNodeWithText("形象暂时无法显示").assertDoesNotExist()
         compose.onNodeWithTag("call_photo_preview").assertExists()
+        // Bitmap readiness replaces the loading label before AndroidView has necessarily
+        // completed its first native draw. Await the real pixels, not an arbitrary sleep.
+        compose.waitUntil(10_000) {
+            val pixels = compose.onNodeWithTag("call_photo_preview").captureToImage().toPixelMap()
+            pixels[pixels.width / 2, pixels.height / 2].toArgb() == expectedColor
+        }
     }
     @Test fun anOpenCallUpdatesItsPictureWithoutDependingOnAnimationFrames() {
         val controller = runBlocking { controller(repository.import(chat, png())) }
@@ -97,7 +103,7 @@ class CallCharacterNativeTest {
             controller.connect(chat, reference(fresh), fresh.visualVersion)
         }
         assertEquals(before, controller.identity)
-        compose.waitForIdle(); waitForPhoto()
+        compose.waitForIdle(); waitForPhoto(0xff927043.toInt())
         val pixels = compose.onNodeWithTag("call_photo_preview").captureToImage().toPixelMap()
         assertEquals(0xff927043.toInt(), pixels[pixels.width / 2, pixels.height / 2].toArgb())
     }

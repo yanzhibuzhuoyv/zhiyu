@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.zhiyu.app.data.*
 import com.zhiyu.app.domain.CarePreferenceState
@@ -57,7 +58,7 @@ class CareController(
     fun enable() {
         if (!allowed()) { permissionDenied(); return }
         state = state.copy(enabled = true)
-        refresh()
+        refresh(activate = true)
     }
 
     fun disable(message: String? = null) {
@@ -78,7 +79,8 @@ class CareController(
         }
     }
 
-    fun refresh() {
+    fun refresh() = refresh(activate = false)
+    private fun refresh(activate: Boolean) {
         if (!state.enabled || !allowed()) { permissionDenied(); return }
         refreshJob?.cancel()
         val requestGeneration = ++generation
@@ -89,15 +91,21 @@ class CareController(
             try {
                 mutex.withLock {
                     if (requestGeneration != generation || !state.enabled) return@launch
-                    withContext(Dispatchers.IO) { store.save(state) }
+                    val persisted = withContext(Dispatchers.IO) {
+                        if (activate) store.setEnabled(true) else store.load().state
+                    }
+                    state = persisted
+                    if (!persisted.enabled) return@launch
                 }
                 val snapshot = weatherClient.fetch(location.current())
                 ensureActive()
                 mutex.withLock {
                     if (requestGeneration != generation || !state.enabled) return@withLock
                     if (!allowed()) { disable("定位权限已关闭，天气关心已暂停。"); return@withLock }
-                    val accepted = state.copy(weather = CareRules.weather(snapshot))
-                    withContext(Dispatchers.IO) { store.save(accepted) }
+                    val accepted = withContext(Dispatchers.IO) {
+                        store.publishWeatherIfEnabled(CareRules.weather(snapshot), System.currentTimeMillis() / 1000, ::allowed)
+                        store.load().state
+                    }
                     if (requestGeneration == generation) state = accepted
                 }
             } catch (_: TimeoutCancellationException) {
@@ -125,7 +133,7 @@ class CareController(
     fun calendarOpened() { error = null; notice = "已交给系统日历，请在那里确认保存。" }
     fun dismissFeedback() { error = null; notice = null }
 
-    private fun refreshIfDue() {
+    internal fun refreshIfDue() {
         val last = state.weather?.fetchedAt ?: 0L
         if (state.enabled && !busy && System.currentTimeMillis() / 1000 - last >= CareRules.REFRESH_INTERVAL_SECONDS) refresh()
     }
@@ -137,6 +145,11 @@ class CareController(
     val controller = remember(context.applicationContext, scope) { CareController(context, scope) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(controller) { controller.restore() }
+    LaunchedEffect(controller, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) { controller.refreshIfDue(); delay(60_000) }
+        }
+    }
     DisposableEffect(controller, lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {

@@ -82,24 +82,18 @@ class PlanarPhotoBuilder {
                 owner in 1..3 && plane.parents[owner] == 0 -> PlanarMotionMode.EXPRESSION
                 else -> PlanarMotionMode.CHARACTER
             }
-            PlanarLayer(spec.id, spec.role, spec.z, encode(texture, rectangle[2], rectangle[3]),
-                PlanarBasisFactory.create(rectangle, spec.role, draft.anchors, spec.pivot, spec.strength,
-                    plane.width, plane.height, contract, mode))
+            val mesh = PlanarBasisFactory.create(rectangle, spec.role, draft.anchors, spec.pivot, spec.strength,
+                plane.width, plane.height, contract, mode)
+            val constrained = if (spec.role == "face") PlanarMaskedHeadMotion.create(mesh, rectangle[2], rectangle[3],
+                ByteArray(texture.size) { if (Color.alpha(texture[it]) > 0) 1 else 0 }, spec.strength) else mesh
+            PlanarLayer(spec.id, spec.role, spec.z, encode(texture, rectangle[2], rectangle[3]), constrained)
         } }.sortedWith(compareBy({ it.z }, { it.id }))
-        val suggestedIndex = specs.indexOfFirst { it.id == PlanarHeadMotionSuggestion.ID && it.role == "face" }
-        val suggested = layers.firstOrNull { it.id == PlanarHeadMotionSuggestion.ID && it.role == "face" }
-        if (suggested != null) {
-            val faceMesh = PlanarLocalHeadMotion.create(suggested.mesh, specs[suggestedIndex].strength)
-            return layers.map { layer ->
-                when {
-                    layer.id == suggested.id -> layer.copy(mesh = faceMesh)
-                    (1..3).any { plane.parents[it] == suggestedIndex && specs[it].id == layer.id } ->
-                        layer.copy(mesh = PlanarLocalHeadMotion.inherit(layer.mesh, faceMesh))
-                    else -> layer
-                }
-            } to repaired
-        }
-        return layers to repaired
+        val faces = layers.filter { it.role == "face" }.associateBy { it.id }
+        return layers.map { layer ->
+            val feature = (1..3).firstOrNull { specs[it].id == layer.id }
+            val parent = feature?.let { plane.parents[it] }?.takeIf { it > 0 }?.let { faces[specs[it].id] }
+            if (parent == null) layer else layer.copy(mesh = PlanarLocalHeadMotion.inherit(layer.mesh, parent.mesh))
+        } to repaired
     }
 
     private fun assignRectangle(rect: PlanarRect, owner: Int, owned: ByteArray, subject: ByteArray, pixels: IntArray, width: Int) {

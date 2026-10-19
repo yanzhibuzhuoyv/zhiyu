@@ -38,7 +38,7 @@ object LocalCompanionPrompt {
             多条独立原文：<independent_memory>[$originals]</independent_memory>
             用户导入的独立文件节选：<knowledge>[$knowledge]</knowledge>
             ${RuntimeDialogueContext.render(runtime)}
-            ${if (careContext.isBlank()) "" else "已授权的当前天气事实（不要推断精确地址，也不强行每轮谈天气）：${quote(careContext.take(4000))}"}
+            ${if (careContext.isBlank()) "" else "天气能力与已授权的有效天气事实（不要推断精确地址，也不强行每轮谈天气）：${quote(careContext.take(4000))}"}
         """.trimIndent()
     }
     private fun quote(text: String): String = buildString {

@@ -13,6 +13,7 @@ class ChatPhotoStore(context: Context, private val processor: ChatPhotoImageProc
     private val media = LocalMediaStore(appContext)
     private val root = File(appContext.filesDir, "chat_photo_derivatives")
     private val draftPrefs = appContext.getSharedPreferences("zhiyu_chat_photo_draft", Context.MODE_PRIVATE)
+    internal val ownership = OcPhotoOwnershipStore(appContext)
     companion object { private val lock = Any() }
 
     fun import(uri: Uri): ChatImageDraft {
