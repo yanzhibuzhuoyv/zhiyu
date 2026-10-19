@@ -1,309 +1,304 @@
 # 知语 · ZhiYu
 
-原生 Android AI 伴侣应用，含端侧图像引擎（Qwen-Image 剪层/蒸馏）。本文件说明**如何从源码构建**与**用了哪些技术**；逐版变更见 [CHANGELOG.md](CHANGELOG.md)，整仓库结构见 [README-OVERVIEW.md](README-OVERVIEW.md)。
+**原生 Android AI 伴侣：持续聊天、原文记忆，以及属于同一个 OC 的声音与日常。**
 
----
+知语面向长期相处的人机恋与原创角色（OC）陪伴场景。选择 AI 服务商、填写自己的 API Key 后，在同一段对话中继续相处；聊天、记忆索引和角色素材由手机管理，模型请求通过 HTTPS 发往所选服务。
 
-## 一、仓库构成
+手机独立版无需运行电脑后端、Docker 或 USB 映射。“本地优先”指数据存储和部分推理在设备上完成；**云端聊天、联网天气和远程生图仍需要网络及相应服务权限。**
 
+[功能与边界](#功能与边界) · [快速使用](#快速使用) · [从源码构建](#从源码构建) · [端侧图像研究](#端侧图像研究) · [历史后端](#历史后端) · [验证记录](#验证记录) · [文档导航](#文档导航)
+
+## 功能与边界
+
+| 能力 | 当前实现 | 使用边界 |
+| --- | --- | --- |
+| 持续关系 | 单一聊天页面；API Key 验证；固定服务商、模型与恋人预设；自定义模式可继续调教 | 绑定作用于本次安装，不等于跨设备身份系统 |
+| 原文记忆 | 本机 SQLite 原话库、BGE INT8 语义检索与词项补查；保留作者、时间和消息 ID | 检索结果作为独立原文提供，不以融合摘要替代正文；召回和模型理解仍可能出错 |
+| 图文交流 | 连续发送、分段回复、图片识别、OC 参考与自拍／生活照库存 | 识图依赖模型能力；生成与审图需要可用的服务配置，人物一致性需检查 |
+| 声音与通话 | 端侧 ASR／TTS、可选音色及语速／音高调整、支持打断的语音通话链路 | 实际延迟、回声和听感受设备与模型响应影响 |
+| 通话看画面 | 0.2.18 增加摄像头开关和前后摄切换，每轮语音可携带当前一帧 | 需要视觉模型；属于单帧识图，尚不等于连续视频理解 |
+| 动态形象 | 基于用户图片的局部网格动画；保留背景，支持手动标注与修正 | 不是任意图片自动生成完整 Cubism 模型；遮挡和活动范围需要确认 |
+| 主动关心 | 按性格与互动安排主动联系、日常分享；授权后的天气与日历联动 | 后台执行受系统调度影响，厂商省电设置可能延迟通知 |
+| 界面与资料 | 水彩风格、描边气泡、头像与背景、字号调整，以及本机 TXT／MD／PDF／DOCX 导入 | 资料解析与图片 OCR 各有格式和容量限制 |
+
+各版本的实现、修复和未验证项见 [CHANGELOG](CHANGELOG.md)。摄像头、语音、动态形象的详细边界分别见[通话摄像头](docs/CALL_CAMERA_2026-10-19.md)、[语音通话](docs/DUPLEX_ANDROID_2026-10-15.md)和[手机动态形象教程](docs/LIVE2D_PHONE_GUIDE_ZH.md)。
+
+### 数据如何流转
+
+```mermaid
+flowchart LR
+    User[用户] <--> App[Android · Kotlin / Compose]
+    App <--> Local[本机原话库、语义索引与角色素材]
+    App <--> Voice[端侧语音识别与合成]
+    App -->|HTTPS · 所选 API Key| AI[聊天 / 视觉模型服务]
+    App -->|按需生成| Image[已配置的图像服务]
 ```
+
+- **本机保存**：聊天原文、检索索引、导入资料与 OC 素材。API Key 使用 Android Keystore / AES-GCM 加密保存。
+- **按请求发送**：当前输入、为本轮挑选的上下文，以及需要识图时的图片。使用云模型时，相应内容会交给所选服务处理。
+- **摄像头单独授权**：仅在用户开启摄像头并授权后取帧；通话帧仅短时保留在内存中，不写入图片库或聊天附件。挂断、关闭摄像头或退后台会使旧帧失效。
+
+记忆存档容量与模型上下文窗口是两回事：历史可以持续保存，每次请求仍需选择相关原文并控制输入预算。Android 与历史 Python 后端的 schema、迁移和排序算法也不等价，后端实验成绩不能直接视为手机端召回成绩。
+
+## 快速使用
+
+拿到适配设备的 APK 后：
+
+1. 安装到 **Android 8.0 / API 26 及以上**设备；覆盖升级时保持原签名，保留应用数据。
+2. 选择服务商和模型，填写自己的 API Key，完成验证与恋人设定。
+3. 按需导入 OC 图片、调整头像／背景和声音，再开始聊天。通知、定位、日历与摄像头在使用相关能力时授权。
+
+普通聊天与图像生成分别使用对应服务配置。只有聊天 Key，不代表图像服务已经配置完成。后台主动联系还需要手机允许知语后台运行；红米实测中的系统冻结问题与处理记录见 [USB 实机调试](docs/USB_REGRESSION_2026-10-19.md)。
+
+[GitHub Releases](https://github.com/yanzhibuzhuoyv/zhiyu/releases) 当前主要提供端侧图像研究的模型权重；APK 是否可下载，以实际发布附件为准。没有 APK 时，可按下文准备资源并构建。
+
+## 仓库结构
+
+```text
 zhiyu/
-├── android/            手机端主产品（Kotlin + Jetpack Compose），唯一功能实现
-├── backend/            Python 后端（FastAPI），已冻结为 legacy
-├── native/qwen-edge/   端侧图像引擎原生层（C++ / JNI / stable-diffusion.cpp 分支）
-├── rig2d/              参数化 2D 形象引擎（Kotlin/JVM 契约库，被 android 端以 JAR 引用）
-├── shared/             两端共享的行为契约（由脚本生成，构建时校验）
-├── scripts/            评测、冒烟、量化、打包与联调脚本
-├── qwen-image-edge/    上游实验工程：剪层与蒸馏的实验报告与工具
-├── compose*.yaml       Docker Compose 编排
-└── docs/               各功能的设计、验证与边界记录
+├── android/             手机端主产品：Kotlin、Jetpack Compose、本机存储与推理
+├── rig2d/               参数化 2D 形象与语音协调的可移植 Kotlin/JVM 核心
+├── native/qwen-edge/    端侧图像引擎：C++、JNI 与固定版本上游适配
+├── qwen-image-edge/     Qwen-Image 剪层、蒸馏、量化实验与交付说明
+├── shared/              共享行为契约与生成／一致性检查
+├── backend/             历史 FastAPI 服务、兼容代码与研究工具
+├── scripts/             资源准备、打包、评测与联调脚本
+├── docs/                设计、操作指南、测试结果与已知边界
+└── compose*.yaml        历史后端的 Docker 编排
 ```
 
----
+架构导览见 [README-OVERVIEW](README-OVERVIEW.md)；具体能力与构建要求以当前源码、CHANGELOG 和对应专题文档为准。
 
-## 二、Android 端构建
+## 从源码构建
 
-### 2.1 环境要求
+以下命令以 **Windows PowerShell** 为例。先准备被构建脚本校验的模型与原生产物，再运行 Gradle；全新克隆并不包含所有必需资源。
 
-| 组件 | 版本 | 说明 |
-|------|------|------|
-| JDK | 17 | `sourceCompatibility` / `targetCompatibility` = 17 |
-| Android SDK Platform | **android-36** | `compileSdk = 36` |
-| Android NDK | **30.0.16248370** | `ndkVersion` 已锁定；ABI 过滤 `arm64-v8a` / `armeabi-v7a` / `x86_64` |
-| Gradle | 9.5.0 | 由 wrapper 自动下载 |
-| Android Gradle Plugin | 9.3.0 | |
-| Kotlin | 2.3.21 | 含 Compose 编译器插件 |
-| CMake + Ninja | — | 仅在需要重新编译 JNI 时用到 |
+### 1. 开发环境
 
-`android/local.properties` 需指向 SDK（该文件不入库）：
+| 项目 | 配置 |
+| --- | --- |
+| 构建 JDK | 已验证环境使用 JDK 23；所选 JDK 需满足 Gradle / AGP 的兼容要求 |
+| Java 目标字节码 | 17，见 `sourceCompatibility` / `targetCompatibility` |
+| Android SDK | `compileSdk = 36`、`targetSdk = 36`、`minSdk = 26` |
+| Android NDK | `30.0.16248370`，重新编译 JNI 时使用 |
+| Gradle / AGP | Wrapper `9.5.0` / Android Gradle Plugin `9.3.0` |
+| Kotlin / Compose | Kotlin Compose 插件 `2.3.21`，Compose BOM `2026.06.01` |
+| Python | 3.11+，用于资源准备和共享契约检查；`python` 需可从命令行调用 |
+| CMake / Ninja | 重新编译 JNI 时需要；使用与脚本配置一致的工具链 |
+
+```powershell
+git clone https://github.com/yanzhibuzhuoyv/zhiyu.git
+cd zhiyu
+$env:PYTHONUTF8 = '1'
+```
+
+在 `android/local.properties` 中配置本机 SDK 路径，文件不提交：
 
 ```properties
-sdk.dir=C\:\\Users\\<你>\\AppData\\Local\\Android\\Sdk
+sdk.dir=C:/Users/你的用户名/AppData/Local/Android/Sdk
 ```
 
-### 2.2 构建命令
+### 2. 准备模型与原生产物
+
+`artifacts/` 位于**仓库根目录**，默认被 Git 忽略。构建脚本从 `android/` 看它时，路径写作 `../artifacts/`。
+
+| 资源位置 | 用途 | 准备入口 |
+| --- | --- | --- |
+| `artifacts/native-voice/` | sherpa-onnx AAR、中文流式 ASR 与 TTS 模型 | [prepare_native_voice.py](scripts/prepare_native_voice.py)；下载并校验固定公开文件 |
+| `artifacts/portrait-models/u2netp.onnx` | 保留的人像处理模型 | [prepare_portrait_model.py](backend/prepare_portrait_model.py)，需指定 `--output` |
+| `artifacts/semantic-models/` | BGE INT8、词表与配置／manifest | [prepare_semantic_model.py](backend/prepare_semantic_model.py)，需 `--source` 指定匹配的源模型目录；见[语义编码器说明](docs/LOCAL_SEMANTIC_ENCODER.md) |
+| `artifacts/native-media-seed/` | 安装包内保留的两张示例图片与清单 | [prepare_native_media.py](scripts/prepare_native_media.py)；依赖既有源素材和授权清单，不会自动补齐所有素材 |
+| `artifacts/model-packs/qwen-edge/manifest.json` | 离线图像模型包清单 | [模型打包工具](scripts/package_qwen_model.py)与[端侧接入说明](docs/QWEN_EDGE_NATIVE_PORT_2026-10-11.md) |
+| `artifacts/android-qwen-jni/r2/jniLibs/` | Qwen 文本／图像 JNI 动态库 | [JNI 构建脚本](native/qwen-edge/android-jni/build.py)，需要 NDK、CMake 和已准备的上游源码 |
+| `android/app/libs/rig2d-0.2.0-studio.jar` | 角色动画与语音协调核心 | **已入库**；源码在 [rig2d/](rig2d/)，构建时仍校验 SHA-256 |
+
+这些入口有不同前置条件，不能把它们当作一条自动下载全部资源的安装命令。完整的大权重、部分源素材和准备好的上游源码需要另外取得。不要把 API Key、私人图片、聊天备份或权重提交到仓库。
+
+构建前会检查模型、JNI、JAR 和共享契约的一致性。修改这些输入时，应同步更新匹配的校验与验证记录；跳过校验不能解决版本不匹配。
+
+<details>
+<summary>构建期校验入口</summary>
+
+| Gradle task | 检查对象 |
+| --- | --- |
+| `verifyPlanarCore` | rig2d JAR 与 `assets/planar/contract.json` |
+| `verifyQwenJni` | arm64-v8a / x86_64 的四个 Qwen JNI `.so` |
+| `prepareQwenAssets` | 图像模型包 manifest |
+| `preparePortraitAssets` | U2NetP 模型 SHA 与仅含两张图片的素材打包策略 |
+| `prepareSemanticAssets` | BGE INT8、词表、配置与 manifest 的 SHA |
+| `prepareVoiceAssets` | 语音模型文件及 sherpa-onnx AAR 的 SHA |
+| `verifyCompanionContract` | 执行 `python shared/generate_companion_contract.py --check` |
+| `prepareQwenTestAssets` 等测试资源任务 | 仪器测试所需的固定 checkpoint 与合成素材 |
+
+</details>
+
+### 3. 构建与测试
+
+资源准备完成后：
 
 ```powershell
 cd android
-.\gradlew.bat :app:assembleDebug              # debug APK
-.\gradlew.bat :app:assembleRelease            # release APK（R8 混淆已开启）
-.\gradlew.bat :app:testDebugUnitTest          # JVM 单元测试
-.\gradlew.bat :app:connectedDebugAndroidTest  # 设备/模拟器上的仪器测试
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug
+.\gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest
 ```
 
-ABI 分包已启用（`splits.abi`），产物在 `android/app/build/outputs/apk/`，同时生成 universal APK。
+APK 输出到 `android/app/build/outputs/apk/`。已启用 ABI 分包，并生成 universal APK；手机安装时选择匹配的架构。
 
-> release 构建支持 `-PzhiyuBackendUrl=https://你的域名` 注入后端地址；**非 HTTPS 会被拒绝构建**。
+仪器测试应在**专用模拟器或测试机**运行，避免对日常使用、存有私人数据的安装直接执行整套测试：
 
-### 2.3 构建前置：模型与原生产物
+```powershell
+.\gradlew.bat :app:connectedDebugAndroidTest
+```
 
-`app/build.gradle.kts` 里多个自定义 task 挂在 `preBuild` 上，它们**从仓库外的 `../artifacts/` 读取模型与原生库并做 SHA-256 硬校验，校验失败即中断构建**。全新克隆后必须先准备这些产物：
+Release 使用 `:app:assembleRelease`，已开启 R8；正式分发还需配置发布签名。当前手机独立版直接调用模型服务，不需要通过构建参数填入电脑后端地址。
 
-| 目录 | 内容 | 来源 |
-|------|------|------|
-| `artifacts/native-voice/` | sherpa-onnx 1.13.8 AAR、multi-zh 流式 ASR（int8 encoder 66.9MB）、vits-icefall-zh-aishell3 中文 TTS | `scripts/prepare_native_voice.py`（从 k2-fsa/sherpa-onnx 官方 release 固定版本下载） |
-| `artifacts/portrait-models/` | `u2netp.onnx` 人像分割 | `backend/prepare_portrait_model.py`（固定 URL + SHA） |
-| `artifacts/semantic-models/` | `bge-small-zh-v1.5-int8.onnx` + 词表 + manifest | `backend/prepare_semantic_model.py`（BAAI/bge-small-zh-v1.5，固定 revision） |
-| `artifacts/native-media-seed/` | 打包进 APK 的示例素材 | `scripts/prepare_native_media.py` |
-| `artifacts/model-packs/qwen-edge/` | Qwen 图像模型包 manifest | `scripts/package_qwen_model.py` |
-| `artifacts/android-qwen-jni/r2/jniLibs/` | `libzhiyu_qwen_text_jni.so`、`libzhiyu_qwen_image_jni.so` | `native/qwen-edge/android-jni/build.py` |
+<details>
+<summary>主要 Android 依赖</summary>
 
-模型准备脚本只做「固定版本 + 哈希校验」的下载与导出，不执行下载来的源码。
+| 依赖 | 当前版本／来源 | 用途 |
+| --- | --- | --- |
+| Activity Compose | 1.13.0 | 原生 Activity 与 Compose 入口 |
+| Material 3 / Compose UI | Compose BOM 管理 | 聊天与设置界面 |
+| Lifecycle Compose | 2.10.0 | ViewModel 与生命周期 |
+| Kotlin Coroutines | 1.10.2 | 异步任务与取消 |
+| OkHttp | 5.4.0 | HTTPS 模型请求 |
+| CameraX | 1.6.2 | 通话预览与单帧采集 |
+| WorkManager | 2.12.0 | 后台联系与索引任务 |
+| ONNX Runtime Android | 1.30.0 | 本机语义与图像推理 |
+| sherpa-onnx | 本地 1.13.8 AAR | 语音识别与合成 |
+| ExifInterface / ML Kit 中文 OCR | 1.4.2 / 16.0.1 | 图片方向与文字提取 |
+| PDFBox Android | 2.0.27.0 | PDF 资料解析 |
+| rig2d | 本地 0.2.0 JAR | 形象网格与语音协调 |
 
-**接入但不在本仓库的依赖**：`android/app/libs/rig2d-0.2.0-studio.jar`（角色动画 2D 网格核心，来自同级 `../rig2d` 工程，SHA-256 `0b0d161e…`，构建时由 `verifyPlanarCore` 校验）。缺这个 jar 无法构建。
+准确依赖与锁定值见 [app/build.gradle.kts](android/app/build.gradle.kts)。
 
-### 2.4 构建期完整性校验
+</details>
 
-这些 task 会在构建前强制校验，任何一个哈希不匹配都会**直接失败而不是警告**：
+### 4. 单独开发 rig2d
 
-| task | 校验对象 |
-|------|---------|
-| `verifyPlanarCore` | `rig2d-0.2.0-studio.jar`、`assets/planar/contract.json` |
-| `verifyQwenJni` | 4 个 Qwen JNI `.so`（arm64-v8a / x86_64） |
-| `prepareQwenAssets` | Qwen 模型包 `manifest.json` |
-| `preparePortraitAssets` | `u2netp.onnx` + 示例素材（仅允许 2 张图入包） |
-| `prepareSemanticAssets` | BGE int8 onnx、`vocab.txt`、`config.json`、`tokenizer_config.json`、`manifest.json` |
-| `prepareVoiceAssets` | 12 个语音模型文件 + sherpa AAR |
-| `prepareQwenTestAssets` | 公开测试 checkpoint（长度 262288 字节） |
-| `verifyCompanionContract` | 执行 `python shared/generate_companion_contract.py --check`，保证两端契约一致 |
-
-> 设计意图：模型件、原生库、契约都属于「供应链输入」，任何一个被替换都让构建失败，避免静默地用错权重出图。
-
-### 2.5 Android 依赖清单
-
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| `androidx.compose:compose-bom` | 2026.06.01 | Compose 版本统一约束 |
-| `androidx.activity:activity-compose` | 1.13.0 | Compose Activity 入口 |
-| `androidx.compose.material3:material3` | BOM 托管 | Material 3 |
-| `androidx.compose.material:material-icons-extended` | BOM 托管 | 扩展图标 |
-| `androidx.lifecycle:lifecycle-viewmodel-compose` | 2.10.0 | ViewModel 集成 |
-| `androidx.lifecycle:lifecycle-runtime-compose` | 2.10.0 | `collectAsStateWithLifecycle` |
-| `org.jetbrains.kotlinx:kotlinx-coroutines-android` | 1.10.2 | 协程 |
-| `com.squareup.okhttp3:okhttp` | 5.4.0 | 直连各家 AI 服务的 HTTPS 客户端 |
-| `androidx.exifinterface:exifinterface` | 1.4.2 | 图片方向元数据 |
-| `com.google.mlkit:text-recognition-chinese` | 16.0.1 | 图片中文 OCR |
-| `androidx.work:work-runtime-ktx` | 2.12.0 | 后台任务调度 |
-| `com.microsoft.onnxruntime:onnxruntime-android` | 1.30.0 | 端侧 ONNX 推理（BGE 语义、u2netp 人像） |
-| `com.tom-roush:pdfbox-android` | 2.0.27.0 | 资料导入解析 PDF |
-| `sherpa-onnx` AAR（本地） | 1.13.8 | 端侧 ASR + TTS |
-| `rig2d-0.2.0-studio.jar`（本地） | 0.2.0 | 角色网格动画核心 |
-| `junit:junit` | 4.13.2 | JVM 单元测试 |
-| `androidx.test.ext:junit` | 1.3.0 | 仪器测试 |
-
-### 2.6 rig2d：Android 依赖的纯 JVM 契约库
-
-`android/app/libs/rig2d-0.2.0-studio.jar` 来自本仓库的 `rig2d/`。它是**纯 JVM 模块，不需要 Android SDK / NDK / 真机即可全绿跑测试**，与 Android 侧的对接方式见 `rig2d/docs/PORTING.md`。
-
-| 项 | 值 |
-|---|---|
-| Kotlin | 2.3.21（`kotlin("jvm")`） |
-| 目标字节码 | JVM 17（与 android 端 `VERSION_17` 对齐） |
-| 依赖 | `kotlinx-coroutines-core:1.10.2` |
-| 测试 | JUnit 4.13.2 + `kotlinx-coroutines-test`；JaCoCo 0.8.13 |
-| 产物 | `build/libs/rig2d-0.2.0-studio.jar` |
+rig2d 是纯 Kotlin/JVM 核心，测试不依赖 Android SDK、NDK 或手机：
 
 ```powershell
 cd rig2d
-.\gradlew.bat test jacocoTestReport jar    # 测试 + 覆盖率 + 打包 JAR
-.\gradlew.bat duplexFixture                # 合成 PCM/ASR/LLM/TTS 复演（不录麦克风）
-.\gradlew.bat partsFixture                 # 重放冻结的合成 12 翼素材
+.\gradlew.bat test jacocoTestReport jar
+.\gradlew.bat duplexFixture
+.\gradlew.bat partsFixture
 python -m unittest discover -s probe/tests -v
 python -m unittest discover -s tools/tests -v
 ```
 
-**注意两点**：
+`duplexFixture` 使用合成语音链路，不录制麦克风。JAR 排除了使用宿主 ImageIO 的演示驱动，也不包含 Python 工坊或语音模型。修改核心后，需按 [PORTING](rig2d/docs/PORTING.md) 同步 Android 使用的 JAR、契约与校验值。
 
-1. `build.gradle.kts` **刻意不声明 java toolchain**。声明 toolchain 17 会让 Gradle 去下载 JDK，本机未配置 toolchain 仓库时会直接构建失败；因此改为用当前 JDK 编译、把 `jvmTarget` 固定为 17。所以用 **JDK 17 及以上**即可，不需要额外的 toolchain 配置。
-2. 打出的 JAR **只含可移植核心**：`tasks.jar` 排除了 `rig2d/voice/demo/**` 与 `rig2d/parts/demo/**`（含 Java ImageIO 的宿主专用驱动），JaCoCo 覆盖率统计也排除这两者。它**不含** Python、Web 工坊、分割模型或语音模型。
-3. `partsFixture` 依赖 `rig2d/artifacts/parts-fixture-2026-10-13-r1`（合成素材，约 2.5 MB）。该目录已入库；但**根 `.gitignore` 的 `artifacts/` 规则会忽略整个 `artifacts/`**，因此更新这些素材时需要用 `git add -f`。
+## 端侧图像研究
 
-Android 侧另有 `verifyPlanarCore` 校验 `rig2d-0.2.0-studio.jar` 与 `assets/planar/contract.json` 的 SHA-256；改库后必须同步契约并重跑回归，不能只替换文件。
+[qwen-image-edge/](qwen-image-edge/) 记录 Qwen-Image 的剪层、蒸馏学生和 GGUF 量化实验；Android 接入代码位于 [native/qwen-edge/](native/qwen-edge/)。它与远程图像服务是不同实现路径，某个实验能出图不代表所有手机都已具备相同速度、内存表现或编辑能力。
 
----
+| 路线 | 取舍 | 适用范围 |
+| --- | --- | --- |
+| L36 | 保留完整层数，作为质量与编辑对照 | 基线验证 |
+| L24 | 减少编码器层数，发布配置保留视觉塔 | 需要参考图与编辑能力的研究路径 |
+| 蒸馏学生 0.6B / 1.7B + 适配器 | 更小的文本编码器，需与匹配的适配器使用 | 当前主要验证文生图，不能直接沿用教师的编辑能力结论 |
 
-## 三、后端构建（legacy）
+**为什么选 L24，而不是更深的 L28？** 在已有的全身扩图对照中，L24 为 6/6，L28 为 0/6；另一次 1024² 画风检查中，L24 为 11/12，L20 为 4/12。因此当前选型依据是实际出图和编辑测试，不只看表示余弦。这些结果属于对应任务与样本，不是所有提示词的画质保证。
 
-### 3.1 环境要求
+- [文本编码器剪层实验](qwen-image-edge/实验一报告-文本编码器剪层.md)
+- [L36 / L28 / L24 六种子确认实验](qwen-image-edge/剪层确认实验报告-L36-L28-L24-6seed.md)
+- [蒸馏实验](qwen-image-edge/实验二报告-蒸馏.md)
+- [模型交付清单、体积账本与复现入口](qwen-image-edge/交付说明.md)
+- 下载：[L24 编码器](https://github.com/yanzhibuzhuoyv/zhiyu/releases/tag/te-encoder-L24) · [蒸馏学生](https://github.com/yanzhibuzhuoyv/zhiyu/releases/tag/distill-students)
 
-Python **3.11+**，SQLite **≥3.43**（需 FTS5）。依赖锁定在 `backend/uv.lock`，用 [uv](https://docs.astral.sh/uv/) 管理。
+编码器、适配器及 DiT / VAE 的文件体积应分开比较；模型包磁盘大小也不等于手机推理时的峰值内存。
 
-### 3.2 运行与测试
+重新编译 JNI 时，脚本需要显式路径，例如在仓库根目录运行：
 
 ```powershell
-.\scripts\Start-Backend.ps1          # 启动（默认 127.0.0.1:8790）
-.\scripts\Start-Backend.ps1 -Demo    # 无 Key 本地演示
+python native/qwen-edge/android-jni/build.py `
+  --ndk "<NDK目录>" `
+  --cmake "<cmake.exe路径>" `
+  --llama "<已准备的llama源码目录>" `
+  --sd "<已准备的diffusion源码目录>" `
+  --output artifacts/android-qwen-jni/r2
 ```
 
-API 文档 <http://127.0.0.1:8790/docs>，健康检查 <http://127.0.0.1:8790/health>。
+上游版本与补丁由 [upstream-lock.json](native/qwen-edge/diffusion/upstream-lock.json) 固定。构建会审计 JNI 导出、动态依赖与 16 KiB 对齐；输出与已有产物不同时，需先核对来源及校验，不能直接覆盖已冻结的模型或库。
+
+## 历史后端
+
+`backend/` 保留 FastAPI 服务、早期部署与研究工具。手机独立版不依赖此服务；旧后端检索采用 FTS5 / BM25，手机端采用本机 BGE 语义检索与 FTS4 补查。后端的测试与数据库不能替代 Android 验证。
+
+历史启动入口：
+
+```powershell
+# 在仓库根目录执行，默认仅监听 127.0.0.1:8790
+.\scripts\Start-Backend.ps1
+.\scripts\Start-Backend.ps1 -Demo
+```
+
+启动后可访问 [API 文档](http://127.0.0.1:8790/docs)与[健康检查](http://127.0.0.1:8790/health)。基础环境为 Python 3.11+、SQLite ≥ 3.43（需 FTS5）；依赖由 `backend/uv.lock` 锁定，`semantic`、`portrait` 为可选功能依赖。
 
 ```powershell
 cd backend
 uv sync --frozen --extra dev
-uv run --no-sync pytest --cov=app --cov-report=term-missing
 uv run --no-sync ruff check app tests
+# 完整测试还需准备所选测试涉及的可选依赖与资源
+uv run --no-sync pytest --cov=app --cov-report=term-missing
 ```
 
-Docker：
+Docker 仍可用于历史服务和隔离测试：
 
 ```powershell
+# 在仓库根目录执行
 docker compose up --build -d --wait
-.\scripts\Test-Docker.ps1            # 独立容器测试
+.\scripts\Test-Docker.ps1
 ```
 
-`backend/Dockerfile` 分 `base` / `test` / `runtime` 三阶段；`runtime` 阶段在镜像构建时执行 `prepare_portrait_model.py` 预置模型，**不在请求路径上下载模型**。Compose 已设 `cap_drop: ALL`、`no-new-privileges`、`pids_limit: 256`。
+镜像、数据卷与测试用法见 [Docker 文档](docs/DOCKER.md)，旧 USB／电脑后端接入见[历史 Android 后端说明](docs/ANDROID_BACKEND_LEGACY.md)。
 
-### 3.3 后端依赖
+## 验证记录
 
-| 依赖 | 版本约束 | 用途 |
-|------|---------|------|
-| `fastapi` | ≥0.115,<1 | HTTP 服务 |
-| `uvicorn[standard]` | ≥0.34,<1 | ASGI 服务器 |
-| `httpx` | ≥0.28,<1 | 调用外部 AI 服务 |
-| `python-multipart` | ≥0.0.20,<1 | 表单 / 文件上传 |
-| `pypdf` | ≥6.18,<7 | PDF 资料解析 |
-| `python-docx` | ≥1.2,<2 | DOCX 资料解析 |
-| `pillow` | ≥12.3,<13 | 图片处理 |
-| `tzdata` | ≥2026.5,<2027 | 时区数据 |
+以下是对应版本已记录的验收结果，**不是当前工作区的实时 CI 状态**。新增功能、未提交改动和不同设备需要另行验证。
 
-可选 extras：`dev`（pytest / pytest-asyncio / pytest-cov / ruff）、`semantic`（sentence-transformers）、`portrait`（numpy / onnxruntime）。
+| 对象 | 记录结果 | 证据与边界 |
+| --- | --- | --- |
+| Android 0.2.18 | 965 JVM / 145 suites；495 Native / 98 类；lint 0 Error | [通话摄像头报告](docs/CALL_CAMERA_2026-10-19.md)；模拟器与合成／假摄像头验证，真实手机画质和热节流待验证 |
+| Android 0.2.17 | 948 JVM；481 Native；lint 0 Error | [反馈 47–49](docs/FEEDBACK_47_49_2026-10-19.md) |
+| 红米 Turbo 3 · 0.2.17 | 同秒报时、真实自拍附件、保存后的局部动画，以及一次后台主动通知 | [USB 实机记录](docs/USB_REGRESSION_2026-10-19.md)；不等于整夜到达率或所有 OC 均通过 |
 
----
+旧 README 还记录过 2026-10-16 的后端克隆验证：892 项通过、当时覆盖率 95%、Ruff 通过。该数字仅保留为历史记录；依赖、测试范围和源码变化后，应以重新运行的结果为准。
 
-## 四、原生层构建（端侧图像引擎）
+模型效果、长对话记忆、声音听感和真实手机稳定性是不同维度。测试数量不能替代实际场景质量；对应研究过程与失败记录保留在 `docs/` 中。
 
-### 4.1 剪层选型：为什么停在 L24
+## 常见问题
 
-文本编码器 Qwen3-VL-8B 有 36 层，剪层就是直接把第 j 层隐状态喂给 DiT（零训练）。取舍点不在余弦——余弦掉到 0.25 时 512² 文生图画面依然成立——而在两条实测：
+| 问题 | 检查方向 |
+| --- | --- |
+| 新克隆无法构建 | 先核对根目录 `artifacts/` 的模型、种子素材和 JNI；仓库源码不包含全部准备资源 |
+| `SDK location not found` | 检查 `android/local.properties` 和已安装 SDK |
+| `* SHA mismatch` / 契约校验失败 | 对照 Gradle 中的固定文件与来源；同步匹配版本，不跳过校验 |
+| 模型包已经下载，但不能生成 | 核对完整清单、适配器、运行时与设备能力；单独的编码器并非完整生图模型 |
+| 摄像头已开，恋人仍看不到 | 检查摄像头权限、视觉模型支持、当前帧是否可用；见[摄像头说明](docs/CALL_CAMERA_2026-10-19.md) |
+| 后台没有主动消息 | 检查通知、自启动与应用省电策略，以及人格间隔；见[实机调试](docs/USB_REGRESSION_2026-10-19.md) |
+| 动态形象画面正常但不动 | 检查图层类型、头部活动范围、擦除与幅度；按[教程](docs/LIVE2D_PHONE_GUIDE_ZH.md)预览并保存 |
+| GitHub 推送或 Release 上传失败 | 分别检查 DNS、TLS、代理与 `github.com` / `api.github.com` / `uploads.github.com` 的连通性；单个域名可访问不足以确认故障原因 |
 
-- **L28 不能用**：编辑任务（扩图到全身）6 个 seed 全灭，而更浅的 L24 是 6/6，属任务特异性塌陷（Fisher p = 0.0022）。L28 又只比 L36 省 0.77 B，L24 能省 2.32 B —— 既不更省也不更好，被 L24 严格支配。
-- **更浅不行**：1024² 二次元画风检验里 L24 是 11/12，L20 崩到 4/12。
+若使用系统代理，先确认当前实际地址，再为单次 Git 命令配置；不要假定本机代理端口固定，也不要为了排障关闭 TLS 校验。
 
-所以 L24 是当前的安全线：比 L36 省 2.32 B 参数 / 1.16 GB（int4），画质与编辑能力与 L36 打平。它保留了视觉塔，因此还能图生图与编辑；蒸馏到 0.6B/1.7B 学生后编辑能力会丢，只做文生图时才用学生。依据见 `qwen-image-edge/实验一报告-文本编码器剪层.md` 与 `剪层确认实验报告-L36-L28-L24-6seed.md`。
+## 文档导航
 
-### 4.2 原生层构建与上游锁定
+| 想了解什么 | 入口 |
+| --- | --- |
+| 版本功能与修复 | [CHANGELOG](CHANGELOG.md) |
+| 仓库总览 | [README-OVERVIEW](README-OVERVIEW.md) |
+| 语义编码器与本机记忆生命周期 | [本机编码器](docs/LOCAL_SEMANTIC_ENCODER.md) · [记忆生命周期](docs/NATIVE_MEMORY_LIFECYCLE.md) |
+| 原文、压缩与历史容量研究 | [正文存储](docs/BODY_STORAGE.md) · [冷归档实测](docs/MEMORY_COLD_PROOF.md) |
+| 召回顺序与论文参考实验 | [检索顺序 A/B](docs/MEMORY_RETRIEVAL_ORDER_EVAL.md) · [VoiceMem 研究与 A/B](docs/VOICEMEM_RESEARCH_AND_AB_2026-10-15.md) |
+| OC、声音、权限与通话 | [动态形象教程](docs/LIVE2D_PHONE_GUIDE_ZH.md) · [本地语音](docs/LOCAL_VOICE_NATIVE.md) · [天气与日历](docs/CARE_FEATURES.md) · [摄像头](docs/CALL_CAMERA_2026-10-19.md) |
+| 端侧图像引擎 | [交付说明](qwen-image-edge/交付说明.md) · [Android 原生接入](docs/QWEN_EDGE_NATIVE_PORT_2026-10-11.md) |
 
-原生层对 stable-diffusion.cpp 的**固定分支**做适配，锁定信息在 `native/qwen-edge/diffusion/upstream-lock.json`：
+## 来源与许可
 
-| 项 | 值 |
-|---|---|
-| 上游 | `github.com/leejet/stable-diffusion.cpp` |
-| commit | `2988060a4338a5dcd94721c964a8e87003c1ac8b` |
-| ggml 子模块 | `d25b121ce1d6ae0c7e62ad080460d9fc1e46dd93` |
-| 补丁 SHA-256 | `9bf82bfd37dd1ffd5df28fd32e0a3948ae10ab8f086c886496c01203f300cc95` |
+本项目为个人学习与自用项目，非任何 AI 服务商或机构的官方产品。调用第三方服务需要使用者自己的 API Key，服务费用与授权范围由对应服务决定。
 
-编译 JNI 动态库（产出 `artifacts/android-qwen-jni/`，并自动 audit 导出符号与依赖）：
+Qwen-Image-2.1-Turbo 的衍生权重遵循随附的 [Qwen Research License](qwen-image-edge/LICENSE-Qwen-Image-2.1-Turbo)，其他模型、代码和素材分别保留其来源及许可说明。使用和分发前应阅读对应许可；仓库包含某项资源或研究代码，不代表已取得其所有使用场景的授权。
 
-```powershell
-python native\qwen-edge\android-jni\build.py
-```
-
-原生层目录：`adapter/`（适配器推理）、`diffusion/`（采样与 VAE 设备端分阶段）、`android-jni/`（JNI 导出与输入契约）、`student/`。
-
-端侧图像引擎的**上游实验工程**在 `qwen-image-edge/`：剪层（L24/L36）、蒸馏学生（Qwen3-0.6B/1.7B + 适配器）、GGUF 量化。交付清单与体积账本见 [qwen-image-edge/交付说明.md](qwen-image-edge/交付说明.md)，工具链在 `qwen-image-edge/tools/`。
-
-模型权重不入库，发布在本仓库 Release（`te-encoder-L24`、`distill-students`）。
-
----
-
-## 五、常见构建问题
-
-| 现象 | 原因与处理 |
-|------|-----------|
-| `Qwen JNI SHA mismatch` / `Voice model SHA mismatch` / `Portrait model SHA256 mismatch` | `../artifacts/` 下的模型件被替换或缺失，按第 2.3 节重新准备 |
-| `Planar core/contract SHA mismatch` | `rig2d-0.2.0-studio.jar` 缺失或被改动；改库必须同步 `contract.json` 并重跑回归 |
-| `Semantic asset SHA256 mismatch` | BGE int8 导出件不匹配，重跑 `backend/prepare_semantic_model.py` |
-| `SDK location not found` | 缺 `android/local.properties` |
-| `NDK not configured` / 找不到 `30.0.16248370` | 用 SDK Manager 安装对应 NDK 版本 |
-| 找不到 `libzhiyu_qwen_*.so` | 先跑 `native/qwen-edge/android-jni/build.py` |
-| `verifyCompanionContract` 失败 | 两端契约不同步，跑 `python shared/generate_companion_contract.py` 重新生成 |
-| 中文乱码 | 构建脚本与 Python 均依赖 UTF-8；PowerShell 下先设 `$env:PYTHONUTF8='1'` |
-
----
-
-## 六、构建验证记录
-
-### 6.1 实测数据
-
-下列命令是在**本仓库 GitHub 上的实际克隆**中执行通过的，不是纸面推导（2026-10-16 实测）：
-
-```
-克隆：git clone --depth 1 --branch master https://github.com/yanzhibuzhuoyv/zhiyu.git
-      → backend/tests 共 51 个测试文件
-
-cd backend
-uv sync --frozen --extra dev
-  → exit 0，依赖按 uv.lock 完整安装
-
-uv run --no-sync pytest --cov=app --cov-report=term-missing
-  → 892 passed, 1 warning in 156.50s
-  → app 覆盖率 TOTAL 4630 stmts / 252 miss = 95%
-
-uv run --no-sync ruff check app tests
-  → All checks passed!
-
-python shared/generate_companion_contract.py --check
-  → companion contract verified:
-    7fae113eebdaf8075382978a45afe2463008b4cb5a2ec382d1ddc75354d3a937
-```
-
-> **Android 端未在此环境实测**：`app/build.gradle.kts` 的 `preBuild` 依赖仓库外的 `../artifacts/`（Qwen JNI、u2netp、BGE int8、sherpa 语音件、rig2d jar），本机虽已具备这些文件，但重新生成 JNI 需要完整 CMake/NDK 工具链，未在本轮验证。第 2.3 / 2.4 节描述的是构建脚本的**实际约束**（哈希与路径均取自源码），准备齐产物后即可按 2.2 节构建。
-
-### 6.2 推送与网络
-
-若 `git push` 报 `Failed to connect to github.com port 443`（或 `Recv failure: Connection was reset`），
-但 `https://api.github.com` 能正常返回，说明是**针对 `github.com` 这一个域名的 SNI/IP 阻断**：
-TCP 握手可能成功，TLS 阶段被重置；同域名的其他 IP 往往仍然可用。
-
-此时改走本机代理即可。**代理端口由客户端每次启动时分配，不是固定值**（实测同一台机器上出现过
-`63900` 与 `63048` 两个端口），所以先读出当前端口，再拼给 git：
-
-```powershell
-# 读取当前系统代理地址（形如 127.0.0.1:63048）
-$proxy = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyServer
-$proxy
-
-git -c http.proxy=http://$proxy push origin master
-```
-
-长期生效（注意端口会变，重设一次即可）：
-
-```powershell
-git config --global http.proxy "http://$proxy"
-```
-
-Release 附件上传（`gh release upload`）走 `uploads.github.com`，受同一阻断影响；同样可先设
-`$env:HTTPS_PROXY = "http://$proxy"` 再执行。
-
-> 排查顺序建议：① 先确认 `https://api.github.com` 是否可达（可达就说明是单域名阻断，不是断网）；
-> ② 读系统代理端口并走代理；③ 若仍失败，再用 `curl --resolve github.com:443:<可达IP>` 验证
-> 是否只是该 IP 被墙，而不是整站不可用。
-
----
-
-## 七、免责声明
-
-- 本项目为个人学习与自用项目，**非任何公司或机构的官方产品**，未用于任何商业用途。
-- 应用访问第三方 AI 服务需自备 API Key，费用与合规由使用者承担。
-- 端侧图像引擎的权重衍生于 Qwen-Image-2.1-Turbo（**Qwen Research License**），许可副本见 `qwen-image-edge/LICENSE-Qwen-Image-2.1-Turbo`；依其第 31 条标注 **Built with Qwen / Improved using Qwen**。
-- 使用本项目产生的任何后果由使用者自行承担。
+**Built with Qwen. Improved using Qwen.**
