@@ -260,22 +260,33 @@ python shared/generate_companion_contract.py --check
 
 ### 6.2 推送与网络
 
-若 `git push` 报 `Failed to connect to github.com port 443`，但 `https://api.github.com` 可访问，
-说明是**针对 `github.com` 单一 IP 的阻断**（实测 DNS 解析到 `20.205.243.166` 时不通，
-而同域名的其他 IP 正常）。此时走本机代理即可：
+若 `git push` 报 `Failed to connect to github.com port 443`（或 `Recv failure: Connection was reset`），
+但 `https://api.github.com` 能正常返回，说明是**针对 `github.com` 这一个域名的 SNI/IP 阻断**：
+TCP 握手可能成功，TLS 阶段被重置；同域名的其他 IP 往往仍然可用。
+
+此时改走本机代理即可。**代理端口由客户端每次启动时分配，不是固定值**（实测同一台机器上出现过
+`63900` 与 `63048` 两个端口），所以先读出当前端口，再拼给 git：
 
 ```powershell
-git -c http.proxy=http://127.0.0.1:63900 push origin master
+# 读取当前系统代理地址（形如 127.0.0.1:63048）
+$proxy = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyServer
+$proxy
+
+git -c http.proxy=http://$proxy push origin master
 ```
 
-端口取自 Windows「设置 → 网络和 Internet → 代理」中的本机代理端口。若要长期生效：
+长期生效（注意端口会变，重设一次即可）：
 
 ```powershell
-git config --global http.proxy http://127.0.0.1:63900
+git config --global http.proxy "http://$proxy"
 ```
 
-Release 附件上传（`gh release upload`）走 `uploads.github.com`，受同一阻断影响；同样可设
-`HTTPS_PROXY=http://127.0.0.1:63900` 环境变量后再执行。
+Release 附件上传（`gh release upload`）走 `uploads.github.com`，受同一阻断影响；同样可先设
+`$env:HTTPS_PROXY = "http://$proxy"` 再执行。
+
+> 排查顺序建议：① 先确认 `https://api.github.com` 是否可达（可达就说明是单域名阻断，不是断网）；
+> ② 读系统代理端口并走代理；③ 若仍失败，再用 `curl --resolve github.com:443:<可达IP>` 验证
+> 是否只是该 IP 被墙，而不是整站不可用。
 
 ---
 
