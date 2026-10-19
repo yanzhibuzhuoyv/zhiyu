@@ -27,7 +27,8 @@ class RequestGuard:
             await send(message)
 
         async def reject(status, detail):
-            await JSONResponse(status_code=status, content={"detail": detail})(scope, receive, secure_send)
+            auth_headers = {"X-ZhiYu-Error-Code": "session_expired", "WWW-Authenticate": "Bearer"} if status == 401 else None
+            await JSONResponse(status_code=status, content={"detail": detail}, headers=auth_headers)(scope, receive, secure_send)
 
         headers = Headers(scope=scope)
         length = headers.get("content-length")

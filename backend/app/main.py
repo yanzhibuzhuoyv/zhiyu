@@ -21,6 +21,9 @@ from .media_storage import MediaStorageError
 from .memory_attention import MemoryAttention
 from .memory_routes import router as memory_router
 from .memory_worker import MemoryWorker
+from .portrait_previews import PortraitPreviews
+from .portrait_routes import router as portrait_router
+from .portrait_subject import PortraitProcessor
 from .proactive_routes import router as proactive_router
 from .proactive_store import ProactiveStore
 from .providers import ProviderClient, ProviderError
@@ -32,7 +35,7 @@ from .trial_routes import router as trial_router
 from .visual_profiles import VisualProfiles
 
 
-def create_app(settings: Settings | None = None, provider_client=None, *, visual_generator=None) -> FastAPI:
+def create_app(settings: Settings | None = None, provider_client=None, *, visual_generator=None, portrait_processor=None) -> FastAPI:
     settings = settings or Settings.from_env()
 
     @asynccontextmanager
@@ -60,6 +63,7 @@ def create_app(settings: Settings | None = None, provider_client=None, *, visual
     state.provider = provider_client or ProviderClient(allow_demo=settings.allow_demo)
     state.upstream_slots = asyncio.Semaphore(8)
     state.parse_slots = asyncio.Semaphore(2)
+    state.portrait_slots = asyncio.Semaphore(2)
     state.turn_locks = WeakValueDictionary()
     state.memory_worker = MemoryWorker(state.chat, state.sessions, state.provider)
     state.memory_attention = MemoryAttention()
@@ -68,12 +72,15 @@ def create_app(settings: Settings | None = None, provider_client=None, *, visual
     state.visual = VisualProfiles(media_dir)
     state.daily_scenes = DailyScenes(media_dir)
     state.visual_generator = visual_generator
+    state.portrait_processor = portrait_processor or (PortraitProcessor(settings.portrait_model_path) if settings.portrait_model_path else None)
+    state.portrait_previews = PortraitPreviews(media_dir)
     state.proactive = ProactiveStore(settings.data_dir)
     state.contact_clock = lambda: datetime.now(UTC)
 
     @application.exception_handler(ProviderError)
     async def provider_error(request: Request, error: ProviderError):
-        return JSONResponse(status_code=error.status_code, content={"detail": error.message})
+        headers = {"X-ZhiYu-Error-Code": "provider_auth_failed"} if error.status_code in {401, 403} else None
+        return JSONResponse(status_code=error.status_code, content={"detail": error.message}, headers=headers)
 
     @application.exception_handler(RagStorageError)
     async def storage_error(request: Request, error: RagStorageError):
@@ -109,6 +116,7 @@ def create_app(settings: Settings | None = None, provider_client=None, *, visual
     application.include_router(knowledge_router)
     application.include_router(trial_router)
     application.include_router(media_router)
+    application.include_router(portrait_router)
     application.include_router(proactive_router)
     return application
 

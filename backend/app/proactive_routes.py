@@ -13,6 +13,7 @@ from .chat_routes import owned, selected_history, turn_lock
 from .companion import companion_system
 from .dependencies import current_session
 from .media_service import choose_attachments
+from .memory_voice import MEMORY_VOICE
 from .proactive_policy import decision, local_day
 from .providers import ProviderError
 from .schemas import Input
@@ -78,7 +79,7 @@ def contact_prompt(profile, history, daily, sticker_prompt=""):
               f"当前北京时间日期：{daily['day_id']}。今天的虚拟生活安排：{activity}。"
               "这个安排属于 OC 的虚拟日常，不能声称现实真人刚刚拍照或实际在场。")
     trigger = "[应用后台调度事件，不是用户的聊天原话] 现在按上述固定性格，发起一次自然的主动联系。"
-    return [{"role": "system", "content": system + companion_system(profile) + sticker_prompt}, *selected_history(history),
+    return [{"role": "system", "content": system + companion_system(profile) + MEMORY_VOICE + sticker_prompt}, *selected_history(history),
             {"role": "user", "content": trigger}]
 
 

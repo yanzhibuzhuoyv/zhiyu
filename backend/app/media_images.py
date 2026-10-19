@@ -4,7 +4,7 @@ import hashlib
 import io
 from dataclasses import dataclass
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_PIXELS = 20_000_000
@@ -47,8 +47,10 @@ def normalize_image(raw: bytes) -> SafeImage:
                 mime, extension = "image/gif", "gif"
             else:
                 # A fresh pixel image strips EXIF location, comments and embedded instructions.
-                pixels = Image.new("RGBA", image.size)
-                pixels.paste(image.convert("RGBA"))
+                oriented = ImageOps.exif_transpose(image)
+                width, height = oriented.size
+                pixels = Image.new("RGBA", oriented.size)
+                pixels.paste(oriented.convert("RGBA"))
                 pixels.save(output, "PNG", optimize=True)
                 mime, extension = "image/png", "png"
             data = output.getvalue()

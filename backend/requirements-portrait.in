@@ -1,0 +1,5 @@
+# CPU-only subject previews; the base backend supplies Pillow.
+# Pin existing route-environment versions to avoid changing shared dependencies.
+numpy==2.5.3
+onnxruntime==1.30.0
+packaging==26.3
