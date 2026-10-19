@@ -30,6 +30,7 @@ class LocalChatRepository(
     private val dailyNow: () -> Instant = Instant::now,
     private val runtimeNow: () -> Instant = PhoneClock::now,
     private val runtimeZone: () -> java.time.ZoneId = java.time.ZoneId::systemDefault,
+    private val runtimeElapsed: () -> Long = android.os.SystemClock::elapsedRealtime,
 ) : ChatRepository {
     companion object {
         const val LOCAL_URL = "https://local.zhiyu.invalid"
@@ -225,6 +226,9 @@ class LocalChatRepository(
     }
     override suspend fun sendCallMessage(id: String, content: String, onDelta: suspend (String) -> Unit): Pair<Message, Message> =
         contactAware(id,content){send(id, content, null, onDelta=onDelta, call=true)}
+    override suspend fun sendCallVisualMessage(id: String, content: String, frame: CallCameraFrame,
+        onDelta: suspend (String) -> Unit): Pair<Message, Message> =
+        contactAware(id,content){send(id, content, null, onDelta=onDelta, call=true, cameraFrame=frame)}
     override suspend fun sendQueuedTextBatch(id: String, inputs: List<QueuedTextInput>,
         onSubmitted: (String, Message) -> Unit): QueuedTextBatchResult {
         val checked = QueuedTextBatchRules.check(inputs)
@@ -241,7 +245,8 @@ class LocalChatRepository(
     private suspend fun send(id: String, content: String, photo: MediaAttachment?,
         onSubmitted: (Message) -> Unit = {}, onDelta: (suspend (String) -> Unit)? = null,
         call: Boolean = false, voiceDraftId: String? = null, queuedId: String? = null,
-        textBatch: List<QueuedTextInput>? = null, onBatchSubmitted: (String, Message) -> Unit = { _, _ -> }): Pair<Message, Message> = serial.withLock {
+        textBatch: List<QueuedTextInput>? = null, onBatchSubmitted: (String, Message) -> Unit = { _, _ -> },
+        cameraFrame: CallCameraFrame? = null): Pair<Message, Message> = serial.withLock {
         lastCalendarNotice = null; lastCallNotice = null
         lastPhotoStatus = null
         if (textBatch == null) {
@@ -251,6 +256,11 @@ class LocalChatRepository(
         val text = content
         val saved = withContext(Dispatchers.IO) { connection() }
         val binding = withContext(Dispatchers.IO) { binding() }
+        if (cameraFrame != null) {
+            require(call && photo == null && voiceDraftId == null && textBatch == null && queuedId == null) { "通话画面的用途无效" }
+            require(ChatPhotoRules.nativeVision(saved.providerId, saved.model)) { "当前模型不能查看通话画面，请先关闭摄像头后继续语音" }
+            require(CallCameraFrameRules.fresh(cameraFrame, runtimeElapsed())) { "通话画面已过期，请重新采集" }
+        }
         val payload = photo?.let { withContext(Dispatchers.IO) { photos.payload(it) } }
         val owner = owner(binding)
         val queuedInputs = textBatch ?: queuedId?.let { listOf(QueuedTextInput(it, content)) }
@@ -297,7 +307,7 @@ class LocalChatRepository(
         val boundedRecent = promptContext.messages
         val conversation = withContext(Dispatchers.IO) { database.conversation(owner, id) }
         val actionText = textBatch?.let { RuntimeDialogueContext.actionText(it.map { item -> item.content }) } ?: text
-        val clockQuestion = photo == null && textBatch == null && LocalClockReply.respond(actionText, runtimeNow(), runtimeZone()) != null
+        val clockQuestion = cameraFrame == null && photo == null && textBatch == null && LocalClockReply.respond(actionText, runtimeNow(), runtimeZone()) != null
         val voicePlanned = !call && VoiceMessagePolicy.reply(actionText, voiceDraftId != null, conversation.profile?.style, user.id)
         val ocSnapshot = withContext(Dispatchers.IO) { currentOcPhotoIdentity(id) }
         val recentOnly = call && CallTurnPolicy.recentOnly(text)
@@ -331,8 +341,11 @@ class LocalChatRepository(
                 proactiveContact = withContext(Dispatchers.IO) { ConversationRuntimeReader(appContext).proactive(id) },
                 photoSharing = withContext(Dispatchers.IO) { ConversationRuntimeReader(appContext).photos(ocSnapshot != null) },
                 voiceInput = if (call || voiceDraftId != null) VoiceInputRuntime(VoiceInputSource.ASR_TRANSCRIPT, !call && voiceDraftId != null) else VoiceInputRuntime())
-        val pictureContext = withContext(Dispatchers.IO) { photoHistory.build(boundedRecent, saved.providerId, saved.model,
-            user.id, payload, analysis, ocSnapshot, runtime = requestRuntime) }
+        val pictureContext = withContext(Dispatchers.IO) {
+            if (call) CallCameraPromptContext.build(boundedRecent, requestRuntime, cameraFrame)
+            else photoHistory.build(boundedRecent, saved.providerId, saved.model,
+                user.id, payload, analysis, ocSnapshot, runtime = requestRuntime)
+        }
         val system = LocalCompanionPrompt.build(conversation.profile, recalled, sources, careContext(), retrieval.status, boundedRecent.size,
             interactionToken = "$id:${user.id}", runtime = requestRuntime) + "\n" + plan.prompt +
             (if (textBatch == null) "" else "\n这是用户短时间的连续输入，下面多条用户原文属于同一轮。统一回应最新意图，不逐条机械分别作答；可自然分段，不能忽略其相关的前一句。") +
@@ -353,6 +366,10 @@ class LocalChatRepository(
         val committed = java.util.concurrent.atomic.AtomicBoolean(false)
         var providerVerifiedAt: Instant? = null
         try {
+        if (cameraFrame != null) require(CallCameraFrameRules.fresh(cameraFrame, runtimeElapsed())) {
+            "通话画面已过期，请重新采集"
+        }
+        currentCoroutineContext().ensureActive()
         val raw = if (clockQuestion) checkNotNull(LocalClockReply.respond(actionText, runtimeNow(), runtimeZone())).also { answer ->
                 if (onDelta != null) { generated.append(answer); onDelta(answer) }
             }

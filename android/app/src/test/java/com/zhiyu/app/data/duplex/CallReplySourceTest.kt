@@ -1,11 +1,15 @@
 package com.zhiyu.app.data.duplex
 
+import com.zhiyu.app.domain.CallCameraFrame
+import com.zhiyu.app.domain.ChatPhotoPayload
+import com.zhiyu.app.domain.ChatPhotoRules
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.test.*
 import org.junit.Assert.*
 import org.junit.Test
 import rig2d.voice.VoiceStamp
+import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CallReplySourceTest {
@@ -67,5 +71,25 @@ class CallReplySourceTest {
         assertTrue(pending.isCancelled)
         assertThrows(IllegalStateException::class.java){runBlocking{source.tokens("挂断后",second).toList()}}
         assertEquals(1,calls)
+    }
+
+    @Test fun onlyTheTurnWithACurrentFrameUsesTheVisualPath()=runTest {
+        val frame=CallCameraFrame(ChatPhotoPayload(
+            ChatPhotoRules.sha(byteArrayOf(-1,-40,-1,1)),ChatPhotoRules.sha(byteArrayOf(-1,-40,-1,1)),
+            "image/jpeg",byteArrayOf(-1,-40,-1,1)),Instant.EPOCH,1000)
+        val camera=object:CallCameraTurnSource {
+            var current:CallCameraFrame?=frame
+            var leases=0
+            override fun currentFrame()=current
+            override suspend fun <T> withFrame(frame:CallCameraFrame,block:suspend()->T):T {
+                leases++;return block()
+            }
+        }
+        val source=CallReplySource.streaming("a".repeat(32),{_,_->flow{emit("纯文字")}},
+            camera,{_,_,_->flow{emit("看见画面")}})
+        assertEquals(listOf("看见画面"),source.tokens("看这个",first).toList())
+        camera.current=null
+        assertEquals(listOf("纯文字"),source.tokens("接着说",second).toList())
+        assertEquals(1,camera.leases)
     }
 }

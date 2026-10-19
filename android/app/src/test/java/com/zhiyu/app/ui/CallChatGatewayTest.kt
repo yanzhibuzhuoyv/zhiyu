@@ -11,6 +11,46 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CallChatGatewayTest {
+    private fun cameraFrame(): CallCameraFrame {
+        val bytes = byteArrayOf(-1, -40, -1, 1)
+        val sha = ChatPhotoRules.sha(bytes)
+        return CallCameraFrame(ChatPhotoPayload(sha, sha, "image/jpeg", bytes), java.time.Instant.EPOCH, 1000)
+    }
+
+    @Test fun visualCallPassesOneFrameAndKeepsKeyboardAndTextTimelineUntouched() = model { model, repo ->
+        val frame = cameraFrame()
+        model.draft("还没有发送的文字")
+        assertEquals("陪你聊聊。", model.sendCallVisualText(repo.chat.id, "看我手里这个", frame))
+        assertEquals(listOf(frame), repo.frames)
+        assertEquals(listOf(repo.chat.id to "看我手里这个"), repo.calls)
+        assertEquals("还没有发送的文字", model.state.value.draft)
+        assertTrue(model.state.value.messages.isEmpty())
+        assertNull(model.state.value.pendingMessage)
+    }
+
+    @Test fun visualStreamUsesItsFrameAndStillPropagatesCancellation() = model { model, repo ->
+        val frame = cameraFrame(); val heard = mutableListOf<String>()
+        repo.streamAnswer = { emit -> emit("看到了。"); awaitCancellation() }
+        val call = launch { model.streamCallVisualText(repo.chat.id, "窗外怎么样", frame).toList(heard) }
+        try {
+            runCurrent()
+            assertEquals(listOf(frame), repo.frames)
+            assertEquals(listOf("看到了。"), heard)
+            call.cancelAndJoin()
+            assertTrue(call.isCancelled)
+            assertTrue(model.state.value.messages.isEmpty())
+            assertNull(model.state.value.pendingMessage)
+        } finally { call.cancelAndJoin() }
+    }
+
+    @Test fun unsupportedRepositoryDoesNotPretendToHaveSentCameraOrFallBackToText() = model { model, repo ->
+        repo.supportsVisual = false
+        try { model.sendCallVisualText(repo.chat.id, "看我这边", cameraFrame()); fail("Visual support must be explicit") }
+        catch (error: IllegalStateException) { assertTrue(error.message.orEmpty().contains("画面")) }
+        assertTrue(repo.calls.isEmpty())
+        assertTrue(model.state.value.messages.isEmpty())
+    }
+
     @Test fun callCompletionNeverPublishesIntoTheTextTimeline() = model { model, repo ->
         model.draft("等会再发的文字")
         val snapshot = model.state.value
@@ -186,6 +226,8 @@ private class CallRepository : ChatRepository {
     var connection: SavedConnection? = SavedConnection("https://local.zhiyu.invalid", binding.providerId, "synthetic-secret", binding.model)
     val rows = mutableListOf<Message>()
     val calls = mutableListOf<Pair<String, String>>()
+    val frames = mutableListOf<CallCameraFrame>()
+    var supportsVisual = true
     var answer: suspend () -> String = { "陪你聊聊。" }
     var streamAnswer: (suspend (suspend (String) -> Unit) -> String)? = null
     var persistAssistant = true
@@ -207,6 +249,12 @@ private class CallRepository : ChatRepository {
         val assistant = Message("assistant-${calls.size}", "assistant", streaming(onDelta), emptyList(), "2026-10-15")
         if (persistAssistant) rows.add(assistant)
         return user to assistant
+    }
+    override suspend fun sendCallVisualMessage(id: String, content: String, frame: CallCameraFrame,
+        onDelta: suspend (String) -> Unit): Pair<Message, Message> {
+        if (!supportsVisual) return super<ChatRepository>.sendCallVisualMessage(id, content, frame, onDelta)
+        frames.add(frame)
+        return sendCallMessage(id, content, onDelta)
     }
     override suspend fun history(id: String, before: String?): MessagePage {
         val snapshot = rows.toList(); historyGate?.await()

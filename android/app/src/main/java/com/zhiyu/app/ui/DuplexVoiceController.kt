@@ -1,7 +1,9 @@
 package com.zhiyu.app.ui
 
 import androidx.compose.runtime.*
+import com.zhiyu.app.data.duplex.CallCameraTurnSource
 import com.zhiyu.app.data.duplex.CallReplySource
+import com.zhiyu.app.domain.CallCameraFrame
 import com.zhiyu.app.domain.MediaRules
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
@@ -34,7 +36,11 @@ enum class DuplexPhase { IDLE, PREPARING, LISTENING, THINKING, SPEAKING, STOPPIN
     private var stamp:VoiceStamp?=null
     private var disposed=false
 
-    fun start(chat:String,stream:((String,String)->Flow<String>)?=null,send:suspend(String,String)->String) {
+    fun start(chat:String,stream:((String,String)->Flow<String>)?=null,
+        camera:CallCameraTurnSource?=null,
+        visualStream:((String,String,CallCameraFrame)->Flow<String>)?=null,
+        visualSend:(suspend(String,String,CallCameraFrame)->String)?=null,
+        send:suspend(String,String)->String) {
         if(disposed||active)return
         MediaRules.path(chat)
         val token=epoch.incrementAndGet()
@@ -44,7 +50,7 @@ enum class DuplexPhase { IDLE, PREPARING, LISTENING, THINKING, SPEAKING, STOPPIN
             ensureActive();if(epoch.get()!=token)return@withLock
             var run:Run?=null
             try {
-                run=createRun(token,chat,send,stream);current.set(run)
+                run=createRun(token,chat,send,stream,camera,visualStream,visualSend);current.set(run)
                 run.core.start();ensureActive()
                 if(epoch.get()!=token)throw CancellationException("Stale call startup")
             }catch(cancelled:CancellationException) {
@@ -58,8 +64,16 @@ enum class DuplexPhase { IDLE, PREPARING, LISTENING, THINKING, SPEAKING, STOPPIN
             }
         }}
     }
-    private fun createRun(token:Long,chat:String,send:suspend(String,String)->String,stream:((String,String)->Flow<String>)?):Run {
-        val source=if(stream==null)CallReplySource(chat,send)else CallReplySource.streaming(chat,stream)
+    private fun createRun(token:Long,chat:String,send:suspend(String,String)->String,stream:((String,String)->Flow<String>)?,
+        camera:CallCameraTurnSource?,visualStream:((String,String,CallCameraFrame)->Flow<String>)?,
+        visualSend:(suspend(String,String,CallCameraFrame)->String)?):Run {
+        val source=if(stream==null) {
+            if(camera!=null&&visualSend!=null)CallReplySource(chat,send,camera,visualSend)
+            else CallReplySource(chat,send)
+        } else {
+            if(camera!=null&&visualStream!=null)CallReplySource.streaming(chat,stream,camera,visualStream)
+            else CallReplySource.streaming(chat,stream)
+        }
         val callScope=CoroutineScope(SupervisorJob(worker.coroutineContext[Job])+dispatcher)
         try {
             val ports=factory(source){aec,phones->update(token){aecEnabled=aec;headset=phones}}

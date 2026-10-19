@@ -45,6 +45,8 @@ import com.zhiyu.app.ui.screens.*
     var planarOpen by rememberSaveable { mutableStateOf(false) }
     val voice = rememberVoiceController()
     val duplex=rememberDuplexVoiceController()
+    val cameraSession=remember { CallCameraSession() }
+    val visualCallSupported=com.zhiyu.app.domain.ChatPhotoRules.nativeVision(state.providerId,state.model)
     val photos = rememberChatPhotoController(state.draftImage, viewModel::draftImage)
     val media = rememberMediaController(state.selectedId, state.connected)
     val ocScope = rememberCoroutineScope()
@@ -56,7 +58,7 @@ import com.zhiyu.app.ui.screens.*
         voiceLifecycle.addObserver(observer)
         onDispose { voiceLifecycle.removeObserver(observer); chatVoice.cancel() }
     }
-    LaunchedEffect(callOpen) { if (callOpen) chatVoice.pause() }
+    LaunchedEffect(callOpen) { if (callOpen) chatVoice.pause() else cameraSession.clear() }
     val scenePhotos=remember(appContext,ocScope){ScenePhotoController(com.zhiyu.app.data.remotescene.ScenePhotoManager(appContext),ocScope)}
     LaunchedEffect(scenePhotosOpen,state.connected,state.selectedId) {
         scenePhotos.connect(if(scenePhotosOpen&&state.connected)state.selectedId else null)
@@ -232,7 +234,10 @@ import com.zhiyu.app.ui.screens.*
     if(planarOpen&&state.connected)PlanarWorkshopDialog(planar,companionName){planarOpen=false}
     if (callOpen && state.connected && state.selectedId!=null) {
         DuplexCallDialog(duplex,checkNotNull(state.selectedId),companionName,
-            viewModel::sendCallText,onDismiss={callOpen=false},streamText=viewModel::streamCallText,character={ speaking,mouth ->
+            viewModel::sendCallText,onDismiss={callOpen=false},streamText=viewModel::streamCallText,
+            cameraSession=cameraSession,visualSupported=visualCallSupported,
+            streamVisual=viewModel::streamCallVisualText,sendVisual=viewModel::sendCallVisualText,
+            character={ speaking,mouth ->
                 CallCharacterPreview(currentCallIdentity,planar.forBinding(planarBinding),
                     if(speaking)mouth.coerceIn(0f,1f)else 0f, ocCreator::source,
                     onEdit={callOpen=false;planarOpen=true},modifier=Modifier.fillMaxSize())

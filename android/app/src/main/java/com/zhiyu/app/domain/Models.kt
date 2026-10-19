@@ -90,6 +90,9 @@ interface ChatRepository {
     suspend fun recordReplyTurn(id: String, userIds: List<String>, assistantIds: List<String>): Unit = Unit
     suspend fun sendCallMessage(id: String, content: String, onDelta: suspend (String) -> Unit): Pair<Message, Message> =
         sendMessage(id, content).also { onDelta(it.second.content) }
+    suspend fun sendCallVisualMessage(id: String, content: String, frame: CallCameraFrame,
+        onDelta: suspend (String) -> Unit): Pair<Message, Message> =
+        throw IllegalStateException("当前连接暂不支持查看通话画面")
     suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment): Pair<Message, Message> =
         throw IllegalStateException("当前连接不支持发送图片")
     suspend fun sendPhotoMessage(id: String, content: String, attachment: MediaAttachment,

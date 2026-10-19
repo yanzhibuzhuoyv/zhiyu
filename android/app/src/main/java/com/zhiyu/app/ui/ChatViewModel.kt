@@ -288,10 +288,15 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
     fun retryOutgoing(id: String) = outgoing.retry(id)
     fun discardOutgoing(id: String) = outgoing.discard(id)
     fun streamCallText(chatId: String, content: String): kotlinx.coroutines.flow.Flow<String> =
-        kotlinx.coroutines.flow.channelFlow { callText(chatId, content) { send(it) } }.buffer(0)
+        kotlinx.coroutines.flow.channelFlow { callText(chatId, content, onDelta = { send(it) }) }.buffer(0)
     /** The caller owns cancellation for one final recognized utterance. */
     suspend fun sendCallText(chatId: String, content: String): String = callText(chatId, content, null)
-    private suspend fun callText(chatId: String, content: String, onDelta: (suspend (String) -> Unit)?): String = withContext(Dispatchers.Main.immediate) {
+    fun streamCallVisualText(chatId: String, content: String, frame: CallCameraFrame): kotlinx.coroutines.flow.Flow<String> =
+        kotlinx.coroutines.flow.channelFlow { callText(chatId, content, { send(it) }, frame) }.buffer(0)
+    suspend fun sendCallVisualText(chatId: String, content: String, frame: CallCameraFrame): String =
+        callText(chatId, content, null, frame)
+    private suspend fun callText(chatId: String, content: String, onDelta: (suspend (String) -> Unit)?,
+        frame: CallCameraFrame? = null): String = withContext(Dispatchers.Main.immediate) {
         val current = mutableState.value
         check(current.connected && current.selectedId == chatId && current.selected?.id == chatId) { "这段通话已不在当前聊天中" }
         val text = ConnectionRules.message(content)
@@ -305,11 +310,13 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         try {
             cleanup?.await()
             check(stillCurrent()) { "通话已结束" }
-            val result = repository.sendCallMessage(chatId, text) { delta ->
+            val emit: suspend (String) -> Unit = { delta ->
                 currentCoroutineContext().ensureActive()
                 check(stillCurrent()) { "通话已结束" }
                 onDelta?.invoke(delta)
             }
+            val result = if (frame == null) repository.sendCallMessage(chatId, text, emit)
+                else repository.sendCallVisualMessage(chatId, text, frame, emit)
             currentCoroutineContext().ensureActive()
             check(stillCurrent()) { "通话已结束" }
             check(result.first.role == "user" && result.first.content == text && result.second.role == "assistant") {
