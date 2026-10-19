@@ -118,7 +118,7 @@ class PhotoSendFlowNativeTest {
                 val result = repo.sendPhotoMessage(chat.id, "这张图里是什么？", photo.attachment)
                 val user = messages(transport.chats.single()).last { it.getString("role") == "user" }
                 val parts = user.getJSONArray("content")
-                assertEquals("这张图里是什么？", parts.getJSONObject(0).getString("text"))
+                assertEquals("这张图里是什么？", promptOriginal(parts.getJSONObject(0).getString("text")))
                 val image = parts.getJSONObject(1).getJSONObject("image_url")
                 assertEquals(expected.dataUri(), image.getString("url"))
                 assertEquals("high", image.getString("detail"))

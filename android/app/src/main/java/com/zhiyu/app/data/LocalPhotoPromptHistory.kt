@@ -25,14 +25,15 @@ internal class LocalPhotoPromptHistory(private val photos: ChatPhotoStore,
 
     fun build(history: List<Message>, provider: String, model: String,
         currentId: String? = null, currentPayload: ChatPhotoPayload? = null,
-        currentAnalysis: ChatPhotoAnalysis? = null, ocIdentity: OcPhotoIdentitySnapshot? = null): LocalPhotoPromptContext {
+        currentAnalysis: ChatPhotoAnalysis? = null, ocIdentity: OcPhotoIdentitySnapshot? = null,
+        runtime: ConversationRuntime? = null): LocalPhotoPromptContext {
         val pictured = history.takeLast(12).lastOrNull { it.role == "user" && it.mediaAttachments.any { image -> image.kind == "image" } }
-        if (pictured == null) return withAppearance(history, provider, model, ocIdentity)
+        if (pictured == null) return withAppearance(history, provider, model, ocIdentity, runtime)
         val image = pictured.mediaAttachments.singleOrNull { it.kind == "image" }
-            ?: return LocalPhotoPromptContext(textOnly(history), "最近图片无法确定，未知内容不可猜测。")
+            ?: return LocalPhotoPromptContext(textOnly(history, runtime), "最近图片无法确定，未知内容不可猜测。")
         val native = ChatPhotoRules.nativeVision(provider, model)
         val picture = readPicture(pictured, image, native, currentId, currentPayload, currentAnalysis)
-        val originalMessages = historyMessages(history, pictured, picture.payload)
+        val originalMessages = historyMessages(history, pictured, picture.payload, runtime)
         val stored = ocIdentity?.takeIf { picture.readable }?.let { confirmed(it, image.sha256) } == true
         val attribution = attribution(history, pictured)
         val isConfirmed = attribution == true || attribution == null && stored
@@ -42,7 +43,7 @@ internal class LocalPhotoPromptHistory(private val photos: ChatPhotoStore,
         val comparison = ownership.reference?.let { DirectChatMessage("user",
             "[应用附带的当前恋人OC参考图，仅供与随后用户图片对照；不是用户新消息或记忆]", listOf(it)) }
         val messages = if (comparison == null) originalMessages else originalMessages.toMutableList().apply {
-            val index = historyMessages(history.takeWhile { it.id != pictured.id }, pictured, null).size
+            val index = historyMessages(history.takeWhile { it.id != pictured.id }, pictured, null, runtime).size
             add(index, comparison)
         }.toList()
         val source = "最近用户图片的独立证据，消息ID=${AgnesImageJson.quote(pictured.id)}，时间=${AgnesImageJson.quote(pictured.createdAt)}，" +
@@ -72,8 +73,8 @@ internal class LocalPhotoPromptHistory(private val photos: ChatPhotoStore,
             } }.lastOrNull()
 
     private fun withAppearance(history: List<Message>, provider: String, model: String,
-        identity: OcPhotoIdentitySnapshot?): LocalPhotoPromptContext {
-        val original = textOnly(history)
+        identity: OcPhotoIdentitySnapshot?, runtime: ConversationRuntime?): LocalPhotoPromptContext {
+        val original = textOnly(history, runtime)
         val appearance = identityContext.appearance(identity, ChatPhotoRules.nativeVision(provider, model),
             allowReferencePixels = original.size < 99)
         val anchor = appearance.reference?.let { DirectChatMessage("user",
@@ -101,13 +102,16 @@ internal class LocalPhotoPromptHistory(private val photos: ChatPhotoStore,
         Picture(null, "最近这张图片暂时无法看清，不要猜测其中内容，可以自然请对方再说说。", false)
     }
 
-    private fun historyMessages(history: List<Message>, pictured: Message, payload: ChatPhotoPayload?) = history.mapNotNull { message ->
+    private fun historyMessages(history: List<Message>, pictured: Message, payload: ChatPhotoPayload?,
+        runtime: ConversationRuntime?) = history.mapNotNull { message ->
+        val content = if (message.content.isEmpty()) "" else TemporalGroundingContext.annotate(runtime, message.createdAt, message.content)
         when {
-            message.id == pictured.id && payload != null -> DirectChatMessage(message.role, message.content, listOf(payload))
-            message.content.isNotBlank() -> DirectChatMessage(message.role, message.content)
-            message.id == pictured.id -> DirectChatMessage("user", "[用户附图；这一条文字原文为空。]")
+            message.id == pictured.id && payload != null -> DirectChatMessage(message.role, content, listOf(payload))
+            message.content.isNotBlank() -> DirectChatMessage(message.role, content)
+            message.id == pictured.id -> DirectChatMessage("user", TemporalGroundingContext.annotate(runtime, message.createdAt, "[用户附图；这一条文字原文为空。]"))
             else -> null
         }
     }
-    private fun textOnly(history: List<Message>) = history.filter { it.content.isNotBlank() }.map { DirectChatMessage(it.role, it.content) }
+    private fun textOnly(history: List<Message>, runtime: ConversationRuntime?) = history.filter { it.content.isNotBlank() }
+        .map { DirectChatMessage(it.role, TemporalGroundingContext.annotate(runtime, it.createdAt, it.content)) }
 }

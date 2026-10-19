@@ -8,7 +8,6 @@ import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
 import android.util.Log
 import com.zhiyu.app.BuildConfig
-import rig2d.planar.PlanarAnimation
 import rig2d.planar.PlanarMixer
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -160,7 +159,8 @@ class PlanarGlRenderer(
         require(seconds.isFinite() && seconds >= 0.0) { "动画时间无效" }
         check(program != 0 && ownerContext == EGL14.eglGetCurrentContext()) { "角色渲染上下文已改变" }
         val input = controls
-        val parameters = PlanarAnimation.sample(document.contract, seconds, input.mouth, input.idle)
+        val parameters = PlanarPhoneIdleMotion.sample(document.contract, seconds, input.mouth, input.idle,
+            document.layers.any { it.role == "face" })
         // Validate the whole pose before drawing any layer. The portable mixer checks folds.
         val prepared = resources.map { it to PlanarMixer.vertices(it.layer.mesh, parameters) }
         if(debugFirst)trace("draw-pose-ready")

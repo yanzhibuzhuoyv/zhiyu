@@ -51,4 +51,66 @@ class LocalSelfieRulesTest {
         listOf(first.copy(lane = -1), first.copy(lane = 3), first.copy(generation = -1), first.copy(scope = "bad"))
             .forEach { assertThrows(IllegalArgumentException::class.java) { LocalSelfieRules.check(it) } }
     }
+
+    private val now = java.time.Instant.parse("2026-10-19T05:00:00Z")
+    private fun line(role: String, text: String, age: Long = 0, attachments: List<MediaAttachment> = emptyList()) =
+        Message("a".repeat(32), role, text, emptyList(), now.minusSeconds(age).toString(), attachments)
+
+    @Test fun aLifePhotoOfferCarriesItsSubjectButNeverAuthorizesPaidSelfies() {
+        val offer = listOf(line("assistant", "还有几张猫咪照片，要看吗？"))
+        listOf("都看看", "看看", "好哦好哦", "还没挑好吗", "只要你发的就行，发一张看看嘛", "诶没看到啊")
+            .forEach { text ->
+                val request = checkNotNull(LocalPhotoDeliveryRules.resolve(text, offer, now))
+                assertFalse(text, request.selfie); assertFalse(text, request.explicit)
+                assertTrue(text, request.standalone); assertEquals("cat", request.subject)
+            }
+        val generic = checkNotNull(LocalPhotoDeliveryRules.resolve("发张照片", offer, now))
+        assertFalse(generic.selfie); assertEquals("cat", generic.subject)
+    }
+
+    @Test fun ordinaryPolitenessExpiredOffersNewTopicsCancellationAndActualDeliveryEndTheOffer() {
+        val offer = line("assistant", "有张猫咪照片，给你看吗？")
+        val image = MediaAttachment("b".repeat(32), "image", "unused", "image/png", "c".repeat(64), null, 0, "test")
+        listOf(emptyList(), listOf(offer.copy(createdAt = now.minusSeconds(901).toString())),
+            listOf(offer, line("user", "晚饭吃什么？"), line("assistant", "煮面吧。")),
+            listOf(offer, line("user", "不用发了")),
+            listOf(offer, line("assistant", "给你。", attachments = listOf(image))),
+            listOf(line("assistant", "还有几张作业，要看哪样？")))
+            .forEach { history -> assertNull(LocalPhotoDeliveryRules.resolve("好哦", history, now)) }
+        listOf("不用照片", "不要发了", "算了", "他说“都看看”", "教我怎么拍猫咪照片", "我给你发猫咪照片")
+            .forEach { assertNull(it, LocalPhotoDeliveryRules.resolve(it, listOf(offer), now)) }
+    }
+
+    @Test fun explicitSelfiesKeepTheirExistingPermissionWhileAnAcknowledgmentOnlyUsesStock() {
+        val explicit = checkNotNull(LocalPhotoDeliveryRules.resolve("给我拍张自拍", emptyList(), now))
+        assertTrue(explicit.selfie); assertTrue(explicit.explicit); assertTrue(explicit.standalone)
+        val accepted = checkNotNull(LocalPhotoDeliveryRules.resolve("好哦", listOf(line("user", "给我拍张自拍"),
+            line("assistant", "我挑张自拍给你看。")), now))
+        assertTrue(accepted.selfie); assertFalse(accepted.explicit)
+        assertTrue(checkNotNull(LocalPhotoDeliveryRules.resolve("发张照片", emptyList(), now)).selfie)
+        val scenery = checkNotNull(LocalPhotoDeliveryRules.resolve("给我发张风景照", emptyList(), now))
+        assertFalse(scenery.selfie); assertEquals("landscape", scenery.subject)
+    }
+
+    @Test fun mixedRequestsKeepTheirOtherAnswerAndARecordedCurrentUserDoesNotBecomeItsOwnOffer() {
+        val offer = line("assistant", "还有几张照片，要看哪样？")
+        val text = "都看看，晚饭吃什么？"
+        val request = checkNotNull(LocalPhotoDeliveryRules.resolve(text, listOf(offer, line("user", text)), now))
+        assertFalse(request.standalone)
+        assertNull(LocalPhotoDeliveryRules.resolve("好哦", listOf(line("user", "好哦")), now))
+        assertNotNull(LocalPhotoDeliveryRules.resolve("都看看", listOf(line("assistant", "还有几张要看哪样？")), now))
+    }
+
+    @Test fun aNegativeOrUnavailablePhotoStatementDoesNotTurnPolitenessIntoAnOffer() {
+        listOf("我没有照片给你看。", "我不能发照片给你看。", "照片还没准备好给你看。")
+            .forEach { statement ->
+                assertNull(statement, LocalPhotoDeliveryRules.resolve("好哦", listOf(line("assistant", statement)), now))
+            }
+    }
+
+    @Test fun questionsAboutAnExistingPictureAreNotRequestsForNewStock() {
+        listOf("看看这张猫咪照片里写了什么", "看看这张风景照片有什么问题", "给我分析这张猫咪照片")
+            .forEach { question -> assertNull(question, LocalPhotoDeliveryRules.resolve(question, emptyList(), now)) }
+        assertNotNull(LocalPhotoDeliveryRules.resolve("给我发张猫咪照片", emptyList(), now))
+    }
 }

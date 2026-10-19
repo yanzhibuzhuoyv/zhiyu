@@ -50,4 +50,27 @@ class ProactiveWorkStoreTest {
         recreate().recordRun("chat", denied)
         assertEquals(denied, recreate().lastRun("chat"))
     }
+
+    @Test fun replayingConnectionValidationDoesNotPushAnAlreadyReleasedDeadlineForward() = store { state, recreate ->
+        val verifiedAt = Instant.parse("2026-10-19T04:00:00Z")
+        state.setEnabled("chat", true)
+        val record = ProactiveRunRecord(verifiedAt.minusSeconds(60), "needs_connection", verifiedAt.plusSeconds(6 * 3600))
+        state.recordRun("chat", record)
+        val pending = state.requestId("chat")
+        assertTrue(state.releaseConnectionBackoff("chat", verifiedAt))
+        assertFalse("Replaying verification is not a new policy deadline",
+            recreate().releaseConnectionBackoff("chat", verifiedAt.plusSeconds(60)))
+        assertEquals(record.copy(nextDue = verifiedAt), recreate().lastRun("chat"))
+        assertEquals(pending, recreate().requestId("chat"))
+    }
+
+    @Test fun aLateValidationCannotReleaseAProviderFailureCheckedAfterTheValidationEvent() = store { state, recreate ->
+        val verifiedAt = Instant.parse("2026-10-19T04:00:00Z")
+        state.setEnabled("chat", true)
+        val newerFailure = ProactiveRunRecord(verifiedAt.plusSeconds(30), "needs_connection", verifiedAt.plusSeconds(6 * 3600))
+        state.recordRun("chat", newerFailure)
+        assertFalse("A delayed older success cannot overrule a newer provider rejection",
+            recreate().releaseConnectionBackoff("chat", verifiedAt))
+        assertEquals(newerFailure, recreate().lastRun("chat"))
+    }
 }

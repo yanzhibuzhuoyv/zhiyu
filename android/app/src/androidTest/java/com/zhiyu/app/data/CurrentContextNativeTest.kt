@@ -13,6 +13,45 @@ import java.time.Instant
 import java.util.UUID
 
 class CurrentContextNativeTest {
+    @Test fun aNoonContinuationCarriesTheOldNightTimestampAtTheEndOfTheRealProviderPrompt(): Unit = runBlocking {
+        Fixture().use { f ->
+            val chat = f.open()
+            val night = f.db.append(f.owner, chat.id, "user", "才十一点多，还早，晚些睡。")
+            f.db.writableDatabase.update("messages", android.content.ContentValues().apply {
+                put("created_at", "2026-10-18T15:20:00Z")
+            }, "id=?", arrayOf(night.id))
+            val oldReply = f.db.append(f.owner, chat.id, "assistant", "这么晚了，吃点东西再休息。")
+            f.db.writableDatabase.update("messages", android.content.ContentValues().apply {
+                put("created_at", "2026-10-18T15:20:05Z")
+            }, "id=?", arrayOf(oldReply.id))
+            f.now = Instant.parse("2026-10-19T04:53:00Z")
+            f.answer = "吃好了呀。"
+            f.repo.sendMessage(chat.id, "我吃完饭了") { submitted ->
+                f.db.writableDatabase.update("messages", android.content.ContentValues().apply {
+                    put("created_at", "2026-10-19T04:53:00Z")
+                }, "id=?", arrayOf(submitted.id))
+            }
+            if (InstrumentationRegistry.getArguments().getString("temporal_export") == "true") {
+                val status = android.os.Bundle().apply { putString("temporal_payload_b64",
+                    android.util.Base64.encodeToString(checkNotNull(f.last).toString().toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)) }
+                InstrumentationRegistry.getInstrumentation().sendStatus(2, status)
+            }
+            assertTrue(f.system().contains("now_local=2026-10-19T12:53:00+08:00"))
+            assertTrue(f.system().contains("sent_local=2026-10-18T23:20:00+08:00"))
+            assertTrue(f.system().contains("different_local_date=true"))
+            assertTrue(f.system().trimEnd().endsWith("</trusted_temporal_grounding>"))
+            val messages = checkNotNull(f.last).getJSONArray("messages")
+            val presentedNight = messages.getJSONObject(1).getString("content")
+            assertTrue(presentedNight.startsWith("[本条消息发送时间：2026-10-18T23:20:00+08:00"))
+            assertTrue(presentedNight.endsWith("才十一点多，还早，晚些睡。"))
+            assertTrue(messages.getJSONObject(messages.length() - 1).getString("content")
+                .startsWith("[本轮设备当前时间：2026-10-19T12:53:00+08:00；Asia/Shanghai；当前时段中午"))
+            assertTrue(messages.getJSONObject(messages.length() - 1).getString("content")
+                .contains("[本条消息发送时间：2026-10-19T12:53:00+08:00"))
+            assertEquals("才十一点多，还早，晚些睡。", f.db.history(f.owner, chat.id).messages.first().content)
+            assertEquals(1, f.calls)
+        }
+    }
     @Test fun ordinaryDialogueCannotCommitAnEightHourWrongExplicitCurrentClockClaim(): Unit = runBlocking {
         Fixture().use { f ->
             val chat = f.open(); f.now = Instant.parse("2026-10-19T01:07:09Z")

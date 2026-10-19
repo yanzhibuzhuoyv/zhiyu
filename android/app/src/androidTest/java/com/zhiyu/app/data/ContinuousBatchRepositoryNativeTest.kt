@@ -80,7 +80,7 @@ class ContinuousBatchRepositoryNativeTest {
             assertEquals("我们聊杯子。", result.assistant.content)
             val request = checkNotNull(f.lastRequest).getJSONArray("messages")
             val users = (0 until request.length()).map { request.getJSONObject(it) }.filter { it.getString("role") == "user" }
-            assertEquals(inputs.map { it.content }, users.map { it.getString("content") })
+            assertEquals(inputs.map { it.content }, users.map { promptOriginal(it.getString("content")) })
             assertTrue(request.getJSONObject(0).getString("content").contains("topic_focus=new"))
         }
     }

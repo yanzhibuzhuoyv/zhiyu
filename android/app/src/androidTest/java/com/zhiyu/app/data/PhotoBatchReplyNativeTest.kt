@@ -36,7 +36,7 @@ class PhotoBatchReplyNativeTest {
             val users = checkNotNull(f.last).getJSONArray("messages").let { rows ->
                 (0 until rows.length()).map(rows::getJSONObject).filter { it.getString("role") == "user" }
             }
-            assertEquals(inputs.map { it.content }, users.map { it.getString("content") })
+            assertEquals(inputs.map { it.content }, users.map { promptOriginal(it.getString("content")) })
 
             val single = f.repo.sendMessage(chat.id, "发张照片")
             assertEquals("A standalone photo request keeps its quick natural pending reply", 1, f.calls)

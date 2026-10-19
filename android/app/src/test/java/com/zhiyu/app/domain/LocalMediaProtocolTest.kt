@@ -82,4 +82,43 @@ class LocalMediaProtocolTest {
         assertEquals(listOf(beforeChoosingOc), LocalMediaFreshness.accept(reply.copy(attachments = listOf(beforeChoosingOc)),
             0, "2026-10-09", emptySet(), setOf(id)).attachments)
     }
+
+    @Test fun anAcceptedLifePhotoUsesItsRequiredActualImageWithoutDependingOnModelMarkers() {
+        val image = asset.copy(kind = "image")
+        val ready = LocalMediaPlan("", listOf(image), "", requiredAttachmentId = id,
+            readyCaption = "给你看看这张。", photoRequested = true, standaloneMediaRequest = true)
+        val reply = ready.parse("行，我翻翻看。")
+        assertEquals("给你看看这张。", reply.content); assertEquals(listOf(image), reply.attachments)
+        assertFalse(ready.selfieRequested)
+    }
+
+    @Test fun aMissingLifePhotoRemovesOnlyUnsupportedPhotoClausesAndKeepsTheOtherAnswer() {
+        val pending = "这条还没有附上照片，我现在没有可发的合适图片。"
+        val plan = LocalMediaPlan("", emptyList(), "", unavailableMessage = pending,
+            preserveGeneratedText = true, photoRequested = true)
+        val reply = plan.parse("考试没发挥好先别急。这张窗边橘猫在毯子上。今晚先休息。")
+        assertEquals("考试没发挥好先别急。今晚先休息。\n$pending", reply.content)
+        assertTrue(reply.attachments.isEmpty())
+        assertEquals(pending, plan.copy(preserveGeneratedText = false).parse("这张窗边橘猫很乖。").content)
+    }
+
+    @Test fun anUnavailableLifePhotoKeepsTheOtherAnswerAboutARealWorksheet() {
+        val pending = "这条还没有附上照片，我现在没有可发的合适图片。"
+        val plan = LocalMediaPlan("", emptyList(), "", unavailableMessage = pending,
+            preserveGeneratedText = true, photoRequested = true)
+        val reply = plan.parse("这张试卷先做第二题。作业慢慢来。这张窗边橘猫在毯子上。")
+        assertEquals("这张试卷先做第二题。作业慢慢来。\n$pending", reply.content)
+        assertTrue(reply.attachments.isEmpty())
+    }
+
+    @Test fun aMissingLifePhotoAlsoRemovesUnsupportedCaptionsStartingWithInsideThePicture() {
+        val pending = "这条还没有附上照片，我现在没有可发的合适图片。"
+        val plan = LocalMediaPlan("", emptyList(), "", unavailableMessage = pending,
+            preserveGeneratedText = true, photoRequested = true)
+        listOf("图中", "图片中").forEach { prefix ->
+            val reply = plan.parse("考试没发挥好先别急。${prefix}那只橘猫卧在毯子上。今晚先休息。")
+            assertEquals(prefix, "考试没发挥好先别急。今晚先休息。\n$pending", reply.content)
+            assertTrue(reply.attachments.isEmpty())
+        }
+    }
 }

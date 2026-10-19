@@ -31,6 +31,8 @@ import com.zhiyu.app.data.*
 import com.zhiyu.app.domain.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -68,14 +70,14 @@ class ProactiveSystemDispatchNativeTest {
         }
     }
 
-    private class Fixture : AutoCloseable {
+    private class Fixture(private val holdDelivery: Boolean = false) : AutoCloseable {
         private val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = ScopedContext(instrumentation.targetContext)
         private val originalManager = WorkManagerImpl.getInstance(instrumentation.targetContext)
         private val executor = Executors.newFixedThreadPool(2)
         private val taskExecutor = Executors.newFixedThreadPool(2)
         private val originalVisible = ProactiveForeground.isVisible()
-        val archive = LocalChatDatabase(context, "dispatch_archive.sqlite3")
+        val archive = LocalChatDatabase(context, if (holdDelivery) "zhiyu_local_v1.sqlite3" else "dispatch_archive.sqlite3")
         val owner = "companion-" + LocalMemoryCodec.sha("deepseek\u0000deepseek-flash".toByteArray(Charsets.UTF_8))
         val binding = CompanionBinding("deepseek", "deepseek-flash", CompanionProfile(style = "anxious", name = "合成恋人"))
         val credentials = object : CredentialStore {
@@ -88,6 +90,8 @@ class ProactiveSystemDispatchNativeTest {
         val chat = archive.ensureConversation(owner, binding.model, binding.profile)
         val providerCalls = AtomicInteger(0)
         val workerCreations = AtomicInteger(0)
+        val deliveryStarted = CompletableDeferred<Unit>()
+        val releaseDelivery = CompletableDeferred<Unit>()
         private val repository = LocalChatRepository(context, credentials,
             DirectProviderClient(DirectProviderTransport { _, key, json ->
                 assertEquals("synthetic-dispatch-key", key)
@@ -106,6 +110,7 @@ class ProactiveSystemDispatchNativeTest {
                 instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.POST_NOTIFICATIONS)
             ProactiveNotifications.createChannel(context)
             check(ProactiveNotifications.allowed(context))
+            if (holdDelivery) SecureCredentialStore(context).writeBinding(binding)
             val user = archive.append(owner, chat.id, "user", "今天有点累，准备去歇一会儿。")
             archive.writableDatabase.execSQL("UPDATE messages SET created_at=? WHERE id=?",
                 arrayOf(Instant.now().minusSeconds(3600).toString(), user.id))
@@ -113,6 +118,11 @@ class ProactiveSystemDispatchNativeTest {
                 override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker? {
                     if (workerClassName != ProactiveWorker::class.java.name) return null
                     workerCreations.incrementAndGet()
+                    if (holdDelivery) return ProactiveWorker(context, workerParameters) { _, _ ->
+                        deliveryStarted.complete(Unit)
+                        releaseDelivery.await()
+                        ProactiveWorkOutcome.COMPLETE
+                    }
                     return ProactiveWorker(context, workerParameters) { id, chain ->
                         val recreatedService = LocalProactiveService(context, credentials, RepositoryProactiveGateway(repository))
                         ProactiveWorkRunner(context, credentials, recreatedService).run(id, chain)
@@ -130,6 +140,7 @@ class ProactiveSystemDispatchNativeTest {
             archive.history(owner, chat.id).messages.any { it.origin == "proactive" && it.id == note.tag }
         }
         override fun close() {
+            releaseDelivery.complete(Unit)
             try {
                 manager.cancelAllWork().result.get(5, TimeUnit.SECONDS)
                 awaitProcessorIdle()
@@ -171,6 +182,37 @@ class ProactiveSystemDispatchNativeTest {
                 SystemClock.sleep(20)
             }
             throw AssertionError("WorkManager serial executor stayed busy during teardown")
+        }
+    }
+
+    @Test fun aVerifiedConnectionDoesNotCancelAnActuallyRunningContactWorkerOrItsRequest() = runBlocking {
+        Fixture(holdDelivery = true).use { test ->
+            test.state.setEnabled(test.chat.id, true)
+            val pending = test.state.requestId(test.chat.id)
+            test.state.recordRun(test.chat.id, ProactiveRunRecord(Instant.now().minusSeconds(60),
+                "needs_connection", Instant.now().plusSeconds(6 * 3600)))
+            val work = OneTimeWorkRequestBuilder<ProactiveWorker>()
+                .setInputData(workDataOf(ProactiveScheduler.CONVERSATION_INPUT to test.chat.id,
+                    ProactiveScheduler.CHAIN_INPUT to true))
+                .setInitialDelay(1, TimeUnit.SECONDS).addTag(ProactiveScheduler.WORK_TAG).build()
+            test.manager.enqueueUniqueWork(ProactiveSchedulePolicy.uniqueDueName(test.chat.id),
+                ExistingWorkPolicy.KEEP, work).result.get(5, TimeUnit.SECONDS)
+            // A real JobScheduler dispatch is not a one-second timer. Use the same bounded
+            // platform-start budget as the other OS tests; validation is invoked only after RUNNING.
+            try { withTimeout(90_000) { test.deliveryStarted.await() } }
+            catch (failure: kotlinx.coroutines.TimeoutCancellationException) {
+                throw AssertionError("Before connection validation: platform did not start held delivery; creations=" +
+                    test.workerCreations.get() + "; state=" + test.manager.getWorkInfoById(work.id).get(5, TimeUnit.SECONDS)?.state, failure)
+            }
+            assertEquals("Android's real dispatcher must first enter the production Worker", WorkInfo.State.RUNNING,
+                test.manager.getWorkInfoById(work.id).get(5, TimeUnit.SECONDS)?.state)
+
+            ProactiveScheduler.onConnectionValidated(test.context).join()
+
+            assertEquals("Connection repair must preserve an in-flight attempt under the same work identity",
+                WorkInfo.State.RUNNING, test.manager.getWorkInfoById(work.id).get(5, TimeUnit.SECONDS)?.state)
+            assertEquals(pending, test.state.requestId(test.chat.id))
+            assertEquals(0, test.providerCalls.get())
         }
     }
 

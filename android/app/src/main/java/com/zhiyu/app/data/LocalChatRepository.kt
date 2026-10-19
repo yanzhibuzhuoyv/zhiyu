@@ -310,8 +310,9 @@ class LocalChatRepository(
         lastRetrievalRoute = retrieval
         val recalled = retrieval.originals
         val sources = if (conversation.useRag && !recentOnly && !clockQuestion) withContext(Dispatchers.IO) { database.documentSources(owner, actionText) } else emptyList()
-        val plan = if (call || clockQuestion) LocalMediaPlan("", emptyList(), "") else media.prepare(id, conversation.profile, recent, userText = actionText)
-            .let { if ((textBatch?.size ?: 0) > 1 || it.selfieRequested && !LocalSelfieRules.standaloneRequest(actionText))
+        val plan = if (call || clockQuestion) LocalMediaPlan("", emptyList(), "") else media.prepare(id, conversation.profile, recent,
+            userText = actionText, dialogue = boundedRecent)
+            .let { if ((textBatch?.size ?: 0) > 1 || (it.selfieRequested || it.photoRequested) && !it.standaloneMediaRequest)
                 it.copy(preserveGeneratedText = true) else it }
         val calendarPlan = prepareCalendar(actionText)
         lastPhotoStatus = plan.selfieStatus
@@ -324,26 +325,33 @@ class LocalChatRepository(
             "provider_balance_insufficient" -> "写图像提示词或审图时，AI 公司返回余额不足，请检查当前聊天 Key 的额度。"
             else -> null
         }
-        val pictureContext = withContext(Dispatchers.IO) { photoHistory.build(boundedRecent, saved.providerId, saved.model,
-            user.id, payload, analysis, ocSnapshot) }
         if (database.isMainArchive) weatherRefresh.forQuestion(actionText)
         val requestRuntime = ConversationRuntime(runtimeNow(), runtimeZone(),
                 textBatch?.last()?.content ?: text, call || voicePlanned, ocSnapshot != null,
                 proactiveContact = withContext(Dispatchers.IO) { ConversationRuntimeReader(appContext).proactive(id) },
                 photoSharing = withContext(Dispatchers.IO) { ConversationRuntimeReader(appContext).photos(ocSnapshot != null) },
                 voiceInput = if (call || voiceDraftId != null) VoiceInputRuntime(VoiceInputSource.ASR_TRANSCRIPT, !call && voiceDraftId != null) else VoiceInputRuntime())
+        val pictureContext = withContext(Dispatchers.IO) { photoHistory.build(boundedRecent, saved.providerId, saved.model,
+            user.id, payload, analysis, ocSnapshot, runtime = requestRuntime) }
         val system = LocalCompanionPrompt.build(conversation.profile, recalled, sources, careContext(), retrieval.status, boundedRecent.size,
             interactionToken = "$id:${user.id}", runtime = requestRuntime) + "\n" + plan.prompt +
             (if (textBatch == null) "" else "\n这是用户短时间的连续输入，下面多条用户原文属于同一轮。统一回应最新意图，不逐条机械分别作答；可自然分段，不能忽略其相关的前一句。") +
             interruptedContext(boundedRecent) +
             pictureContext.evidence.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty() +
-            calendarPlan.prompt.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty()
-        val context = listOf(DirectChatMessage("system", system)) + pictureContext.messages
+            calendarPlan.prompt.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty() +
+            "\n" + TemporalGroundingContext.render(requestRuntime, boundedRecent)
+        val latestUserIndex = pictureContext.messages.indexOfLast { it.role == "user" }
+        val context = listOf(DirectChatMessage("system", system)) + pictureContext.messages.mapIndexed { index, message ->
+            if (index == latestUserIndex && message.content.isNotBlank())
+                message.copy(content = TemporalGroundingContext.currentAnchor(requestRuntime) + message.content)
+            else message
+        }
         val generated = StringBuilder()
         val publicPrefix = StringBuilder()
-        val selfPortraitAnswer = if (!call && !plan.selfieRequested && textBatch == null)
+        val selfPortraitAnswer = if (!call && !plan.selfieRequested && !plan.photoRequested && textBatch == null)
             pictureContext.selfPortraitReply(actionText, conversation.profile?.style) else null
         val committed = java.util.concurrent.atomic.AtomicBoolean(false)
+        var providerVerifiedAt: Instant? = null
         try {
         val raw = if (clockQuestion) checkNotNull(LocalClockReply.respond(actionText, runtimeNow(), runtimeZone())).also { answer ->
                 if (onDelta != null) { generated.append(answer); onDelta(answer) }
@@ -351,10 +359,11 @@ class LocalChatRepository(
             else if (selfPortraitAnswer != null) selfPortraitAnswer.also { answer ->
                 if (onDelta != null) { generated.append(answer); onDelta(answer) }
             }
-            else if (plan.selfieRequested && !plan.preserveGeneratedText && plan.readyCaption != null &&
+            else if ((plan.selfieRequested || plan.photoRequested) && !plan.preserveGeneratedText && plan.readyCaption != null &&
                 plan.candidates.singleOrNull { it.id == plan.requiredAttachmentId }?.kind == "image") plan.readyCaption
             else if (plan.unavailableMessage != null && !plan.preserveGeneratedText) plan.unavailableMessage
             else if (onDelta == null) provider.complete(saved.providerId, saved.apiKey, saved.model, context, outputBudget())
+                .also { providerVerifiedAt = Instant.now() }
             else {
                 val speech = CallSpeechFilter()
                 val clockSpeech = CurrentClockClaims.Stream(requestRuntime)
@@ -364,6 +373,7 @@ class LocalChatRepository(
                     publicPrefix.append(publicText)
                     clockSpeech.append(publicText).takeIf { it.isNotEmpty() }?.let { generated.append(it); onDelta(it) }
                 }
+                providerVerifiedAt = Instant.now()
                 currentCoroutineContext().ensureActive()
                 val publicTail = speech.finish()
                 publicPrefix.append(publicTail)
@@ -392,6 +402,8 @@ class LocalChatRepository(
                 }
             }
         }
+        if (database.isMainArchive) com.zhiyu.app.notifications.ProactiveScheduler.onConversationActivity(
+            appContext, id, user.id, user.createdAt, connectionValidated = providerVerifiedAt != null, verifiedAt = providerVerifiedAt)
         commitCalendar(assistant, calendarReply)
         photoNotice?.let { lastCalendarNotice = listOfNotNull(lastCalendarNotice, it).joinToString("\n") }
         if (!call && database.isMainArchive && plan.selfieRequested) initializeDailyPlan(id)
@@ -537,9 +549,12 @@ class LocalChatRepository(
         } else null
         val requestRuntime = ConversationRuntime(runtimeNow(), runtimeZone(), voiceReplyPlanned = false)
         val system = LocalDailyShareCaption.system(conversation.profile, event, vision, history.size) + interruptedContext(history) +
-            "\n" + RuntimeDialogueContext.render(requestRuntime) + "\n" + careContext()
-        val context = listOf(DirectChatMessage("system", system)) + history.map { DirectChatMessage(it.role, it.content) } +
-            DirectChatMessage("user", "[应用的日常分享请求，不是真实用户消息] 围绕这次日常分享一点感受。", listOfNotNull(picture))
+            "\n" + RuntimeDialogueContext.render(requestRuntime) + "\n" + careContext() +
+            "\n" + TemporalGroundingContext.render(requestRuntime, history)
+        val context = listOf(DirectChatMessage("system", system)) + history.map {
+            DirectChatMessage(it.role, TemporalGroundingContext.annotate(requestRuntime, it.createdAt, it.content)) } +
+            DirectChatMessage("user", TemporalGroundingContext.currentAnchor(requestRuntime) +
+                "[应用的日常分享请求，不是真实用户消息] 围绕这次日常分享一点感受。", listOfNotNull(picture))
         withContext(Dispatchers.IO) {
             checkStillConnected(saved)
             check(store.readBinding() == selectedBinding && conversation.profile == selectedBinding.profile) { "恋人设定已更新" }
@@ -598,9 +613,12 @@ class LocalChatRepository(
             LocalRetrievalStatus.NOT_SEARCHED, promptContext.size, runtime = requestRuntime) + "\n" + plan.prompt + interruptedContext(promptContext) +
             "\n本次由应用发起主动联系，并非用户新原话。遵循恋人性格，只发一条自然消息；不指责未回复，不虚构用户活动、天气、共同约定或自己的真实线下生活。" +
             nightEvent?.prompt()?.let { "\n$it" }.orEmpty() +
-            calendarPlan.prompt.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty()
-        val context = listOf(DirectChatMessage("system", system)) + promptContext.filter { it.content.isNotBlank() }.map { DirectChatMessage(it.role, it.content) } +
-            DirectChatMessage("user", "[应用的主动联系请求，不是真实用户消息] 请自然地同恋人说一句话，可以选择不索要回应。")
+            calendarPlan.prompt.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty() +
+            "\n" + TemporalGroundingContext.render(requestRuntime, promptContext)
+        val context = listOf(DirectChatMessage("system", system)) + promptContext.filter { it.content.isNotBlank() }.map {
+            DirectChatMessage(it.role, TemporalGroundingContext.annotate(requestRuntime, it.createdAt, it.content)) } +
+            DirectChatMessage("user", TemporalGroundingContext.currentAnchor(requestRuntime) +
+                "[应用的主动联系请求，不是真实用户消息] 请自然地同恋人说一句话，可以选择不索要回应。")
         val raw = provider.complete(saved.providerId, saved.apiKey, saved.model, context, outputBudget())
         currentCoroutineContext().ensureActive()
         val calendarReply = CompanionCalendarProtocol.parse(CurrentClockClaims.correct(raw, requestRuntime), calendarPlan)
