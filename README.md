@@ -160,15 +160,9 @@ API 文档 <http://127.0.0.1:8790/docs>，健康检查 <http://127.0.0.1:8790/he
 ```powershell
 cd backend
 uv sync --frozen --extra dev
-uv pip install -r requirements-portrait.lock   # 肖像相关测试需要 numpy/onnxruntime
 uv run --no-sync pytest --cov=app --cov-report=term-missing
 uv run --no-sync ruff check app tests
 ```
-
-> `test_portrait_subject.py` 等用例依赖 `numpy`，而 `dev` extra 里没有它。若跳过上面那行
-> `pip install`，pytest 会在收集阶段报 `ModuleNotFoundError: No module named 'numpy'` 并中断。
-> 依赖已用哈希锁定在 `requirements-portrait.lock`，`Dockerfile` 的 `base` 阶段也是用同一份锁文件安装。
-> 实测：装齐后 **986 项测试通过，覆盖率 94%**。
 
 Docker：
 
