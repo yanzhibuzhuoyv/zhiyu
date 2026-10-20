@@ -1,5 +1,8 @@
 package com.zhiyu.app.ui
 
+import com.zhiyu.app.domain.CallCameraFrame
+import com.zhiyu.app.domain.ChatPhotoPayload
+import com.zhiyu.app.domain.ChatPhotoRules
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -7,6 +10,7 @@ import kotlinx.coroutines.test.*
 import org.junit.Assert.*
 import org.junit.Test
 import rig2d.voice.*
+import java.time.Instant
 import kotlin.coroutines.CoroutineContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -101,6 +105,59 @@ class DuplexVoiceControllerTest {
             assertEquals(1,calls);assertEquals(4,ports.closes);assertEquals(DuplexPhase.IDLE,controller.phase)
         }finally{controller.dispose();dispatch.drain();runCurrent()}
     }
+
+    @Test fun closingCameraWhileThinkingReturnsToListeningAndKeepsAudioCallUsable()=runTest {
+        verifyCameraCancellation(playingFirstSentence=false)
+    }
+
+    @Test fun closingCameraWhileSpeakingStopsVisualPlaybackAndKeepsAudioCallUsable()=runTest {
+        verifyCameraCancellation(playingFirstSentence=true)
+    }
+
+    @Test fun closingCameraAfterModelFinishedStillStopsQueuedVisualSpeech()=runTest {
+        verifyCameraCancellation(playingFirstSentence=true, modelFinished=true)
+    }
+
+    private suspend fun TestScope.verifyCameraCancellation(playingFirstSentence:Boolean, modelFinished:Boolean=false) {
+        lateinit var ports:Ports
+        var visualCancelled=false;var visualCalls=0;var factoryCalls=0
+        val audioInputs=mutableListOf<String>()
+        val camera=CallCameraSession { 1000L }
+        val bytes=byteArrayOf(-1,-40,-1,1)
+        val sha=ChatPhotoRules.sha(bytes)
+        camera.offer(camera.open(),CallCameraFrame(ChatPhotoPayload(sha,sha,"image/jpeg",bytes),Instant.EPOCH,1000L))
+        val controller=DuplexVoiceController(this,{source,_->DuplexPortsFactory {
+            factoryCalls++;Ports(source).also{ports=it}.bundle
+        }},rules,StandardTestDispatcher(testScheduler))
+        try {
+            controller.start("a".repeat(32),stream={_,text->flow {
+                audioInputs.add(text);emit("我继续听着呢。")
+            }},camera=CameraSessionTurnSource(camera),visualStream={_,_,_->flow {
+                visualCalls++
+                try {
+                    if(playingFirstSentence)emit("看见了，你手里拿着一本书。")
+                    if(!modelFinished)awaitCancellation()
+                }finally{visualCancelled=true}
+            }}){_,_->error("The streaming call must not use the completion fallback")}
+            runCurrent();ports.sentence();runCurrent()
+            assertEquals(if(playingFirstSentence)DuplexPhase.SPEAKING else DuplexPhase.THINKING,controller.phase)
+            assertEquals(playingFirstSentence,ports.playing)
+            camera.clear();runCurrent()
+            assertTrue("Closing the camera must cancel its pending visual generation",visualCancelled)
+            assertNull(camera.latest())
+            assertEquals("Camera cancellation must leave the call listening, not thinking or speaking",DuplexPhase.LISTENING,controller.phase)
+            assertEquals(0f,controller.mouthLevel);assertFalse(ports.playing)
+            assertEquals("The microphone and other call ports must remain open",0,ports.closes)
+            ports.sentence();runCurrent()
+            assertEquals(listOf("第2句话"),audioInputs)
+            assertEquals(1,visualCalls);assertEquals(1,factoryCalls)
+            assertEquals(DuplexPhase.SPEAKING,controller.phase);assertTrue(ports.playing)
+            assertEquals(0,ports.closes)
+            controller.stop();runCurrent()
+            assertEquals(4,ports.closes);assertEquals(DuplexPhase.IDLE,controller.phase)
+        }finally{camera.clear();controller.dispose();runCurrent()}
+    }
+
     private class ReorderedDispatcher:CoroutineDispatcher() {
         private val tasks=ArrayDeque<Runnable>()
         override fun dispatch(context:CoroutineContext,block:Runnable){tasks.addLast(block)}

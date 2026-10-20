@@ -64,6 +64,11 @@ class DuplexCallSession(
         withContext(NonCancellable) { run.job.join() }
     }
 
+    /** Withdraw one camera-bound reply without stopping capture or a later utterance. */
+    fun cancelReply(stamp: VoiceStamp) {
+        current.get()?.cancelReply(stamp)
+    }
+
     private data class Reply(val stamp: VoiceStamp, val job: Job)
 
     private inner class Run(val session: Long, val ports: DuplexPorts) {
@@ -73,12 +78,12 @@ class DuplexCallSession(
         private val released = AtomicBoolean(false)
         private var releaseReported = false
         private var utterance = 0L
-        @Volatile private var reply: Reply? = null
+        private val reply = AtomicReference<Reply?>(null)
         private val replyLease = Mutex()
 
         fun running(): Boolean = current.get() === this && !closing.get() && job.isActive
         private fun replying(stamp: VoiceStamp): Boolean = running() &&
-            reply?.let { it.stamp == stamp && it.job.isActive } == true
+            reply.get()?.let { it.stamp == stamp && it.job.isActive } == true
 
         suspend fun execute() {
             try {
@@ -207,13 +212,33 @@ class DuplexCallSession(
                     if (replying(stamp)) event(VoiceEvent.Fault(session, VoiceFault.GENERATION))
                 }
             }
-            reply = Reply(stamp, response)
+            reply.set(Reply(stamp, response))
             response.start()
         }
 
+        /**
+         * Withdraws only the reply carrying [stamp]. The microphone/capture and call stay active;
+         * a stale camera callback can never revoke a newer reply.
+         */
+        fun cancelReply(stamp: VoiceStamp) {
+            while (true) {
+                val previous = reply.get() ?: return
+                if (previous.stamp != stamp) return
+                if (!reply.compareAndSet(previous, null)) continue
+                if (!previous.job.isActive) return
+                previous.job.cancel()
+                val portsCancelled = cancelPorts(previous.stamp)
+                if (running()) {
+                    onMouth(previous.stamp, 0f)
+                    event(VoiceEvent.Interrupted(previous.stamp))
+                    if (!portsCancelled) event(VoiceEvent.Fault(session, VoiceFault.RELEASE))
+                }
+                return
+            }
+        }
+
         private fun interruptReply() {
-            val previous = reply ?: return
-            reply = null // Invalidate before cancellation/stop can synchronously invoke a late callback.
+            val previous = reply.getAndSet(null) ?: return
             if (previous.job.isActive) {
                 previous.job.cancel()
                 if (!cancelPorts(previous.stamp)) throw VoiceStageFailure(VoiceFault.RELEASE)
@@ -225,8 +250,7 @@ class DuplexCallSession(
         }
 
         fun signalStop() {
-            val previous = reply
-            reply = null
+            val previous = reply.getAndSet(null)
             previous?.job?.cancel()
             if (previous != null) cancelPorts(previous.stamp)
             try { ports.player.stop(null) } catch (_: Exception) { releaseFailed.set(true) }

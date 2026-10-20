@@ -44,6 +44,12 @@ import kotlinx.coroutines.flow.Flow
     var cameraToken by remember { mutableStateOf<Long?>(null) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     fun disableCamera(){ cameraOn=false;cameraToken=null;cameraError=null;cameraSession?.clear() }
+    fun invalidateCameraToken(token:Long){
+        if(cameraToken!=token)return
+        cameraOn=false
+        cameraToken=null
+        cameraSession?.clear()
+    }
     fun enableCamera(){ val session=cameraSession?:return; cameraOn=true;cameraError=null;cameraToken=session.open() }
     fun connect(){controller.start(chatId,stream=currentStream,camera=cameraSource,
         visualStream=currentVisualStream,visualSend=currentVisualSend,
@@ -62,7 +68,11 @@ import kotlinx.coroutines.flow.Flow
         else if(!allowed)controller.permissionDenied()
     }
     DisposableEffect(controller,chatId,lifecycle) {
-        val observer=LifecycleEventObserver{_,event->if(event==Lifecycle.Event.ON_STOP){disableCamera();controller.stop()}}
+        val observer=LifecycleEventObserver{_,event->when(event){
+            Lifecycle.Event.ON_PAUSE->disableCamera()
+            Lifecycle.Event.ON_STOP->{disableCamera();controller.stop()}
+            else->Unit
+        }}
         lifecycle.addObserver(observer)
         onDispose{lifecycle.removeObserver(observer);disableCamera();controller.stop()}
     }
@@ -78,10 +88,21 @@ import kotlinx.coroutines.flow.Flow
                 Text(name,style=MaterialTheme.typography.headlineSmall)
                 Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center) {
                     character(controller.phase==DuplexPhase.SPEAKING,controller.mouthLevel)
-                    if(cameraOn&&cameraSession!=null)CallCameraPreview(front,
-                        onFrame={frame->cameraToken?.let{cameraSession.offer(it,frame)}},
-                        onError={cameraError=it},modifier=Modifier.align(Alignment.TopEnd).size(120.dp)
-                            .testTag("call_camera_preview_box"))
+                    if(cameraOn&&cameraSession!=null)cameraToken?.let{token->
+                        key(token){
+                            CallCameraPreview(front,
+                                onFrame={frame->cameraSession.offer(token,frame)},
+                                onError={message->
+                                    if(cameraToken==token){
+                                        cameraError=message
+                                        invalidateCameraToken(token)
+                                    }
+                                },
+                                modifier=Modifier.align(Alignment.TopEnd).size(120.dp)
+                                    .testTag("call_camera_preview_box"),
+                                onUnavailable={invalidateCameraToken(token)})
+                        }
+                    }
                 }
                 Text(when(controller.phase) {
                     DuplexPhase.IDLE->"我在，接通后随时和我说话。"

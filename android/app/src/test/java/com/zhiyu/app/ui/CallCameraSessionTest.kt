@@ -73,4 +73,34 @@ class CallCameraSessionTest {
         try { session.withLease(lease) { calls++ }; fail() } catch (_: CancellationException) { }
         assertEquals(0, calls)
     }
+
+    @Test fun anAlreadyCancelledRequestCannotEnterTheVisualBlock() = runTest {
+        val session = CallCameraSession { 1000 }
+        val token = session.open()
+        session.offer(token, frame(1000))
+        val lease = session.latest()!!
+        var calls = 0
+        val request = launch(start = CoroutineStart.UNDISPATCHED) {
+            currentCoroutineContext().cancel(CancellationException("camera request already cancelled"))
+            session.withLease(lease) { calls++ }
+        }
+        request.join()
+        assertTrue(request.isCancelled)
+        assertEquals("A cancelled visual request must never invoke its provider block", 0, calls)
+        assertTrue(currentCoroutineContext().isActive)
+    }
+
+    @Test fun aNewSampleDoesNotDiscardTheAlreadySelectedFreshTurn() = runTest {
+        val session = CallCameraSession { 1000 }
+        val token = session.open()
+        val first = frame(1000, 1)
+        session.offer(token, first)
+        val source = CameraSessionTurnSource(session)
+        val selected = source.currentFrame()!!
+        session.offer(token, frame(1000, 2))
+        var calls = 0
+        source.withFrame(selected) { calls++ }
+        assertEquals("Routine capture refresh is not a revoked visual turn", 1, calls)
+        assertSame(first, selected)
+    }
 }

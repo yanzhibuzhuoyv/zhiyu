@@ -63,7 +63,7 @@ val prepareQwenAssets = tasks.register("prepareQwenAssets") {
 }
 tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(prepareQwenAssets) }
 val verifyPlanarCore = tasks.register("verifyPlanarCore") {
-    val checks = mapOf("libs/rig2d-0.2.0-studio.jar" to "0b0d161e52f182d3e58bba9baae30bb044458f2aab4fb395172cfcea3610e115",
+    val checks = mapOf("libs/rig2d-0.2.0-studio.jar" to "ed8c5b9eb719a99a6d6fa879814881f271670bbc8b096bbb963b2ac62cde2c0f",
         "src/main/assets/planar/contract.json" to "5e659b2e83b3ed72db2b3d9eb5d024c2e49cc2055f3e33979ee715a7a9489483")
     inputs.files(checks.keys.map { project.file(it) })
     doLast { checks.forEach { (name, expected) ->

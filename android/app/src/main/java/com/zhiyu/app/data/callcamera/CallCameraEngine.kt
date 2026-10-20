@@ -7,6 +7,7 @@ import android.os.Looper
 import android.util.Size
 import android.view.Surface
 import androidx.annotation.MainThread
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -68,8 +69,10 @@ internal class CameraXCallCameraEngine(private val context: Context, private val
         running = session
         preview.setSurfaceProvider(view.surfaceProvider)
         analysis.setAnalyzer(executor, CallCameraAnalyzer(gate, token, { main.execute(it) }, onFrame, onError))
-        provider.bindToLifecycle(owner, selector, preview, analysis)
+        val camera = provider.bindToLifecycle(owner, selector, preview, analysis)
         session.watchRotation()
+        // Last setup step: observing can synchronously fail and close this entire binding.
+        session.watchCameraState(camera, token)
     }
 
     override fun stop() {
@@ -92,6 +95,7 @@ internal class CameraXCallCameraEngine(private val context: Context, private val
         val analysis: ImageAnalysis, val executor: ExecutorService) : AutoCloseable {
         private val displays = context.getSystemService(DisplayManager::class.java)
         private var watching = false
+        private var stateObservation: CallCameraStateObservation? = null
         private val listener = object : DisplayManager.DisplayListener {
             override fun onDisplayAdded(displayId: Int) = Unit
             override fun onDisplayRemoved(displayId: Int) = Unit
@@ -108,13 +112,26 @@ internal class CameraXCallCameraEngine(private val context: Context, private val
             watching = displays != null
         }
 
+        fun watchCameraState(camera: Camera, token: Long) {
+            if (!gate.live(token) || running !== this) return
+            val observation = CallCameraStateObservation(camera.cameraInfo.cameraState, owner,
+                { gate.live(token) && running === this },
+                { failed(token, "摄像头连接已中断，可以关闭后重试") })
+            stateObservation = observation
+            observation.start()
+        }
+
         override fun close() {
             try {
-                analysis.clearAnalyzer()
-                provider.unbind(preview, analysis)
+                stateObservation?.close()
             } finally {
-                try { if (watching) displays?.unregisterDisplayListener(listener) }
-                finally { executor.shutdownNow() }
+                try {
+                    analysis.clearAnalyzer()
+                    provider.unbind(preview, analysis)
+                } finally {
+                    try { if (watching) displays?.unregisterDisplayListener(listener) }
+                    finally { executor.shutdownNow() }
+                }
             }
         }
     }

@@ -37,13 +37,14 @@ internal val LocalCallCameraScreenVisible = staticCompositionLocalOf<(Context) -
 
 /** Compose only after explicit camera permission and while the user has enabled an active call camera. */
 @Composable fun CallCameraPreview(front: Boolean, onFrame: (CallCameraFrame) -> Unit,
-    onError: (String) -> Unit, modifier: Modifier = Modifier) {
+    onError: (String) -> Unit, modifier: Modifier = Modifier, onUnavailable: () -> Unit = {}) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val factory = LocalCallCameraEngineFactory.current
     val screenVisible = LocalCallCameraScreenVisible.current
     val latestFrame = rememberUpdatedState(onFrame)
     val latestError = rememberUpdatedState(onError)
+    val latestUnavailable = rememberUpdatedState(onUnavailable)
     val view = remember(context) { PreviewView(context).apply {
         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         scaleType = PreviewView.ScaleType.FIT_CENTER
@@ -52,15 +53,19 @@ internal val LocalCallCameraScreenVisible = staticCompositionLocalOf<(Context) -
     AndroidView(factory = { view }, modifier = modifier.testTag("call_camera_preview"))
     DisposableEffect(context, owner, view, front, factory, screenVisible) {
         val engine = factory.create(context, owner, view, front, { latestFrame.value(it) }, { latestError.value(it) })
+        fun unavailable() {
+            latestUnavailable.value()
+            engine.stop()
+        }
         fun reconcile() {
             val visible = owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
                 screenVisible(context)
-            if (visible) engine.start() else engine.stop()
+            if (visible) engine.start() else unavailable()
         }
         val observer = LifecycleEventObserver { _, _ -> reconcile() }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action == Intent.ACTION_SCREEN_OFF) engine.stop() else reconcile()
+                if (intent?.action == Intent.ACTION_SCREEN_OFF) unavailable() else reconcile()
             }
         }
         val filter = IntentFilter().apply {

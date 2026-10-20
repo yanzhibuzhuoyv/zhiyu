@@ -67,11 +67,16 @@ enum class DuplexPhase { IDLE, PREPARING, LISTENING, THINKING, SPEAKING, STOPPIN
     private fun createRun(token:Long,chat:String,send:suspend(String,String)->String,stream:((String,String)->Flow<String>)?,
         camera:CallCameraTurnSource?,visualStream:((String,String,CallCameraFrame)->Flow<String>)?,
         visualSend:(suspend(String,String,CallCameraFrame)->String)?):Run {
+        var coreRef:DuplexCallSession?=null
+        val onVisualCancelled:(VoiceStamp)->Unit={ voiceStamp->
+            val owner=current.get()
+            if(epoch.get()==token&&owner!=null&&owner.core===coreRef)coreRef?.cancelReply(voiceStamp)
+        }
         val source=if(stream==null) {
-            if(camera!=null&&visualSend!=null)CallReplySource(chat,send,camera,visualSend)
+            if(camera!=null&&visualSend!=null)CallReplySource(chat,send,camera,visualSend,onVisualCancelled)
             else CallReplySource(chat,send)
         } else {
-            if(camera!=null&&visualStream!=null)CallReplySource.streaming(chat,stream,camera,visualStream)
+            if(camera!=null&&visualStream!=null)CallReplySource.streaming(chat,stream,camera,visualStream,onVisualCancelled)
             else CallReplySource.streaming(chat,stream)
         }
         val callScope=CoroutineScope(SupervisorJob(worker.coroutineContext[Job])+dispatcher)
@@ -82,6 +87,7 @@ enum class DuplexPhase { IDLE, PREPARING, LISTENING, THINKING, SPEAKING, STOPPIN
                 onMouth={voiceStamp,level->update(token){if(stamp==voiceStamp) {
                     mouthLevel=level.coerceIn(0f,1f);if(level>0f)phase=DuplexPhase.SPEAKING
                 }}})
+            coreRef=core
             return Run(core,source,callScope)
         }catch(failure:Throwable){source.close();callScope.cancel();throw failure}
     }
