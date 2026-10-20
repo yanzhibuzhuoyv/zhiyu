@@ -1,0 +1,27 @@
+{
+  "name": "zhiyu-promo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "check": "tsc --noEmit",
+    "stills": "node scripts/render.mjs stills",
+    "render": "node scripts/render.mjs video",
+    "render:wide": "remotion render src/index.ts ZhiyuWide out/zhiyu-wide.mp4 --codec=h264 --crf=18",
+    "render:vertical": "remotion render src/index.ts ZhiyuVertical out/zhiyu-vertical.mp4 --codec=h264 --crf=18"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.537",
+    "@remotion/bundler": "4.0.537",
+    "@remotion/renderer": "4.0.537",
+    "@remotion/fonts": "4.0.537",
+    "@remotion/media": "4.0.537",
+    "remotion": "4.0.537",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "typescript": "5.9.3"
+  }
+}
