@@ -361,6 +361,71 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
         if (removed == 0) throw ApiFailure(404, "这份本机文件不存在", "local_document_missing")
         db.delete("memory_fts", "owner=? AND document_id=?", arrayOf(owner, id))
     }
+    fun memoryPruneDue(owner: String, id: String, now: Instant, intervalMillis: Long): Boolean {
+        val key = "memory_prune_" + LocalMemoryCodec.sha("$owner\u0000$id".toByteArray())
+        return readableDatabase.rawQuery("SELECT value FROM local_meta WHERE key=?", arrayOf(key)).use {
+            !it.moveToFirst() || now.toEpochMilli() - it.getString(0).toLong() >= intervalMillis
+        }
+    }
+
+    fun markMemoryPrune(owner: String, id: String, now: Instant) {
+        val key = "memory_prune_" + LocalMemoryCodec.sha("$owner\u0000$id".toByteArray())
+        writableDatabase.insertWithOnConflict("local_meta", null, values("key" to key, "value" to now.toEpochMilli().toString()),
+            SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /** Old, unprotected mid-tier rows that may be considered by the conservative retention policy. */
+    fun oldMemoryCandidates(owner: String, id: String, before: Instant): List<LocalMemoryPruneCandidate> {
+        require(owner.isNotBlank() && owner.length <= 256)
+        return readableDatabase.rawQuery(
+            "SELECT m.id,m.role,m.created_at,m.tier,m.attachments," +
+                "EXISTS(SELECT 1 FROM native_memory_annotations a WHERE a.owner=m.owner AND a.conversation_id=m.conversation_id AND a.message_id=m.id AND a.source_sha=m.sha256 AND a.role=m.role AND a.source_created_at=m.created_at AND a.validity='current' AND a.pinned=1)," +
+                "EXISTS(SELECT 1 FROM proactive_requests p WHERE p.message_id=m.id)," +
+                "COALESCE((SELECT MAX(1.0+CASE a.tier WHEN 'long' THEN 0.05 WHEN 'permanent' THEN 0.10 ELSE 0.0 END+CASE a.pinned WHEN 1 THEN 0.05 ELSE 0.0 END) FROM native_memory_annotations a WHERE a.owner=m.owner AND a.conversation_id=m.conversation_id AND a.message_id=m.id AND a.source_sha=m.sha256 AND a.role=m.role AND a.source_created_at=m.created_at AND a.validity='current'),1.0) " +
+                "FROM messages m WHERE m.owner=? AND m.conversation_id=? AND m.created_at<? AND m.tier='mid' AND m.manual_tier IS NULL AND m.attachments='[]' " +
+                "AND m.seq <= (SELECT MAX(seq)-" + LocalMemoryPruneRules.PROTECTED_RECENT_MESSAGES + " FROM messages WHERE owner=? AND conversation_id=?) " +
+                "ORDER BY m.seq ASC",
+            arrayOf(owner, id, before.toString(), owner, id)).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(LocalMemoryPruneCandidate(
+                    cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3),
+                    cursor.getInt(5) != 0, cursor.getString(4) != "[]", cursor.getInt(6) != 0,
+                    cursor.getDouble(7)))
+            }
+        }
+    }
+
+    /**
+     * Deletes exact old rows and their derived vectors/annotations/FTS entries in one transaction.
+     * Proactive or attachment-bearing rows are never deleted; a concurrent revision change aborts
+     * that row, so a stale candidate can never remove a newer memory.
+     */
+    fun deleteOldMemories(owner: String, id: String, ids: List<String>, before: Instant): Int = transaction { db ->
+        require(ids.size <= 1000 && ids.distinct().size == ids.size && ids.all { it.length in 1..128 })
+        var removed = 0
+        for (messageId in ids) {
+            val safe = db.rawQuery(
+                "SELECT 1 FROM messages m WHERE m.owner=? AND m.conversation_id=? AND m.id=? AND m.created_at<? " +
+                    "AND m.tier='mid' AND m.manual_tier IS NULL AND m.attachments='[]' " +
+                    "AND NOT EXISTS(SELECT 1 FROM proactive_requests p WHERE p.message_id=m.id) " +
+                    "AND NOT EXISTS(SELECT 1 FROM native_memory_annotations a WHERE a.owner=m.owner AND a.conversation_id=m.conversation_id AND a.message_id=m.id AND a.source_sha=m.sha256 AND a.role=m.role AND a.source_created_at=m.created_at AND a.validity='current' AND a.pinned=1)",
+                arrayOf(owner, id, messageId, before.toString())).use { it.moveToFirst() }
+            if (!safe) continue
+            db.delete("native_memory_annotation_links",
+                "newer_id IN (SELECT id FROM native_memory_annotations WHERE owner=? AND conversation_id=? AND message_id=?) OR " +
+                    "older_id IN (SELECT id FROM native_memory_annotations WHERE owner=? AND conversation_id=? AND message_id=?)",
+                arrayOf(owner, id, messageId, owner, id, messageId))
+            db.delete("native_memory_annotations", "owner=? AND conversation_id=? AND message_id=?", arrayOf(owner, id, messageId))
+            db.delete("native_memory_jobs", "owner=? AND conversation_id=? AND message_id=?", arrayOf(owner, id, messageId))
+            db.delete("semantic_vectors", "owner=? AND conversation_id=? AND message_id=?", arrayOf(owner, id, messageId))
+            db.delete("semantic_jobs", "owner=? AND conversation_id=? AND message_id=?", arrayOf(owner, id, messageId))
+            db.delete("memory_fts", "owner=? AND message_id=?", arrayOf(owner, messageId))
+            db.delete("memory_cold_fts", "owner=? AND message_id=?", arrayOf(owner, messageId))
+            removed += db.delete("messages", "owner=? AND conversation_id=? AND id=?", arrayOf(owner, id, messageId))
+        }
+        removed
+    }
+
     fun memory(owner: String, id: String, before: String?): MemoryPage {
         val page = history(owner, id, before, 50)
         val scheduled = readableDatabase.rawQuery("SELECT EXISTS(SELECT 1 FROM native_memory_jobs WHERE owner=? AND conversation_id=? AND version=?)",arrayOf(owner,id,LocalMemoryRecognitionRules.VERSION)).use {

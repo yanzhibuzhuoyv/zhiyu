@@ -117,6 +117,14 @@ class LocalSemanticStore(private val archive: LocalChatDatabase) {
         }
         return LocalSemanticStatistics(counts[0],counts[1],counts[2],counts[0] - counts[1] - counts[5],vectors,if (counts[3] == 0L) counts[4] else null,counts[3],counts[4],counts[5])
     }
+    fun firstVector(owner: String, id: String, messageId: String, model: String): FloatArray? =
+        archive.readableDatabase.rawQuery(
+            "SELECT v.vector,v.dimensions FROM semantic_vectors v JOIN messages m ON m.id=v.message_id AND m.owner=v.owner AND m.conversation_id=v.conversation_id " +
+                "WHERE v.owner=? AND v.conversation_id=? AND v.message_id=? AND v.model_id=? AND v.raw_sha=m.sha256 AND m.index_state IN ('active','cold') ORDER BY v.chunk_index LIMIT 1",
+            arrayOf(owner, id, messageId, model)).use {
+            if (!it.moveToFirst()) null else LocalSemanticVectorRules.decode(it.getBlob(0), it.getInt(1))
+        }
+
     suspend fun search(owner: String, id: String, model: String, dimensions: Int, queries: List<FloatArray>, exclude: Set<String>, state: String = "active",minimumScore:Double = -1.0): List<LocalSemanticHit> {
         require(exclude.size <= 100 && state in setOf("active","cold") && minimumScore in -1.0..1.0)
         val exclusions = if (exclude.isEmpty()) "" else " AND m.id NOT IN (${exclude.joinToString(",") { "?" }})"

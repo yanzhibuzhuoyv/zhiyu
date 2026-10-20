@@ -26,6 +26,65 @@ class FiftyMillionMemoryTest {
         2502 to "我答应十二月八日在蓝桥聊春潮这本书",
         4998 to "我现在仍然最喜欢铃兰",
     )
+    @Test fun resumeExistingFiftyMillionAndRunQueryProof() = runBlocking {
+        val name = InstrumentationRegistry.getArguments().getString("dbName") ?: return@runBlocking
+        check(android.os.Build.FINGERPRINT.contains("generic") || android.os.Build.MODEL.contains("sdk"))
+        val owner = "synthetic-fifty-million"
+        var database = LocalChatDatabase(context, name)
+        val encoder = BgeLocalSemanticEncoder(context)
+        try {
+            val chat = database.findConversation(owner) ?: error("50M conversation missing")
+            var before: String? = null
+            val ordered = ArrayList<Message>(5000)
+            var characters = 0L
+            do {
+                val page = database.history(owner, chat.id, before)
+                // history returns newest page first; prepend older pages to recover global old->new order.
+                ordered.addAll(0, page.messages)
+                page.messages.forEach { message ->
+                    characters += message.content.codePointCount(0, message.content.length)
+                }
+                before = page.nextBefore
+            } while (before != null)
+            val ids = ordered.map { it.id }
+            assertEquals(5000, ids.size)
+            assertEquals(50_000_000L, characters)
+            val semantic = LocalSemanticService(database, encoder)
+            val indexStart = System.nanoTime()
+            val maxReady = InstrumentationRegistry.getArguments().getString("maxReady")?.toInt() ?: 5000
+            val probeLimit = InstrumentationRegistry.getArguments().getString("probeLimit")?.toInt() ?: queries.size
+            var batches = 0
+            while (true) {
+                val batch = semantic.indexBatch(owner, chat.id, 16)
+                batches++
+                val stats = semantic.statistics(owner, chat.id)
+                if (batches % 32 == 0 || stats.readyMessages >= maxReady || stats.readyMessages == stats.totalMessages) {
+                    nativeProbeReport("FIFTY_MILLION_RESUME_PROGRESS ready=${stats.readyMessages} " +
+                        "messages=${stats.totalMessages} chunks=${stats.vectorChunks} failed=${stats.failedMessages} reason=${batch.reason}")
+                }
+                if (stats.readyMessages >= maxReady || stats.readyMessages == stats.totalMessages) break
+                check(batch.encodedChunks > 0) { "Resume indexing stopped before coverage was complete" }
+            }
+            val indexSeconds = (System.nanoTime() - indexStart) / 1_000_000_000.0
+            database.close(); database = LocalChatDatabase(context, name)
+            val reopened = LocalSemanticService(database, encoder)
+            val restartStats = reopened.statistics(owner, chat.id)
+            assertTrue(restartStats.readyMessages >= maxReady)
+            val recent = database.promptHistory(owner, chat.id)
+            val selectedQueries = queries.take(probeLimit.coerceIn(1, queries.size))
+            val proof = evaluate(reopened, owner, chat, ids, recent, "", "", selectedQueries)
+            assertProbes(proof, false)
+            nativeProbeReport("FIFTY_MILLION_RESUME_QUERY_REPORT " + JSONObject()
+                .put("messages", ids.size).put("characters", characters)
+                .put("semantic_seconds", indexSeconds).put("ready", restartStats.readyMessages)
+                .put("chunks", restartStats.vectorChunks).put("probes", proof)
+                .put("partial", maxReady < 5000))
+        } finally {
+            database.close()
+        }
+    }
+
+
     @Test fun exactFiftyMillionCharactersSurviveRestartAndDistantRecall() = runBlocking {
         check(android.os.Build.FINGERPRINT.contains("generic") || android.os.Build.MODEL.contains("sdk"))
         val name = "fifty_million_${UUID.randomUUID()}.sqlite3"
@@ -124,9 +183,10 @@ class FiftyMillionMemoryTest {
         Probe("我喜欢哪种花？", listOf(2, 4998), listOf("铃兰")),
     )
     private suspend fun evaluate(semantic: LocalSemanticService, owner: String, chat: Conversation,
-                                 ids: List<String>, recent: List<Message>, key: String, model: String): JSONArray {
+                                 ids: List<String>, recent: List<Message>, key: String, model: String,
+                                 probes: List<Probe> = queries): JSONArray {
         val proof = JSONArray()
-        for (probe in queries) {
+        for (probe in probes) {
             val searchStart = System.nanoTime()
             val retrieval = semantic.retrieve(owner, chat.id, probe.question, recent.map { it.id }.toSet())
             val recalled = retrieval.originals

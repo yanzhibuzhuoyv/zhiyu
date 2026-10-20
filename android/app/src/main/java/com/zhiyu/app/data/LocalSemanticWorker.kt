@@ -34,10 +34,16 @@ class LocalSemanticWorker(context:Context,parameters:WorkerParameters):Coroutine
             val service = LocalSemanticService(archive,encoder)
             val deadline = System.nanoTime() + 90_000_000_000L
             var encoded = 0
+            var reason: String? = null
             while (System.nanoTime() < deadline && encoded < 128) {
                 val result = service.indexBatch(owner,chat.id,minOf(12,128 - encoded))
                 encoded += result.encodedChunks
-                if (result.reason != "batch_limit") return@withContext if (result.reason == "encoding_failed") Result.retry() else Result.success()
+                reason = result.reason
+                if (result.reason != "batch_limit") break
+            }
+            if (reason == "encoding_failed") return@withContext Result.retry()
+            if (reason != "batch_limit") {
+                LocalMemoryPruneService(archive,encoder).runIfDue(owner,chat.id)
             }
             Result.success()
         } catch (cancelled:CancellationException) { throw cancelled }

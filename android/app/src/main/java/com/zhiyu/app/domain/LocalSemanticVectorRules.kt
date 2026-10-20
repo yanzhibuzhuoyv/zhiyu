@@ -18,6 +18,11 @@ object LocalSemanticVectorRules {
         normalized(vector, dimensions).forEach(result::putFloat)
         return result.array()
     }
+    fun decode(bytes: ByteArray, dimensions: Int): FloatArray {
+        require(bytes.size == dimensions * 4) { "语义向量长度不一致" }
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        return FloatArray(dimensions) { buffer.float.also { value -> require(value.isFinite()) } }
+    }
     fun score(bytes: ByteArray, queries: List<FloatArray>, dimensions: Int): Double {
         require(bytes.size == dimensions * 4 && queries.size in 1..8 && queries.all { it.size == dimensions }) { "语义索引维度不一致" }
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
