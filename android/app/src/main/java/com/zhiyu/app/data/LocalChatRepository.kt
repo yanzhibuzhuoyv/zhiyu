@@ -39,7 +39,7 @@ class LocalChatRepository(
     }
     private val appContext = context.applicationContext
     private val weatherRefresh by lazy { NativeWeatherRefresh(appContext) }
-    private val media = LocalReplyMedia(appContext)
+    private val media = LocalReplyMedia(appContext, archive = database)
     private val dailyShares = LocalDailyShareMedia(appContext, dailyNow)
     private val dailyVisual = LocalVisualRepository(appContext)
     private val calendar = CompanionCalendarStore(appContext)
@@ -129,6 +129,18 @@ class LocalChatRepository(
     }
     private fun owner(binding: CompanionBinding) = "companion-" + LocalMemoryCodec.sha((binding.providerId + "\u0000" + binding.model).toByteArray(Charsets.UTF_8))
     private fun currentOwner() = owner(binding())
+    override suspend fun saveOutgoingDraft(draft: OutgoingDraft) = withContext(Dispatchers.IO) {
+        val bound = binding()
+        require(draft.providerId == bound.providerId && draft.model == bound.model) { "待发消息与恋人绑定不一致" }
+        LocalOutgoingStore(database, owner(bound)).save(draft)
+    }
+    override suspend fun loadOutgoingDrafts(): List<OutgoingDraft> = withContext(Dispatchers.IO) {
+        val bound = store.readBinding() ?: return@withContext emptyList()
+        LocalOutgoingStore(database, owner(bound)).restore()
+    }
+    override suspend fun deleteOutgoingDraft(requestId: String) = withContext(Dispatchers.IO) {
+        LocalOutgoingStore(database, currentOwner()).remove(requestId)
+    }
     override suspend fun conversations(): List<Conversation> = withContext(Dispatchers.IO) {
         val saved = connection()
         val binding = binding()

@@ -14,7 +14,7 @@ import java.util.UUID
 import java.time.Instant
 import kotlin.random.Random
 
-class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant::now) {
+class LocalReplyMedia(context: Context, archive: LocalChatDatabase? = null, private val now: () -> Instant = Instant::now) {
     private val appContext = context.applicationContext
     private val assets = LocalMediaStore(appContext)
     private val visual = LocalVisualRepository(appContext)
@@ -23,7 +23,7 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
     private val characters = OcCreatorStore(appContext)
     private val borrower = com.zhiyu.app.data.selfie.LocalPhotoBorrower(appContext)
     private val borrowed = com.zhiyu.app.data.selfie.LocalPhotoBorrowStore(appContext)
-    private val deliveredPhotos = appContext.getSharedPreferences("photo_delivery_used_sha_v1", Context.MODE_PRIVATE)
+    private val deliveredPhotos = LocalPhotoDeliveryStore(appContext, archive)
     private data class SelfiePreparation(val image: LocalMediaDetails? = null, val safeFailureReason: String? = null)
     suspend fun prepare(id: String, profile: CompanionProfile?, recent: List<Message>, userText: String = "",
         dialogue: List<Message> = recent): LocalMediaPlan {
@@ -88,7 +88,7 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
                         }
                     val final = if (plan.photoRequested) {
                         val image = reply.attachments.singleOrNull()
-                        if (image != null && image.id == plan.requiredAttachmentId && consumePhoto(id, image.sha256)) reply
+                        if (image != null && image.id == plan.requiredAttachmentId) reply
                         else unavailableReply(plan, raw)
                     } else if (!plan.selfieRequested) reply else {
                         val selected = reply.attachments.singleOrNull()?.let { assets.details(it.id) }
@@ -99,7 +99,9 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
                         else if (plan.preserveGeneratedText && plan.candidates.isEmpty() && plan.borrowed == null) reply
                         else LocalMediaReply(if (plan.borrowed != null) SELFIE_PENDING else plan.unavailableMessage ?: SELFIE_PENDING, emptyList())
                     }
-                    save(final)
+                    val photo = final.attachments.singleOrNull()?.takeIf { plan.photoRequested }
+                    if (photo == null) save(final) else deliveredPhotos.deliver(id, photo.sha256,
+                        unavailable = { save(unavailableReply(plan, raw)) }, save = { save(final) })
                 }
             }
             }
@@ -199,9 +201,9 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
 
     private fun photoPlan(chat: String, request: LocalPhotoDeliveryRequest, available: List<LocalMediaDetails>,
         dailyPrompt: String, day: String, profile: CompanionProfile?): LocalMediaPlan {
-        val used = deliveredPhotoSha(chat)
+        val used = deliveredPhotos.delivered(chat, available.map { it.attachment.sha256 }.toSet())
         val selected = available.asSequence().filter { item ->
-            item.attachment.sha256 !in used && used.size < 4096 && photoEligible(chat, item) &&
+            item.attachment.sha256 !in used && photoEligible(chat, item) &&
                 photoSubjectMatches(request.subject, item)
         }.firstOrNull { item ->
             try { assets.download(item.attachment.id, item.attachment.sha256); true }
@@ -236,21 +238,6 @@ class LocalReplyMedia(context: Context, private val now: () -> Instant = Instant
             !tags.containsAll(listOf("composite_reviewed", "decoded_final"))) return false
         return "remote_generated" !in tags || "daily_stock" in tags &&
             tags.singleOrNull { it.startsWith("remote_chat_") } == "remote_chat_${chat.take(24)}"
-    }
-
-    private fun deliveredPhotoSha(chat: String): Set<String> {
-        MediaRules.path(chat)
-        val used = deliveredPhotos.getStringSet("chat_$chat", emptySet()).orEmpty().toSet()
-        require(used.size <= 4096 && used.all { Regex("[a-f0-9]{64}").matches(it) }) { "照片交付记录无效，原记录已保留" }
-        return used
-    }
-
-    /** Consume under the existing profile/scene commit lock before saving, just as selfie lanes do. */
-    private fun consumePhoto(chat: String, sha: String): Boolean {
-        val used = deliveredPhotoSha(chat)
-        if (sha in used || used.size >= 4096) return false
-        check(deliveredPhotos.edit().putStringSet("chat_$chat", used + sha).commit()) { "照片交付记录未保存" }
-        return true
     }
 
     private fun unavailableReply(plan: LocalMediaPlan, raw: String): LocalMediaReply =

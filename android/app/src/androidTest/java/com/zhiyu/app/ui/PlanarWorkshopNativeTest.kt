@@ -153,7 +153,7 @@ class PlanarWorkshopNativeTest {
         }
         assertZero(controller.previewDocument!!)
         compose.runOnIdle {controller.save("手动头部")}
-        compose.waitUntil(10000){controller.active!=null&&!controller.busy}
+        compose.waitUntil(10000){!controller.busy&&(controller.active!=null||controller.error!=null)}
         assertNull(controller.error)
         assertZero(checkNotNull(controller.forBinding(binding)))
         val reopened=PlanarWorkshopController(context,scope)

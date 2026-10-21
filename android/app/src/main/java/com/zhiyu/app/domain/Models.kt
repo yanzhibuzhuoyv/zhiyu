@@ -46,6 +46,10 @@ interface CredentialStore {
 }
 interface AuthService { suspend fun authenticate(connection: SavedConnection): AuthSession }
 interface ChatRepository {
+    /** Native implementations durably accept snapshots before the composer is cleared. */
+    suspend fun saveOutgoingDraft(draft: OutgoingDraft): Unit = Unit
+    suspend fun loadOutgoingDrafts(): List<OutgoingDraft> = emptyList()
+    suspend fun deleteOutgoingDraft(requestId: String): Unit = Unit
     suspend fun connectionNotice(): String? = null
     suspend fun savedBinding(): CompanionBinding?
     suspend fun savedConnection(): SavedConnection?

@@ -10,7 +10,7 @@ import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 
-/** Review-only synthetic fixtures. Assertions express the expected safety behavior. */
+/** Synthetic regression fixtures for original retention and bounded scan progress. */
 class RepoReviewPruneNativeTest {
     private val now = Instant.parse("2026-10-21T00:00:00Z")
     private val oldTime = now.minusSeconds(60L * 86400).toString()
@@ -60,8 +60,31 @@ class RepoReviewPruneNativeTest {
             }
             val service = LocalMemoryPruneService(db, encoder) { now }
             val first = service.run(owner, chat)
-            val second = service.run(owner, chat)
+            val second = LocalMemoryPruneService(db, encoder) { now }.run(owner, chat)
             assertTrue("Both scans revisit the same first 400: $first / $second", first.deleted + second.deleted > 0)
+        }
+    }
+
+    @Test fun theNewestHundredAreCountedWithinTheConversationEvenWithSequenceGaps() = runBlocking {
+        withDatabase { db, owner, chat ->
+            val original = append(db, owner, chat, "同一句原话", oldTime)
+            val other = db.ensureConversation("another-owner", "review-model", CompanionProfile())
+            repeat(150) { db.append("another-owner", other.id, "user", "另一个会话的消息$it") }
+            append(db, owner, chat, original.content, now.toString())
+            assertTrue(db.oldMemoryCandidates(owner, chat, now.minusSeconds(30L * 86400)).isEmpty())
+            assertEquals(0, db.deleteOldMemories(owner, chat, listOf(original.id), now.minusSeconds(30L * 86400)))
+        }
+    }
+
+    @Test fun disappearingRepresentativeCannotDeleteAnOriginalSelectedEarlier() = runBlocking {
+        withDatabase { db, owner, chat ->
+            val original = append(db, owner, chat, "原文必须还有完整副本", oldTime)
+            val newer = append(db, owner, chat, original.content, now.minusSeconds(86400).toString())
+            repeat(100) { append(db, owner, chat, "近期内容$it", now.toString()) }
+            assertEquals(newer.id, db.exactNewerOriginal(owner, chat, original.id))
+            db.writableDatabase.update("messages", ContentValues().apply { put("index_state", "archived") }, "id=?", arrayOf(newer.id))
+            assertEquals(0, db.deleteOldMemories(owner, chat, listOf(original.id), now.minusSeconds(30L * 86400)))
+            assertEquals(1, count(db, "SELECT count(*) FROM messages WHERE id=?", arrayOf(original.id)))
         }
     }
 

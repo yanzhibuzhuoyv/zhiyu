@@ -11,6 +11,81 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RepoReviewQueueTest {
+    @Test fun discardInProgressCannotBeRetriedIntoANewProviderRequest() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val holders = ViewModelStore()
+        val repo = ReviewQueueRepository().apply {
+            firstAnswer.complete(Unit); beforeCommitFailure = IllegalStateException("synthetic offline")
+        }
+        try {
+            val model = ChatViewModel(repo, DocumentReader(Application()))
+            holders.put("model", model); advanceUntilIdle()
+            model.draft("准备放弃的待发原话"); model.send(); advanceUntilIdle()
+            val pending = model.state.value.pendingOutgoing.single()
+            assertEquals(OutgoingPhase.FAILED, pending.phase)
+            val gate = CompletableDeferred<Unit>(); repo.deleteGate = gate
+            model.discardOutgoing(pending.id); runCurrent()
+            model.retryOutgoing(pending.id); runCurrent()
+            assertEquals("Discard owns this item until its durable removal completes", 1, repo.contents.size)
+            gate.complete(Unit); advanceUntilIdle()
+            assertTrue(model.state.value.pendingOutgoing.isEmpty())
+            assertTrue(repo.loadOutgoingDrafts().isEmpty())
+        } finally { holders.clear(); runCurrent(); Dispatchers.resetMain() }
+    }
+
+    @Test fun storageFailureKeepsComposerAndMakesNoProviderRequest() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val holders = ViewModelStore()
+        val repo = ReviewQueueRepository().apply { saveFailure = IllegalStateException("synthetic disk failure") }
+        try {
+            val model = ChatViewModel(repo, DocumentReader(Application()))
+            holders.put("model", model); advanceUntilIdle()
+            model.draft("尚未持久保存的原话"); model.send(); advanceUntilIdle()
+            assertEquals("尚未持久保存的原话", model.state.value.draft)
+            assertTrue(model.state.value.pendingOutgoing.isEmpty())
+            assertTrue(repo.contents.isEmpty())
+            assertNotNull(model.state.value.error)
+        } finally { holders.clear(); runCurrent(); Dispatchers.resetMain() }
+    }
+
+    @Test fun slowFollowingSaveCannotSplitAnAcceptedContinuousBatch() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val holders = ViewModelStore()
+        val repo = ReviewQueueRepository()
+        try {
+            val model = ChatViewModel(repo, DocumentReader(Application()))
+            holders.put("model", model); advanceUntilIdle()
+            model.draft("第一句"); model.send(); runCurrent()
+            val gate = CompletableDeferred<Unit>(); repo.saveGate = gate
+            model.draft("连着的第二句"); model.send(); runCurrent()
+            advanceTimeBy(OutgoingQueueRules.TEXT_MAX_WAIT_MILLIS + 1); runCurrent()
+            assertTrue("The provider must not start while a following accepted input is still being persisted", repo.contents.isEmpty())
+            model.draft("还在编辑的第三句")
+            gate.complete(Unit); runCurrent()
+            assertEquals("还在编辑的第三句", model.state.value.draft)
+            assertEquals(listOf("第一句", "连着的第二句"), model.state.value.pendingOutgoing.map { it.content })
+            model.draft(""); advanceTimeBy(OutgoingQueueRules.TEXT_QUIET_MILLIS + 1); runCurrent()
+            assertEquals(listOf("第一句", "连着的第二句"), repo.contents)
+            assertEquals(1, repo.batchCalls)
+        } finally { repo.firstAnswer.complete(Unit); holders.clear(); runCurrent(); Dispatchers.resetMain() }
+    }
+
+    @Test fun disconnectDuringSaveKeepsOriginalForRecreationWithoutSending() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val holders = ViewModelStore()
+        val repo = ReviewQueueRepository()
+        try {
+            val model = ChatViewModel(repo, DocumentReader(Application()))
+            holders.put("model", model); advanceUntilIdle()
+            val gate = CompletableDeferred<Unit>(); repo.saveGate = gate
+            model.draft("切换连接时不能丢的原话"); model.send(); runCurrent()
+            model.disconnect(); runCurrent()
+            gate.complete(Unit); advanceUntilIdle()
+            assertEquals("切换连接时不能丢的原话", repo.loadOutgoingDrafts().single().content)
+            assertTrue(repo.contents.isEmpty())
+        } finally { holders.clear(); runCurrent(); Dispatchers.resetMain() }
+    }
+
     @Test fun acceptedUnsubmittedMessagesSurviveViewModelRecreation() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val holders = ViewModelStore()
@@ -37,6 +112,19 @@ class RepoReviewQueueTest {
     }
 }
 private class ReviewQueueRepository : ChatRepository {
+    private var outbox = emptyList<OutgoingDraft>()
+    var saveFailure: Exception? = null
+    var saveGate: CompletableDeferred<Unit>? = null
+    var deleteGate: CompletableDeferred<Unit>? = null
+    var batchCalls = 0
+    override suspend fun saveOutgoingDraft(draft: OutgoingDraft) {
+        saveFailure?.let { throw it }; saveGate?.await()
+        outbox = outbox + draft
+    }
+    override suspend fun loadOutgoingDrafts() = outbox.map { it.copy(phase = OutgoingPhase.FAILED) }
+    override suspend fun deleteOutgoingDraft(requestId: String) {
+        deleteGate?.await(); outbox = outbox.filterNot { it.id == requestId }
+    }
     val binding = CompanionBinding("deepseek", "synthetic-model")
     var connection: SavedConnection? = SavedConnection("https://synthetic.invalid", binding.providerId, "synthetic-key", binding.model)
     val chat = Conversation("synthetic-chat", "与你", binding.model, true, "2026-10-16", "2026-10-16")
@@ -77,6 +165,7 @@ private class ReviewQueueRepository : ChatRepository {
     }
     override suspend fun sendQueuedTextBatch(id: String, inputs: List<QueuedTextInput>,
         onSubmitted: (String, Message) -> Unit): QueuedTextBatchResult {
+        batchCalls++
         val checked = QueuedTextBatchRules.check(inputs)
         active++; peakActive = maxOf(peakActive, active)
         val firstNumber = contents.size + 1

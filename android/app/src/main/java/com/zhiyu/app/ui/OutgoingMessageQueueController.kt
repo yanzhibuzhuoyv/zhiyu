@@ -2,6 +2,8 @@ package com.zhiyu.app.ui
 
 import com.zhiyu.app.domain.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 /** Main-thread enqueue/ownership; repository callbacks may arrive on IO and only update immutable state. */
@@ -18,6 +20,9 @@ internal class OutgoingMessageQueueController(
     private var maximumWindow: Job? = null
     private var typingDeadline: Job? = null
     private var composingContinuation = false
+    private val admission = Mutex()
+    private var pendingAdmissions = 0
+    private var discarding: Set<String> = emptySet()
     private data class DeferredReply(val item: OutgoingDraft, val result: QueuedTextBatchResult)
     private var deferredReplies: List<DeferredReply> = emptyList()
     fun hasPendingReplies() = deferredReplies.isNotEmpty()
@@ -39,12 +44,32 @@ internal class OutgoingMessageQueueController(
         }
     }
 
-    fun enqueue(voiceText: String? = null, voiceDraftId: String? = null): Boolean {
-        val state = read()
+    suspend fun restore() {
+        val recovered = repository.loadOutgoingDrafts()
+        update { state -> state.copy(pendingOutgoing = (state.pendingOutgoing + recovered.map {
+            it.copy(connectionEpoch = epoch)
+        }).distinctBy { it.id }) }
+    }
+
+    suspend fun enqueue(voiceText: String? = null, voiceDraftId: String? = null): Boolean {
+        val snapshot = read()
+        val stamp = epoch
+        pendingAdmissions++
+        return try { admission.withLock { enqueueSnapshot(snapshot, stamp, voiceText, voiceDraftId) } }
+        finally {
+            pendingAdmissions--
+            resume()
+            scope.launch { flushReplies() }
+        }
+    }
+
+    private suspend fun enqueueSnapshot(state: AppState, stamp: Long, voiceText: String?, voiceDraftId: String?): Boolean {
         try {
-            check(state.connected && !state.restoring) { "请先连接，再发送消息" }
+            val live = read()
+            check(stamp == epoch && live.connected && !live.restoring && state.selectedId == live.selectedId &&
+                state.serverUrl == live.serverUrl && state.providerId == live.providerId && state.model == live.model) { "请先连接，再发送消息" }
             val chat = state.selected ?: error("对话还未准备好，请刷新后重试")
-            check(state.pendingOutgoing.size < OutgoingQueueRules.CAPACITY) { "待发送的消息有点多，等前面的发出后再试试" }
+            check(live.pendingOutgoing.size < OutgoingQueueRules.CAPACITY) { "待发送的消息有点多，等前面的发出后再试试" }
             val image = if (voiceText == null) state.draftImage else null
             val raw = voiceText ?: state.draft
             val text = if (image == null) ConnectionRules.message(raw) else raw
@@ -52,16 +77,18 @@ internal class OutgoingMessageQueueController(
             val id = UUID.randomUUID().toString().replace("-", "")
             val plainText = voiceText == null && image == null && voiceDraftId == null
             composingContinuation = false; typingDeadline?.cancel(); typingDeadline = null
-            val textBatchId = if (plainText) openTextBatchId?.takeIf { canJoin(it, state, text) } ?: id else null
+            val textBatchId = if (plainText) openTextBatchId?.takeIf { canJoin(it, live, text) } ?: id else null
             if (textBatchId != openTextBatchId) closeTextWindow()
             val item = OutgoingDraft(id, chat.id, epoch, state.serverUrl, state.providerId, state.model,
                 text, image, voiceDraftId, textBatchId = textBatchId)
+            repository.saveOutgoingDraft(item)
+            check(stamp == epoch) { "连接已改变，原话已保留，重新连接后可处理待发消息" }
             update { current -> current.copy(pendingOutgoing = current.pendingOutgoing + item,
                 draft = if (voiceText == null && current.draft == state.draft) "" else current.draft,
                 draftImage = if (voiceText == null && current.draftImage?.attachment?.id == image?.attachment?.id) null else current.draftImage,
                 error = null, notice = null) }
             if (textBatchId != null) openTextWindow(textBatchId)
-            resume()
+            composerChanged(read().draft)
             return true
         } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
@@ -74,6 +101,7 @@ internal class OutgoingMessageQueueController(
     fun retry(id: String) {
         val state = read(); val item = state.pendingOutgoing.firstOrNull { it.id == id } ?: return
         val group = if (item.textBatchId == null) listOf(item) else state.pendingOutgoing.filter { it.textBatchId == item.textBatchId }
+        if (group.any { it.id in discarding }) return
         if (group.any { it.submittedMessageId != null || it.phase == OutgoingPhase.SUBMITTED_NO_REPLY }) {
             update { it.copy(error = "这条消息已经发出，不用再发一遍；你可以接着说") }; return
         }
@@ -88,11 +116,22 @@ internal class OutgoingMessageQueueController(
         resume()
     }
 
-    fun discard(id: String) {
-        val item = read().pendingOutgoing.firstOrNull { it.id == id && it.phase != OutgoingPhase.SENDING } ?: return
-        update { it.copy(pendingOutgoing = it.pendingOutgoing.filterNot { row -> row.id == id }) }
-        scope.launch { cleanup(item); flushReplies() }
-        resume()
+    fun discard(id: String) = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+        val item = read().pendingOutgoing.firstOrNull { it.id == id && it.phase != OutgoingPhase.SENDING } ?: return@launch
+        if (id in discarding) return@launch
+        discarding = discarding + id
+        try {
+            repository.deleteOutgoingDraft(id)
+            update { it.copy(pendingOutgoing = it.pendingOutgoing.filterNot { row -> row.id == id }) }
+            cleanup(item); flushReplies()
+        }
+        catch (failure: Exception) {
+            if (failure is CancellationException) throw failure
+            update { it.copy(error = "待发消息暂时没能移除，原话仍保留") }
+        } finally {
+            discarding = discarding - id
+            resume()
+        }
     }
 
     fun invalidate() {
@@ -151,6 +190,7 @@ internal class OutgoingMessageQueueController(
                 result.submitted.map { it.requestId } == items.map { it.id } &&
                 result.submitted.map { it.message.id }.distinct().size == items.size) { "连续消息回复结果不一致，请刷新查看" }
             items.zip(result.submitted).forEach { (item, row) -> submitted(item, row.message) }
+            items.forEach { repository.deleteOutgoingDraft(it.id) }
             if (items.all(::plainText)) deferredReplies = deferredReplies + DeferredReply(items.first(), result)
             else publish(items.first(), result.submitted.map { it.message } + result.assistant)
             val ids = items.map { it.id }.toSet()
@@ -203,25 +243,28 @@ internal class OutgoingMessageQueueController(
     }
 
     private fun nextItems(state: AppState): List<OutgoingDraft> {
+        if (pendingAdmissions > 0) return emptyList()
         val first = state.pendingOutgoing.firstOrNull() ?: return emptyList()
+        if (first.id in discarding) return emptyList()
         if (!state.connected || state.restoring || first.phase != OutgoingPhase.QUEUED || !matches(first, state) ||
             first.textBatchId != null && first.textBatchId == openTextBatchId) return emptyList()
         if (first.textBatchId == null) return listOf(first)
         if (deferredReplies.isNotEmpty()) {
             if (state.pendingOutgoing.any { it.textBatchId == openTextBatchId && openTextBatchId != null }) return emptyList()
             val remaining = (32 - deferredReplies.sumOf { it.result.submitted.size }).coerceAtLeast(1)
-            return state.pendingOutgoing.takeWhile { plainText(it) && it.phase == OutgoingPhase.QUEUED && matches(it, state) }
+            return state.pendingOutgoing.takeWhile { it.id !in discarding && plainText(it) && it.phase == OutgoingPhase.QUEUED && matches(it, state) }
                 .runningFold(emptyList<OutgoingDraft>()) { group, item -> group + item }
                 .last { group -> group.size <= minOf(remaining, QueuedTextBatchRules.MAX_INPUTS) &&
                     group.sumOf { it.content.length.toLong() } <= QueuedTextBatchRules.MAX_CONTENT_CHARS }
         }
-        return state.pendingOutgoing.takeWhile { it.textBatchId == first.textBatchId && it.phase == OutgoingPhase.QUEUED && matches(it, state) }
+        return state.pendingOutgoing.takeWhile { it.id !in discarding && it.textBatchId == first.textBatchId && it.phase == OutgoingPhase.QUEUED && matches(it, state) }
     }
 
     private fun plainText(item: OutgoingDraft) = item.image == null && item.voiceDraftId == null && item.textBatchId != null
     private fun continuationPending() = read().pendingOutgoing
         .takeWhile { it.phase in setOf(OutgoingPhase.QUEUED, OutgoingPhase.SENDING) }.any(::plainText)
     private suspend fun flushReplies() {
+        if (pendingAdmissions > 0) return
         val atLimit = deferredReplies.sumOf { it.result.submitted.size } >= 32
         if (deferredReplies.isEmpty() || !atLimit && (composingContinuation || continuationPending())) return
         val replies = deferredReplies
@@ -235,7 +278,8 @@ internal class OutgoingMessageQueueController(
             if (failure is CancellationException) throw failure
             update { it.copy(notice = "消息已保存，连续消息的显示顺序暂时没能保存") }
         }
-        if (stamp != epoch || deferredReplies != replies || !atLimit && (composingContinuation || continuationPending())) return
+        if (stamp != epoch || deferredReplies != replies || pendingAdmissions > 0 ||
+            !atLimit && (composingContinuation || continuationPending())) return
         deferredReplies = emptyList()
         update { state ->
             if (stamp != epoch || !matchesTarget(first, state)) state else {

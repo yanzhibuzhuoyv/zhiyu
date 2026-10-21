@@ -30,6 +30,7 @@ class PhotoSendUiNativeTest {
     private val models = ViewModelStore()
     private val gate = CompletableDeferred<Unit>()
     private val history = mutableListOf<Message>()
+    private var outbox: List<OutgoingDraft> = emptyList()
     private lateinit var viewModel: ChatViewModel
     private lateinit var draft: ChatImageDraft
     private var failReply = false
@@ -51,6 +52,9 @@ class PhotoSendUiNativeTest {
                 "providers" -> DirectProviderCatalog.providers()
                 "conversations" -> listOf(chat)
                 "documents" -> emptyList<Document>()
+                "loadOutgoingDrafts" -> outbox
+                "saveOutgoingDraft" -> { outbox = outbox + (args!![0] as OutgoingDraft); Unit }
+                "deleteOutgoingDraft" -> { outbox = outbox.filterNot { it.id == args!![0] as String }; Unit }
                 "history" -> MessagePage(history.toList(), false, null)
                 "discardPhotoDraft" -> { ChatPhotoStore(context).clearDraftIf(args!![0] as String); Unit }
                 "sendQueuedMessage", "sendPhotoMessage" -> {

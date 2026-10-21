@@ -42,7 +42,10 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
     }
     private fun createReliabilitySchema(db: SQLiteDatabase) {
         db.execSQL("CREATE INDEX IF NOT EXISTS messages_exact_duplicate ON messages(owner,conversation_id,sha256,role,created_at)")
+        LocalPhotoDeliveryStore.createSchema(db)
+        LocalOutgoingStore.createSchema(db)
     }
+    internal fun <T> atomic(block: () -> T): T = transaction { block() }
     private fun createColdIndex(db:SQLiteDatabase) {
         db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS memory_cold_fts USING fts4(body_tokens,owner,message_id,document_id,part_index,start_offset,end_offset,original_chars,notindexed=owner,notindexed=message_id,notindexed=document_id,notindexed=part_index,notindexed=start_offset,notindexed=end_offset,notindexed=original_chars,tokenize=unicode61)")
     }
@@ -55,6 +58,9 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
     /** All owners and dates protect original message media; malformed records stop cache cleanup. */
     fun pinnedMediaIds(): Set<String> = readableDatabase.rawQuery("SELECT attachments FROM messages", null).use { cursor ->
         buildSet {
+            readableDatabase.rawQuery("SELECT image_id FROM outgoing_drafts WHERE image_id IS NOT NULL", null).use { pending ->
+                while (pending.moveToNext()) add(pending.getString(0).also { MediaRules.path(it) })
+            }
             while (cursor.moveToNext()) {
                 val raw = cursor.getString(0)
                 require(raw.length <= 16 * 1024) { "聊天图片标注损坏，暂不整理缓存" }
@@ -388,7 +394,7 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
                 "EXISTS(SELECT 1 FROM proactive_requests p WHERE p.message_id=m.id)," +
                 "COALESCE((SELECT MAX(1.0+CASE a.tier WHEN 'long' THEN 0.05 WHEN 'permanent' THEN 0.10 ELSE 0.0 END+CASE a.pinned WHEN 1 THEN 0.05 ELSE 0.0 END) FROM native_memory_annotations a WHERE a.owner=m.owner AND a.conversation_id=m.conversation_id AND a.message_id=m.id AND a.source_sha=m.sha256 AND a.role=m.role AND a.source_created_at=m.created_at AND a.validity='current'),1.0),m.seq " +
                 "FROM messages m WHERE m.owner=? AND m.conversation_id=? AND m.created_at<? AND m.tier='mid' AND m.manual_tier IS NULL AND m.attachments='[]' " +
-                "AND m.seq <= (SELECT MAX(seq)-" + LocalMemoryPruneRules.PROTECTED_RECENT_MESSAGES + " FROM messages WHERE owner=? AND conversation_id=?) " +
+                "AND m.seq <= (SELECT seq FROM messages WHERE owner=? AND conversation_id=? ORDER BY seq DESC LIMIT 1 OFFSET " + LocalMemoryPruneRules.PROTECTED_RECENT_MESSAGES + ") " +
                 "ORDER BY m.seq ASC",
             arrayOf(owner, id, before.toString(), owner, id)).use { cursor ->
             buildList {
@@ -436,7 +442,7 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
             val safe = db.rawQuery(
                 "SELECT 1 FROM messages m WHERE m.owner=? AND m.conversation_id=? AND m.id=? AND m.created_at<? " +
                     "AND m.tier='mid' AND m.manual_tier IS NULL AND m.attachments='[]' " +
-                    "AND m.seq <= (SELECT MAX(seq)-100 FROM messages WHERE owner=m.owner AND conversation_id=m.conversation_id) " +
+                    "AND m.seq <= (SELECT seq FROM messages WHERE owner=m.owner AND conversation_id=m.conversation_id ORDER BY seq DESC LIMIT 1 OFFSET " + LocalMemoryPruneRules.PROTECTED_RECENT_MESSAGES + ") " +
                     "AND NOT EXISTS(SELECT 1 FROM proactive_requests p WHERE p.message_id=m.id) " +
                     "AND NOT EXISTS(SELECT 1 FROM native_memory_annotations a WHERE a.owner=m.owner AND a.conversation_id=m.conversation_id AND a.message_id=m.id AND a.source_sha=m.sha256 AND a.role=m.role AND a.source_created_at=m.created_at AND a.validity='current' AND (a.pinned=1 OR a.tier IN ('long','permanent')))",
                 arrayOf(owner, id, messageId, before.toString())).use { it.moveToFirst() }

@@ -30,7 +30,8 @@ class LocalMemoryPruneNativeTest {
                     row
                 }
                 (0 until 100).forEach { index ->
-                    database.append(owner, chat.id, "user", "近期记忆$index")
+                    val duplicate = oldIds.getOrNull(index)?.takeIf { index < 3 }
+                    database.append(owner, chat.id, duplicate?.role ?: "user", duplicate?.content ?: "近期记忆$index")
                 }
                 val cutoff = now.minusSeconds(LocalMemoryPruneRules.MIN_AGE_DAYS * 86400)
                 assertEquals(150, database.oldMemoryCandidates(owner, chat.id, cutoff).size)
@@ -64,7 +65,7 @@ class LocalMemoryPruneNativeTest {
         }
     }
 
-    @Test fun semanticServiceDeletesOnlyConfidentDuplicatesWithinTheCap() = kotlinx.coroutines.runBlocking {
+    @Test fun serviceDeletesOnlyWholeOriginalDuplicatesWithinTheCap() = kotlinx.coroutines.runBlocking {
         NativeV4Context(InstrumentationRegistry.getInstrumentation().targetContext).use { context ->
             val name = "memory_prune_service_${UUID.randomUUID()}.sqlite3"
             val database = LocalChatDatabase(context, name)
@@ -74,10 +75,10 @@ class LocalMemoryPruneNativeTest {
                 val now = Instant.parse("2026-10-19T00:00:00Z")
                 val oldTime = now.minusSeconds(60L * 86400).toString()
                 (0 until 150).forEach { index ->
-                    appendWithVector(database, owner, chat.id, "user", "重复旧记忆$index", oldTime)
+                    appendWithVector(database, owner, chat.id, "user", "完全重复记忆${index % 100}", oldTime)
                 }
                 (0 until 100).forEach { index ->
-                    appendWithVector(database, owner, chat.id, "user", "保留的新记忆$index", now.toString())
+                    appendWithVector(database, owner, chat.id, "user", "完全重复记忆$index", now.toString())
                 }
                 val encoder = object : LocalSemanticEncoder {
                     override val modelIdentity = "synthetic-model"

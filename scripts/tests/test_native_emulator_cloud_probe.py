@@ -74,7 +74,8 @@ def test_user_interrupt_stops_the_owned_runner_and_verifies_it_is_gone(tmp_path)
         return (probe.EXPECTED_AVD + "\nOK\n").encode() if arguments == ("emu", "avd", "name") else b""
     with (patch.object(probe, "adb", side_effect=adb),
           patch.object(probe, "instrument", side_effect=KeyboardInterrupt), pytest.raises(KeyboardInterrupt)):
-        probe.execute_probe("synthetic-secret", tmp_path / "interrupt.log", False, lambda: stopped.append(True))
+        probe.execute_probe("synthetic-secret", tmp_path / "interrupt.log", fifty_million=False,
+                            resume_fifty_million=False, on_stopped=lambda: stopped.append(True))
     assert stopped == [True]
     assert ("shell", "am", "force-stop", "com.zhiyu.app.test") in calls
     assert ("shell", "am", "force-stop", "com.zhiyu.app") in calls
@@ -99,7 +100,8 @@ def test_timed_out_probe_stops_only_the_verified_emulator(tmp_path):
     with patch.object(probe, "adb", side_effect=adb), patch.object(probe, "instrument",
             side_effect=subprocess.TimeoutExpired(["synthetic"], 43200)) as command:
         with pytest.raises(subprocess.TimeoutExpired):
-            probe.execute_probe("synthetic-secret", tmp_path / "probe.log", True)
+            probe.execute_probe("synthetic-secret", tmp_path / "probe.log", fifty_million=True,
+                                resume_fifty_million=False)
         assert command.call_args.kwargs["timeout"] == 43200
     assert ("shell", "am", "force-stop", "com.zhiyu.app.test") in calls
     assert ("shell", "am", "force-stop", "com.zhiyu.app") in calls
@@ -116,7 +118,8 @@ def test_changed_emulator_prevents_force_stop_and_cleanup(tmp_path):
     with patch.object(probe, "adb", side_effect=adb), patch.object(probe, "instrument",
             side_effect=RuntimeError("sanitized")):
         with pytest.raises(RuntimeError, match="Unexpected emulator"):
-            probe.execute_probe("synthetic-secret", tmp_path / "probe.log", False)
+            probe.execute_probe("synthetic-secret", tmp_path / "probe.log", fifty_million=False,
+                                resume_fifty_million=False)
         with pytest.raises(RuntimeError, match="Unexpected emulator"):
             probe.cleanup_proof(tmp_path / "not-read.env", "not-used", tmp_path / "probe.log", True)
     assert not any("force-stop" in arguments or "rm" in arguments for arguments in calls)
@@ -134,6 +137,22 @@ def test_custom_report_is_bounded_to_new_native_log_inside_artifacts(tmp_path):
         destination.write_text("earlier result", "utf-8")
         with pytest.raises(FileExistsError):
             probe.report_path(destination.name, False)
+
+
+@pytest.mark.parametrize("large,resume,runner,timeout", [
+    (False, False, "NativeOfficialAiTest", 3600),
+    (True, False, "FiftyMillionMemoryTest", 43200),
+    (True, True, "FiftyMillionResumeTest", 43200),
+])
+def test_probe_modes_use_the_expected_runner_without_a_stop_callback(tmp_path, large, resume, runner, timeout):
+    with patch.object(probe, "ensure_emulator"), patch.object(probe, "adb"), \
+            patch.object(probe, "instrument") as instrument:
+        stopped = []
+        output = tmp_path / "mode.log"
+        probe.execute_probe("synthetic-secret", output, fifty_million=large,
+                            resume_fifty_million=resume, on_stopped=lambda: stopped.append(True))
+        instrument.assert_called_once_with(f"com.zhiyu.app.data.{runner}", output, timeout=timeout)
+        assert stopped == []
 
 
 def test_cleanup_proof_requires_actual_empty_transient_folder(tmp_path):

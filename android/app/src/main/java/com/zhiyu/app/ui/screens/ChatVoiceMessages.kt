@@ -40,7 +40,7 @@ import kotlinx.coroutines.*
     }
 }
 
-@Composable fun ChatVoiceDraft(controller: ChatVoiceController, send: (String, String) -> Boolean) {
+@Composable fun ChatVoiceDraft(controller: ChatVoiceController, send: suspend (String, String) -> Boolean) {
     if (controller.phase == ChatVoicePhase.IDLE && controller.error == null) return
     Surface(tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth().testTag("voice_draft")) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.zhiyu.app.data.DocumentReader
 import com.zhiyu.app.domain.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -35,6 +36,7 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         viewModelScope.launch {
             try {
                 restoreConnection()
+                outgoing.restore()
                 restorePhotoDraft()
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -46,6 +48,10 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
     private suspend fun restorePhotoDraft() {
         try {
             val image = repository.savedPhotoDraft()
+            if (image != null && mutableState.value.pendingOutgoing.any { it.image?.attachment?.id == image.attachment.id }) {
+                mutableState.update { it.copy(draftImage = null) }
+                return
+            }
             if (image != null && mutableState.value.messages.any { message ->
                 message.role == "user" && message.mediaAttachments.any { it.id == image.attachment.id }
             }) {
@@ -147,6 +153,7 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
         val documents = repository.documents()
         val notice = repository.connectionNotice()
         mutableState.update { it.copy(connected = true, documents = documents, notice = notice) }
+        outgoing.restore()
     }
     private suspend fun applyEditedProfile(editedProfile: CompanionProfile?) {
         if (profileEdited && editedProfile?.mode == "custom" && editedProfile != mutableState.value.selected?.profile) {
@@ -282,9 +289,9 @@ class ChatViewModel(private val repository: ChatRepository, private val reader: 
             mutableState.update { it.copy(conversations = it.conversations.map { c -> if (c.id == updated.id) updated else c }) }
         }
     }
-    fun send() { outgoing.enqueue() }
-    fun sendVoiceText(value: String) { outgoing.enqueue(value) }
-    fun sendVoiceClip(transcript: String, draftId: String): Boolean = outgoing.enqueue(transcript, draftId)
+    fun send() { viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) { outgoing.enqueue() } }
+    fun sendVoiceText(value: String) { viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) { outgoing.enqueue(value) } }
+    suspend fun sendVoiceClip(transcript: String, draftId: String): Boolean = outgoing.enqueue(transcript, draftId)
     fun retryOutgoing(id: String) = outgoing.retry(id)
     fun discardOutgoing(id: String) = outgoing.discard(id)
     fun streamCallText(chatId: String, content: String): kotlinx.coroutines.flow.Flow<String> =

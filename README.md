@@ -288,6 +288,7 @@ docker compose up --build -d --wait
 | 想了解什么 | 入口 |
 | --- | --- |
 | 版本功能与修复 | [CHANGELOG](CHANGELOG.md) |
+| 整体审查与 0.2.20 修复 | [审查发现](docs/CODE_REVIEW_2026-10-21.md) · [修复与回归](docs/REVIEW_FIXES_2026-10-21.md) |
 | 仓库总览 | [README-OVERVIEW](README-OVERVIEW.md) |
 | 语义编码器与本机记忆生命周期 | [本机编码器](docs/LOCAL_SEMANTIC_ENCODER.md) · [记忆生命周期](docs/NATIVE_MEMORY_LIFECYCLE.md) |
 | 原文、压缩与历史容量研究 | [正文存储](docs/BODY_STORAGE.md) · [冷归档实测](docs/MEMORY_COLD_PROOF.md) |

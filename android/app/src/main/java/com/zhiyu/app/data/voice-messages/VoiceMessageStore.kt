@@ -127,7 +127,8 @@ class VoiceMessageStore(context: Context, directoryName: String = "voice_message
     private fun referencedByChat(id: String): Boolean {
         if (!app.getDatabasePath("zhiyu_local_v1.sqlite3").isFile) return false
         return LocalChatDatabase(app).use { archive -> archive.readableDatabase.rawQuery(
-            "SELECT 1 FROM messages WHERE origin=? LIMIT 1", arrayOf(VoiceMessageOrigins.user(id))).use { it.moveToFirst() } }
+            "SELECT 1 FROM messages WHERE origin=? UNION ALL SELECT 1 FROM outgoing_drafts WHERE voice_id=? LIMIT 1",
+            arrayOf(VoiceMessageOrigins.user(id), id)).use { it.moveToFirst() } }
     }
     private fun file(id: String): File {
         validId(id)

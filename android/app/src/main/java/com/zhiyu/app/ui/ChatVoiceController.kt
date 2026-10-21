@@ -27,7 +27,7 @@ class AndroidChatVoiceRecorder(context: Context) : ChatVoiceRecorder {
     override fun stop() = microphone.finishTurn()
 }
 
-enum class ChatVoicePhase { IDLE, PREPARING, RECORDING, TRANSCRIBING, READY, PLAYING }
+enum class ChatVoicePhase { IDLE, PREPARING, RECORDING, TRANSCRIBING, READY, PLAYING, SENDING }
 
 /** Recording belongs to an explicit foreground action. A queued clip transfers ownership to the VM. */
 @Stable class ChatVoiceController(context: Context, private val scope: CoroutineScope,
@@ -105,13 +105,26 @@ enum class ChatVoicePhase { IDLE, PREPARING, RECORDING, TRANSCRIBING, READY, PLA
         }
     }
 
-    fun send(enqueue: (String, String) -> Boolean) {
+    fun send(enqueue: suspend (String, String) -> Boolean) {
         val clip = draft ?: return
-        if (phase != ChatVoicePhase.READY || !enqueue(transcript, clip.id)) return
-        epoch++; draft = null; transcript = ""; phase = ChatVoicePhase.IDLE; seconds = 0
+        if (phase != ChatVoicePhase.READY) return
+        val text = transcript
+        phase = ChatVoicePhase.SENDING
+        job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                if (enqueue(text, clip.id)) {
+                    epoch++; draft = null; transcript = ""; phase = ChatVoicePhase.IDLE; seconds = 0
+                } else phase = ChatVoicePhase.READY
+            } catch (failure: Exception) {
+                phase = ChatVoicePhase.READY
+                if (failure is CancellationException) throw failure
+                error = "语音暂时没能加入发送队列，录音已保留"
+            }
+        }
     }
 
     fun cancel() {
+        if (phase == ChatVoicePhase.SENDING) return // Wait for durable ownership transfer before deleting a clip.
         epoch++; recorder.stop(); playback.stop(); job?.cancel()
         val previous = draft
         draft = null; transcript = ""; phase = ChatVoicePhase.IDLE; seconds = 0

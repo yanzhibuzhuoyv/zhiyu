@@ -101,6 +101,34 @@ class ChatVoiceRecordingNativeTest {
         } finally { test.close() }
     }
 
+    @Test fun aSuspendedDurableHandoffKeepsTheRecordingUntilAcceptance(): Unit = runBlocking {
+        val test = Fixture()
+        val accepted = CompletableDeferred<Boolean>()
+        try {
+            withContext(Dispatchers.Main) { test.controller.start() }
+            awaitReady(test)
+            val clip = withContext(Dispatchers.Main) { test.controller.draft!! }
+            withContext(Dispatchers.Main) {
+                test.controller.send { _, _ -> accepted.await() }
+                assertEquals(ChatVoicePhase.SENDING, test.controller.phase)
+                test.controller.cancel()
+                assertEquals(clip, test.controller.draft)
+            }
+            assertNotNull(test.store.find(clip.id))
+            accepted.complete(false)
+            withTimeout(5_000) {
+                while (withContext(Dispatchers.Main) { test.controller.phase != ChatVoicePhase.READY }) delay(10)
+            }
+            withContext(Dispatchers.Main) {
+                assertEquals(clip, test.controller.draft)
+                test.controller.send { _, _ -> true }
+                assertNull(test.controller.draft)
+                assertEquals(ChatVoicePhase.IDLE, test.controller.phase)
+            }
+            assertNotNull(test.store.find(clip.id))
+        } finally { accepted.complete(false); test.close() }
+    }
+
     @Test fun finishWhilePreparingNeverStartsALateRecorder(): Unit = runBlocking {
         val test = Fixture(Recorder(delayedPreparation = true))
         try {
