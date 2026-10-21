@@ -14,7 +14,7 @@ import java.util.UUID
 data class LocalPromptContext(val messages: List<Message>, val completeMessageIds: Set<String>)
 
 /** Private device archive. Original bodies are losslessly compressed and individually checked. */
-class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3") : SQLiteOpenHelper(context.applicationContext, name, null, 3) {
+class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3") : SQLiteOpenHelper(context.applicationContext, name, null, 4) {
     private val media = LocalMediaStore(context)
     val isMainArchive = name == "zhiyu_local_v1.sqlite3"
     init { setWriteAheadLoggingEnabled(true) }
@@ -31,12 +31,17 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
         LocalSemanticStore.createSchema(db)
         LocalMemoryRecognitionSchema.create(db)
         createColdIndex(db)
+        createReliabilitySchema(db)
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        check(oldVersion in 1..2 && newVersion == 3) { "本机聊天库需要明确迁移，不能清空原文" }
+        check(oldVersion in 1..3 && newVersion == 4) { "本机聊天库需要明确迁移，不能清空原文" }
         LocalSemanticStore.createSchema(db)
         LocalMemoryRecognitionSchema.create(db)
         createColdIndex(db)
+        createReliabilitySchema(db)
+    }
+    private fun createReliabilitySchema(db: SQLiteDatabase) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS messages_exact_duplicate ON messages(owner,conversation_id,sha256,role,created_at)")
     }
     private fun createColdIndex(db:SQLiteDatabase) {
         db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS memory_cold_fts USING fts4(body_tokens,owner,message_id,document_id,part_index,start_offset,end_offset,original_chars,notindexed=owner,notindexed=message_id,notindexed=document_id,notindexed=part_index,notindexed=start_offset,notindexed=end_offset,notindexed=original_chars,tokenize=unicode61)")
@@ -381,7 +386,7 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
             "SELECT m.id,m.role,m.created_at,m.tier,m.attachments," +
                 "EXISTS(SELECT 1 FROM native_memory_annotations a WHERE a.owner=m.owner AND a.conversation_id=m.conversation_id AND a.message_id=m.id AND a.source_sha=m.sha256 AND a.role=m.role AND a.source_created_at=m.created_at AND a.validity='current' AND a.pinned=1)," +
                 "EXISTS(SELECT 1 FROM proactive_requests p WHERE p.message_id=m.id)," +
-                "COALESCE((SELECT MAX(1.0+CASE a.tier WHEN 'long' THEN 0.05 WHEN 'permanent' THEN 0.10 ELSE 0.0 END+CASE a.pinned WHEN 1 THEN 0.05 ELSE 0.0 END) FROM native_memory_annotations a WHERE a.owner=m.owner AND a.conversation_id=m.conversation_id AND a.message_id=m.id AND a.source_sha=m.sha256 AND a.role=m.role AND a.source_created_at=m.created_at AND a.validity='current'),1.0) " +
+                "COALESCE((SELECT MAX(1.0+CASE a.tier WHEN 'long' THEN 0.05 WHEN 'permanent' THEN 0.10 ELSE 0.0 END+CASE a.pinned WHEN 1 THEN 0.05 ELSE 0.0 END) FROM native_memory_annotations a WHERE a.owner=m.owner AND a.conversation_id=m.conversation_id AND a.message_id=m.id AND a.source_sha=m.sha256 AND a.role=m.role AND a.source_created_at=m.created_at AND a.validity='current'),1.0),m.seq " +
                 "FROM messages m WHERE m.owner=? AND m.conversation_id=? AND m.created_at<? AND m.tier='mid' AND m.manual_tier IS NULL AND m.attachments='[]' " +
                 "AND m.seq <= (SELECT MAX(seq)-" + LocalMemoryPruneRules.PROTECTED_RECENT_MESSAGES + " FROM messages WHERE owner=? AND conversation_id=?) " +
                 "ORDER BY m.seq ASC",
@@ -390,9 +395,33 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
                 while (cursor.moveToNext()) add(LocalMemoryPruneCandidate(
                     cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3),
                     cursor.getInt(5) != 0, cursor.getString(4) != "[]", cursor.getInt(6) != 0,
-                    cursor.getDouble(7)))
+                    cursor.getDouble(7), cursor.getLong(8)))
             }
         }
+    }
+
+    internal fun pruneCursor(owner: String, id: String): Long = readableDatabase.rawQuery(
+        "SELECT value FROM local_meta WHERE key=?", arrayOf("prune_cursor:$owner:$id")).use {
+        if (it.moveToFirst()) it.getString(0).toLong().also { value -> require(value >= 0) } else 0L
+    }
+
+    internal fun advancePruneCursor(owner: String, id: String, sequence: Long) {
+        require(sequence >= 0)
+        conversation(owner, id)
+        writableDatabase.insertWithOnConflict("local_meta", null,
+            values("key" to "prune_cursor:$owner:$id", "value" to sequence.toString()), SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /** Hash narrows candidates; decoded, checksum-verified whole originals prove equality. */
+    internal fun exactNewerOriginal(owner: String, id: String, messageId: String, excluded: Set<String> = emptySet()): String? {
+        val source = recognitionOriginal(owner, id, messageId) ?: return null
+        val newer = readableDatabase.rawQuery(
+            "SELECT id FROM messages WHERE owner=? AND conversation_id=? AND sha256=? AND role=? AND origin=? " +
+                "AND created_at>? AND index_state IN ('active','cold') ORDER BY created_at DESC,seq DESC",
+            arrayOf(owner, id, source.sha256, source.role, source.origin, source.createdAt)).use { cursor ->
+            buildList { while (cursor.moveToNext()) if (cursor.getString(0) !in excluded) add(cursor.getString(0)) }
+        }
+        return newer.firstOrNull { newerId -> recognitionOriginal(owner, id, newerId)?.text == source.text }
     }
 
     /**
@@ -407,10 +436,11 @@ class LocalChatDatabase(context: Context, name: String = "zhiyu_local_v1.sqlite3
             val safe = db.rawQuery(
                 "SELECT 1 FROM messages m WHERE m.owner=? AND m.conversation_id=? AND m.id=? AND m.created_at<? " +
                     "AND m.tier='mid' AND m.manual_tier IS NULL AND m.attachments='[]' " +
+                    "AND m.seq <= (SELECT MAX(seq)-100 FROM messages WHERE owner=m.owner AND conversation_id=m.conversation_id) " +
                     "AND NOT EXISTS(SELECT 1 FROM proactive_requests p WHERE p.message_id=m.id) " +
-                    "AND NOT EXISTS(SELECT 1 FROM native_memory_annotations a WHERE a.owner=m.owner AND a.conversation_id=m.conversation_id AND a.message_id=m.id AND a.source_sha=m.sha256 AND a.role=m.role AND a.source_created_at=m.created_at AND a.validity='current' AND a.pinned=1)",
+                    "AND NOT EXISTS(SELECT 1 FROM native_memory_annotations a WHERE a.owner=m.owner AND a.conversation_id=m.conversation_id AND a.message_id=m.id AND a.source_sha=m.sha256 AND a.role=m.role AND a.source_created_at=m.created_at AND a.validity='current' AND (a.pinned=1 OR a.tier IN ('long','permanent')))",
                 arrayOf(owner, id, messageId, before.toString())).use { it.moveToFirst() }
-            if (!safe) continue
+            if (!safe || exactNewerOriginal(owner, id, messageId, ids.toSet()) == null) continue
             db.delete("native_memory_annotation_links",
                 "newer_id IN (SELECT id FROM native_memory_annotations WHERE owner=? AND conversation_id=? AND message_id=?) OR " +
                     "older_id IN (SELECT id FROM native_memory_annotations WHERE owner=? AND conversation_id=? AND message_id=?)",

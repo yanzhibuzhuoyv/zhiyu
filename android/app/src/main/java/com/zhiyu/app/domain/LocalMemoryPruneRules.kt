@@ -12,6 +12,7 @@ data class LocalMemoryPruneCandidate(
     val hasAttachments: Boolean,
     val referenced: Boolean,
     val weight: Double,
+    val sequence: Long = 0,
 ) {
     val age: Duration get() = Duration.between(Instant.parse(createdAt), Instant.now())
 }
@@ -19,8 +20,8 @@ data class LocalMemoryPruneCandidate(
 data class LocalMemoryPruneMatch(val candidate: LocalMemoryPruneCandidate, val newerId: String, val confidence: Double)
 
 /**
- * Conservative retention: only old, unpinned mid-tier duplicates whose newer source is semantically
- * equivalent at 95% may be removed, and never more than 2.5% of the old candidate pool per run.
+ * The service and database must prove full original equality before using this quantity policy.
+ * Semantic similarity alone is never permission to delete an original.
  */
 object LocalMemoryPruneRules {
     const val MIN_CONFIDENCE = 0.95
